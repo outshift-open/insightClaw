@@ -1,7 +1,6 @@
-# OpenClaw Observe PoC
+# OpenClaw Deep Observability Plugin
 
-
-## Initial Approach: Custom Hook-Based Plugin
+## Custom Hook-Based Plugin
 
 For **deeper observability**, install the custom plugin from this repo. It uses OpenClaw's typed plugin hooks to capture the full agent lifecycle.
 
@@ -52,21 +51,27 @@ openclaw.request (root span)
 
 1. Clone this repository:
    ```bash
-   git clone https://github.com/91pavan/openclaw-observe-poc.git
+   git clone https://github.com/outshift-open/openclaw-deep-observability.git
    ```
 
-2. Add to your `openclaw.json`:
+2. Navigate to the `deploy` directory and start the observability stack, which includes a ClickHouse instance and an OpenTelemetry Collector configured to receive OTel data and forward it to ClickHouse:
+   ```bash
+   cd openclaw-deep-observability/observability-plugin/deploy
+   docker-compose up -d
+   ```
+
+3. Add to your `openclaw.json`, usually under `~/.openclaw/` folder. The `paths` entry should point to the location of the plugin on your machine. The endpoint should point to your OpenTelemetry Collector's OTLP HTTP receiver (default `http://host.docker.internal:4318` when using the provided Docker setup on Mac/Windows or `http://172.17.0.1:4318` when using Docker on Linux):
    ```json
    {
      "plugins": {
        "load": {
-         "paths": ["/path/to/openclaw-observe-poc"]
+         "paths": ["/path/to/openclaw-deep-observability/observability-plugin"]
        },
        "entries": {
-         "otel-observe-poc": {
+         "openclaw-deep-observability": {
            "enabled": true,
            "config": {
-             "endpoint": "http://localhost:4318",
+             "endpoint": "http://host.docker.internal:4318",
              "serviceName": "openclaw-gateway"
            }
          }
@@ -75,10 +80,18 @@ openclaw.request (root span)
    }
    ```
 
-3. Restart gateway:
-   ```bash
-   openclaw gateway restart
-   ```
+4. Build the plugin and install dependencies:
+
+```bash
+cd openclaw-deep-observability/observability-plugin
+npm install
+```
+
+5. Restart the openclaw gateway:
+
+```bash
+openclaw gateway restart
+```
 
 ### Enable GenAI SDK Auto-Instrumentation
 
@@ -129,7 +142,7 @@ hook before the SDKs are imported.
 
 ## Comparing the Two Approaches
 
-| Feature | Official Plugin | Custom Plugin |
+| Feature | Official Diagnostics Otel Plugin | Deep Observability Plugin |
 |---------|-----------------|---------------|
 | Token metrics | ✅ Per model | ✅ Per session + model |
 | Cost tracking | ✅ Yes | ✅ Yes (from diagnostics) |

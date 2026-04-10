@@ -4,9 +4,15 @@ on:
   pull_request:
     branches:
       - main
+    paths:
+      - './observability-plugin/**'
+      - '.github/workflows/plugin-ci.yaml'
   push:
     branches:
       - main
+    paths:
+      - './observability-plugin/**'
+      - '.github/workflows/plugin-ci.yaml'
   workflow_dispatch:
 
 permissions:

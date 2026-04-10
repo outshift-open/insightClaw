@@ -1,0 +1,44 @@
+name: Continuous Integration
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Verify Plugin
+    runs-on: ubuntu-latest
+    defaults:
+      run: # This sets the working directory for all `run` steps.
+        shell: bash
+        working-directory: ./observability-plugin/
+
+    steps:
+      - name: Checkout
+        id: checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        id: setup-node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 20
+
+      - name: Install Dependencies
+        id: npm-ci
+        run: npm ci
+
+      - name: Typecheck
+        id: npm-typecheck
+        run: npm run typecheck
+
+      - name: Test
+        id: npm-ci-test
+        run: npm run ci-test

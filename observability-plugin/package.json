@@ -1,0 +1,55 @@
+{
+  "name": "@openclaw/otel-observe-poc",
+  "version": "0.1.0",
+  "description": "OpenTelemetry Observe PoC plugin for OpenClaw — traces, metrics, and logs for your AI agent using OpenLLMetry",
+  "type": "module",
+  "openclaw": {
+    "extensions": [
+      "./index.ts"
+    ]
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "package:artifact": "node ./scripts/prepare-artifact.mjs",
+    "test": "tsx --test tests/*.test.ts",
+    "ci-test": "npm test",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src/ index.ts"
+  },
+  "keywords": [
+    "openclaw",
+    "opentelemetry",
+    "observe-poc",
+    "llm",
+    "tracing",
+    "metrics",
+    "dynatrace",
+    "openllmetry"
+  ],
+  "author": "Pavan S",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "@opentelemetry/api": "^1.9.0",
+    "@opentelemetry/exporter-metrics-otlp-grpc": "^0.203.0",
+    "@opentelemetry/exporter-metrics-otlp-http": "^0.203.0",
+    "@opentelemetry/exporter-trace-otlp-grpc": "^0.203.0",
+    "@opentelemetry/exporter-trace-otlp-http": "^0.203.0",
+    "@opentelemetry/exporter-trace-otlp-proto": "^0.203.0",
+    "@opentelemetry/resources": "^2.0.1",
+    "@opentelemetry/sdk-metrics": "^2.0.1",
+    "@opentelemetry/sdk-node": "^0.203.0",
+    "@opentelemetry/sdk-trace-node": "^2.0.1",
+    "@opentelemetry/semantic-conventions": "^1.30.0",
+    "@traceloop/instrumentation-anthropic": "^0.23.0",
+    "@traceloop/instrumentation-bedrock": "^0.23.0",
+    "@traceloop/instrumentation-openai": "^0.23.0",
+    "@traceloop/instrumentation-vertexai": "^0.23.0",
+    "@traceloop/node-server-sdk": "^0.22.6",
+    "import-in-the-middle": "^1.15.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.5.2",
+    "tsx": "^4.20.6",
+    "typescript": "^5.7.0"
+  }
+}

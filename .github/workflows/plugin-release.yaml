@@ -1,0 +1,55 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build And Publish Release
+    runs-on: ubuntu-latest
+    defaults:
+      run: # This sets the working directory for all `run` steps.
+        shell: bash
+        working-directory: ./observability-plugin/
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Run tests
+        run: npm test
+
+      - name: Build plugin
+        run: npm run build
+
+      - name: Prepare release bundle
+        run: npm run package:artifact
+
+      - name: Create release archive
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          cd artifact/package
+          zip -r "../otel-observe-poc-${VERSION}.zip" .
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ./observability-plugin/artifact/*.zip
+          generate_release_notes: true

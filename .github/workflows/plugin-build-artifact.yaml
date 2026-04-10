@@ -1,0 +1,66 @@
+name: Build Artifact
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-artifact:
+    name: Build Plugin Artifact
+    runs-on: ubuntu-latest
+    defaults:
+      run: # This sets the working directory for all `run` steps.
+        shell: bash
+        working-directory: ./observability-plugin/
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Run tests
+        run: npm test
+
+      - name: Build plugin
+        run: npm run build
+
+      - name: Prepare distributable artifact
+        run: npm run package:artifact
+
+      - name: Archive artifact bundle
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          cd artifact/package
+          zip -r "../otel-observe-poc-${VERSION}.zip" .
+
+      - name: Upload compiled dist
+        uses: actions/upload-artifact@v4
+        with:
+          name: otel-observe-poc-dist
+          path: observability-plugin/dist
+
+      - name: Upload release bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: otel-observe-poc-bundle
+          path: |
+            artifact/package
+            artifact/*.zip

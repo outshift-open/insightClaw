@@ -1,7 +1,7 @@
 {
   "id": "openclaw-deep-observability",
-  "name": "OpenTelemetry Observe PoC",
-  "description": "Traces, metrics, and logs for OpenClaw using OpenLLMetry and OpenTelemetry",
+  "name": "OpenClaw Deep Observability Plugin",
+  "description": "Connected traces, cost tracking, and metrics for OpenClaw via OpenTelemetry",
   "version": "0.1.0",
   "uiHints": {
     "endpoint": {

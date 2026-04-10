@@ -2,11 +2,12 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import plugin from "../index.ts";
+import manifest from "../openclaw.plugin.json";
 
 test("plugin metadata and config schema stay aligned with the public contract", () => {
-  assert.equal(plugin.id, "openclaw-deep-observability");
-  assert.equal(plugin.name, "OpenTelemetry Observe PoC");
-  assert.match(plugin.description, /OpenTelemetry/);
+  assert.equal(plugin.id, manifest.id);
+  assert.equal(plugin.name, manifest.name);
+  assert.equal(plugin.description, manifest.description);
 
   const config = plugin.configSchema.parse({
     protocol: "grpc",

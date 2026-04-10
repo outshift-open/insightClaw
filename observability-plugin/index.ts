@@ -1,7 +1,7 @@
 /**
- * OpenClaw OTel Observe PoC Plugin
+ * OpenClaw Deep Observability Plugin
  *
- * Provides full OpenTelemetry Observe PoC for OpenClaw:
+ * Provides full OpenTelemetry Deep Observability for OpenClaw:
  *   - Connected distributed traces (request → agent turn → tools)
  *   - Cost tracking via OpenClaw diagnostic events integration
  *   - Token usage (input, output, cache read/write) as spans + metrics
@@ -13,7 +13,7 @@
  *   {
  *     "plugins": {
  *       "entries": {
- *         "otel-observe-poc": {
+ *         "openclaw-deep-observability": {
  *           "enabled": true,
  *           "config": {
  *             "endpoint": "http://localhost:4318",
@@ -46,8 +46,8 @@ const registerHooks =
         : undefined;
 
 const otelObservabilityPlugin = {
-  id: "otel-observe-poc",
-  name: "OpenTelemetry Observe PoC",
+  id: "openclaw-deep-observability",
+  name: "OpenClaw Deep Observability Plugin",
   description:
     "Connected traces, cost tracking, and metrics for OpenClaw via OpenTelemetry",
 
@@ -67,7 +67,7 @@ const otelObservabilityPlugin = {
     // ── RPC: status endpoint ────────────────────────────────────────
 
     api.registerGatewayMethod(
-      "otel-observe-poc.status",
+      "openclaw-deep-observability.status",
       ({ respond }: { respond: (ok: boolean, payload?: unknown) => void }) => {
         respond(true, {
           initialized: telemetry !== null,
@@ -90,9 +90,9 @@ const otelObservabilityPlugin = {
       ({ program }: { program: any }) => {
         program
           .command("otel")
-          .description("OpenTelemetry Observe PoC status")
+          .description("OpenClaw Deep Observability Plugin status")
           .action(async () => {
-            console.log("🔭 OpenTelemetry Observe PoC Plugin");
+            console.log("🔭 OpenClaw Deep Observability Plugin");
             console.log("─".repeat(40));
             console.log(`  Endpoint:        ${config.endpoint}`);
             console.log(`  Protocol:        ${config.protocol}`);
@@ -114,7 +114,7 @@ const otelObservabilityPlugin = {
     // ── Background service ──────────────────────────────────────────
 
     api.registerService({
-      id: "otel-observe-poc",
+      id: "openclaw-deep-observability",
 
       start: async () => {
         logger.info("[otel] Starting OpenTelemetry Observe PoC...");

@@ -49,18 +49,18 @@ jobs:
         run: |
           VERSION=$(node -p "require('./package.json').version")
           cd artifact/package
-          zip -r "../otel-observe-poc-${VERSION}.zip" .
+          zip -r "../openclaw-deep-observability-${VERSION}.zip" .
 
       - name: Upload compiled dist
         uses: actions/upload-artifact@v4
         with:
-          name: otel-observe-poc-dist
+          name: openclaw-deep-observability-dist
           path: observability-plugin/dist
 
       - name: Upload release bundle
         uses: actions/upload-artifact@v4
         with:
-          name: otel-observe-poc-bundle
+          name: openclaw-deep-observability-bundle
           path: |
             artifact/package
             artifact/*.zip

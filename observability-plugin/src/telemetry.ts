@@ -84,7 +84,7 @@ export function initTelemetry(config: OtelObservabilityConfig, logger: any): Tel
   const resourceAttrs: Record<string, string> = {
     [ATTR_SERVICE_NAME]: config.serviceName,
     [ATTR_SERVICE_VERSION]: "0.1.0",
-    "openclaw.plugin": "otel-observe-poc",
+    "openclaw.plugin": "openclaw-deep-observability",
     ...config.resourceAttributes,
   };
 
@@ -148,8 +148,8 @@ export function initTelemetry(config: OtelObservabilityConfig, logger: any): Tel
 
   // ── Instruments ─────────────────────────────────────────────────
 
-  const tracer = trace.getTracer("openclaw-observe-poc", "0.1.0");
-  const meter = metrics.getMeter("openclaw-observe-poc", "0.1.0");
+  const tracer = trace.getTracer("openclaw-deep-observability", "0.1.0");
+  const meter = metrics.getMeter("openclaw-deep-observability", "0.1.0");
 
   const counters: OtelCounters = {
     llmRequests: meter.createCounter("openclaw.llm.requests", {

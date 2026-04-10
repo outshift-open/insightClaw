@@ -1,7 +1,6 @@
-# OpenClaw Observe PoC
+# OpenClaw Deep Observability Plugin
 
-
-## Initial Approach: Custom Hook-Based Plugin
+## Custom Hook-Based Plugin
 
 For **deeper observability**, install the custom plugin from this repo. It uses OpenClaw's typed plugin hooks to capture the full agent lifecycle.
 
@@ -69,7 +68,7 @@ openclaw.request (root span)
          "paths": ["/path/to/openclaw-deep-observability/observability-plugin"]
        },
        "entries": {
-         "otel-observe-poc": {
+         "openclaw-deep-observability": {
            "enabled": true,
            "config": {
              "endpoint": "http://host.docker.internal:4318",

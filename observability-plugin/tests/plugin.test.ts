@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import plugin from "../index.ts";
 
 test("plugin metadata and config schema stay aligned with the public contract", () => {
-  assert.equal(plugin.id, "otel-observe-poc");
+  assert.equal(plugin.id, "openclaw-deep-observability");
   assert.equal(plugin.name, "OpenTelemetry Observe PoC");
   assert.match(plugin.description, /OpenTelemetry/);
 
@@ -58,7 +58,7 @@ test("plugin register wires the gateway method, cli command, tool, and service",
   plugin.register(api);
 
   assert.equal(calls.registerGatewayMethod.length, 1);
-  assert.equal(calls.registerGatewayMethod[0]?.name, "otel-observe-poc.status");
+  assert.equal(calls.registerGatewayMethod[0]?.name, "openclaw-deep-observability.status");
   assert.equal(calls.registerCli.length, 1);
   assert.deepEqual(calls.registerCli[0]?.options, { commands: ["otel"] });
   assert.equal(calls.registerService.length, 1);

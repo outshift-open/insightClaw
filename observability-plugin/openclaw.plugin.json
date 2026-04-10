@@ -1,5 +1,5 @@
 {
-  "id": "otel-observe-poc",
+  "id": "openclaw-deep-observability",
   "name": "OpenTelemetry Observe PoC",
   "description": "Traces, metrics, and logs for OpenClaw using OpenLLMetry and OpenTelemetry",
   "version": "0.1.0",

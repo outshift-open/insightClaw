@@ -1,5 +1,5 @@
 {
-  "name": "@openclaw/otel-observe-poc",
+  "name": "@openclaw/openclaw-deep-observability",
   "version": "0.1.0",
   "description": "OpenTelemetry Observe PoC plugin for OpenClaw — traces, metrics, and logs for your AI agent using OpenLLMetry",
   "type": "module",
@@ -19,7 +19,7 @@
   "keywords": [
     "openclaw",
     "opentelemetry",
-    "observe-poc",
+    "openclaw-deep-observability",
     "llm",
     "tracing",
     "metrics",

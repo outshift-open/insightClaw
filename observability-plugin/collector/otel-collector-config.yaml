@@ -1,0 +1,230 @@
+# OpenTelemetry Collector configuration for OpenClaw observability
+#
+# This collector receives:
+# - OTLP data from OpenClaw plugin (traces, metrics, logs)
+# - Tetragon security events (logs via filelog)
+# - Host metrics (optional)
+#
+# Environment variables required:
+# - DT_ENDPOINT: Your OTLP endpoint (e.g., https://xxx.live.dynatrace.com/api/v2/otlp)
+# - DT_API_TOKEN: Your API token with otlp ingest scope
+#
+# For other backends, replace the otlphttp/dynatrace exporter with your backend config.
+
+receivers:
+  # ─────────────────────────────────────────────────────────────────────────────
+  # OTLP Receiver - receives traces, metrics, logs from OpenClaw plugin
+  # ─────────────────────────────────────────────────────────────────────────────
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Host Metrics - optional system metrics (CPU, memory, disk, network)
+  # ─────────────────────────────────────────────────────────────────────────────
+  hostmetrics:
+    collection_interval: 30s
+    scrapers:
+      cpu:
+      memory:
+      disk:
+      load:
+      network:
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # OpenClaw Gateway Logs - application logs from the gateway
+  # ─────────────────────────────────────────────────────────────────────────────
+  filelog/openclaw:
+    include:
+      - /tmp/openclaw/openclaw-*.log
+    start_at: end
+    include_file_name: true
+    include_file_path: true
+    operators:
+      # Parse OpenClaw JSON logs
+      - type: json_parser
+        parse_from: body
+        timestamp:
+          parse_from: attributes.time
+          layout: '%Y-%m-%dT%H:%M:%S.%LZ'
+      # Extract log level
+      - type: severity_parser
+        parse_from: attributes._meta.logLevelName
+        mapping:
+          debug: DEBUG
+          info: INFO
+          warn: WARN
+          error: ERROR
+          fatal: FATAL
+      # Extract logger name
+      - type: move
+        from: attributes._meta.name
+        to: attributes.logger.name
+        if: attributes._meta.name != nil
+      # Extract code location
+      - type: move
+        from: attributes._meta.path.filePath
+        to: attributes.code.filepath
+        if: attributes._meta.path != nil
+      - type: move
+        from: attributes._meta.path.fileLine
+        to: attributes.code.lineno
+        if: attributes._meta.path != nil
+      - type: move
+        from: attributes._meta.path.method
+        to: attributes.code.function
+        if: attributes._meta.path != nil
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Tetragon Security Events - kernel-level security monitoring
+  # Requires Tetragon installed with TracingPolicies from tetragon-policies/
+  # ─────────────────────────────────────────────────────────────────────────────
+  filelog/tetragon:
+    include:
+      - /var/log/tetragon/tetragon.log
+    start_at: end
+    include_file_name: true
+    operators:
+      # Parse Tetragon JSON events
+      - type: json_parser
+        parse_from: body
+        timestamp:
+          parse_from: attributes.time
+          layout: '%Y-%m-%dT%H:%M:%S.%LZ'
+
+processors:
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Resource Detection - adds host.name, os.type
+  # ─────────────────────────────────────────────────────────────────────────────
+  resourcedetection/system:
+    detectors: ["system"]
+    system:
+      hostname_sources: ["os"]
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Cumulative to Delta - Dynatrace requires delta temporality for counters
+  # ─────────────────────────────────────────────────────────────────────────────
+  cumulativetodelta:
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Batching - improves export efficiency
+  # ─────────────────────────────────────────────────────────────────────────────
+  batch:
+    timeout: 10s
+    send_batch_size: 512
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Resource attributes for OpenClaw telemetry
+  # ─────────────────────────────────────────────────────────────────────────────
+  resource/openclaw:
+    attributes:
+      - key: service.name
+        value: "openclaw-gateway"
+        action: upsert
+      - key: deployment.environment
+        value: "production"
+        action: upsert
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Transform Tetragon events - extract fields and assign risk levels
+  # ─────────────────────────────────────────────────────────────────────────────
+  transform/tetragon:
+    error_mode: ignore
+    log_statements:
+      - context: log
+        statements:
+          # ── Identify event type ──
+          - set(attributes["tetragon.type"], "kprobe") where attributes["process_kprobe"] != nil
+          - set(attributes["tetragon.type"], "exec") where attributes["process_exec"] != nil
+          - set(attributes["tetragon.type"], "exit") where attributes["process_exit"] != nil
+          
+          # ── Extract policy name ──
+          - set(attributes["tetragon.policy"], attributes["process_kprobe"]["policy_name"]) where attributes["process_kprobe"]["policy_name"] != nil
+          
+          # ── Extract process info ──
+          - set(attributes["process.binary"], attributes["process_kprobe"]["process"]["binary"]) where attributes["process_kprobe"]["process"]["binary"] != nil
+          - set(attributes["process.pid"], attributes["process_kprobe"]["process"]["pid"]) where attributes["process_kprobe"]["process"]["pid"] != nil
+          - set(attributes["process.uid"], attributes["process_kprobe"]["process"]["uid"]) where attributes["process_kprobe"]["process"]["uid"] != nil
+          - set(attributes["process.cwd"], attributes["process_kprobe"]["process"]["cwd"]) where attributes["process_kprobe"]["process"]["cwd"] != nil
+          
+          # ── Extract parent process info ──
+          - set(attributes["process.parent.binary"], attributes["process_kprobe"]["parent"]["binary"]) where attributes["process_kprobe"]["parent"]["binary"] != nil
+          - set(attributes["process.parent.pid"], attributes["process_kprobe"]["parent"]["pid"]) where attributes["process_kprobe"]["parent"]["pid"] != nil
+          
+          # ── Extract function/syscall name ──
+          - set(attributes["tetragon.function"], attributes["process_kprobe"]["function_name"]) where attributes["process_kprobe"]["function_name"] != nil
+          
+          # ── Assign security risk levels based on policy ──
+          - set(attributes["security.risk"], "critical") where attributes["tetragon.policy"] == "openclaw-privilege-escalation"
+          - set(attributes["security.risk"], "critical") where attributes["tetragon.policy"] == "openclaw-kernel-modules"
+          - set(attributes["security.risk"], "high") where attributes["tetragon.policy"] == "openclaw-sensitive-files"
+          - set(attributes["security.risk"], "high") where attributes["tetragon.policy"] == "openclaw-dangerous-commands"
+          - set(attributes["security.risk"], "low") where attributes["tetragon.policy"] == "openclaw-process-exec"
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Resource attributes for Tetragon security events
+  # ─────────────────────────────────────────────────────────────────────────────
+  filter:
+        error_mode: ignore
+        metrics:
+          metric:
+            - 'type == METRIC_DATA_TYPE_SUMMARY'
+  resource/tetragon:
+    attributes:
+      - key: service.name
+        value: "openclaw-security"
+        action: upsert
+      - key: tetragon.version
+        value: "1.6.0"
+        action: upsert
+      - key: security.source
+        value: "tetragon"
+        action: upsert
+
+exporters:
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Dynatrace Exporter - replace with your backend
+  # ─────────────────────────────────────────────────────────────────────────────
+  otlphttp/dynatrace:
+    endpoint: "${env:DT_ENDPOINT}"
+    headers:
+      Authorization: "Api-Token ${env:DT_API_TOKEN}"
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Debug Exporter - logs telemetry to stdout (useful for testing)
+  # ─────────────────────────────────────────────────────────────────────────────
+  debug:
+    verbosity: basic
+
+service:
+  telemetry:
+    metrics:
+      level: none  # Disable collector's own metrics
+      
+  pipelines:
+    # ── OpenClaw Application Traces ──
+    traces:
+      receivers: [otlp]
+      processors: [resourcedetection/system, resource/openclaw, batch]
+      exporters: [otlphttp/dynatrace, debug]
+
+    # ── OpenClaw + Host Metrics ──
+    metrics:
+      receivers: [otlp, hostmetrics]
+      processors: [resourcedetection/system, resource/openclaw,filter, cumulativetodelta, batch]
+      exporters: [otlphttp/dynatrace, debug]
+
+    # ── OpenClaw Application Logs (OTLP + filelog) ──
+    logs/openclaw:
+      receivers: [otlp, filelog/openclaw]
+      processors: [resourcedetection/system, resource/openclaw, batch]
+      exporters: [otlphttp/dynatrace, debug]
+
+    # ── Tetragon Security Events ──
+    logs/tetragon:
+      receivers: [filelog/tetragon]
+      processors: [transform/tetragon, resource/tetragon, resourcedetection/system, batch]
+      exporters: [otlphttp/dynatrace, debug]

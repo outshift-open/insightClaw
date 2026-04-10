@@ -72,7 +72,11 @@ openclaw.request (root span)
            "enabled": true,
            "config": {
              "endpoint": "http://host.docker.internal:4318",
-             "serviceName": "openclaw-gateway"
+             "serviceName": "openclaw-gateway",
+             "protocol": "http",
+              "traces": true,
+              "metrics": true,
+              "captureContent": true
            }
          }
        }

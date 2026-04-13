@@ -392,6 +392,33 @@ function extractToolOutputPayload(event: any, message: any): unknown {
   return undefined;
 }
 
+function isLongTermMemoryAccess(event: any, toolInput: any): boolean {
+    //Heuristics to determine if a tool call is accessing long-term memory:
+    // Check if toolInput has a "path" field that includes "memory" and ends with ".md"
+
+    let path: string | undefined = undefined;
+    // Primary: extract path directly from toolInput
+    if (typeof toolInput?.path === "string") {
+        path = toolInput.path;
+    }
+
+    // Fallback: toolInput may be a JSON string
+    if (!path && typeof toolInput === "string") {
+        try {
+            const parsed = JSON.parse(toolInput);
+            if (typeof parsed?.path === "string") {
+                path = parsed.path;
+            }
+        } catch {
+            // Not JSON, ignore
+        }
+    }
+
+    const isMemory = typeof path === "string" && path.includes("memory") && path.endsWith(".md");
+    console.log("isLongTermMemoryAccess", { path, isMemory });
+    return isMemory;
+}
+
 function resolveMessageFrom(event?: any, ctx?: any): string {
   const metadata = event?.metadata;
   const candidates = [
@@ -1219,6 +1246,91 @@ export function registerHooks(
               );
             }
           }
+          else if (toolName === "read") {
+            console.log("tool_result_persist read - toolInput", toolInput, "message", message);
+            // Heuristics: .md files, "memory" in path, or a "memoryId" field in the tool output    
+            if (isLongTermMemoryAccess(event, toolInput)) {
+                counters.memoryReadEvents.add(1, {
+                    "tool.name": toolName,
+                    "session.key": sessionKey,
+                });
+            }            
+          }
+          else if (toolName === "write") {
+            console.log("tool_result_persist write - toolInput", toolInput, "message", message);
+            // Heuristics: .md files, "memory" in path, or a "memoryId" field in the tool output    
+            if (isLongTermMemoryAccess(event, toolInput)) {
+                counters.memoryWriteEvents.add(1, {
+                    "tool.name": toolName,
+                    "session.key": sessionKey,
+                });
+            }   
+          }
+          else if (toolName === "edit") {
+            console.log("tool_result_persist edit - toolInput", toolInput, "message", message);
+            // Heuristics: .md files, "memory" in path, or a "memoryId" field in the tool output    
+            if (isLongTermMemoryAccess(event, toolInput)) {
+                counters.memoryEditEvents.add(1, {
+                    "tool.name": toolName,
+                    "session.key": sessionKey,
+                });
+            }
+          }
+          else if (toolName === "memory_search") {
+            console.log("tool_result_persist memory_search");
+
+            // Prefer message.details if present, else parse content[0].text
+            let toolOutput = message?.details;
+            if (!toolOutput && Array.isArray(message?.content) && message.content.length > 0) {
+              const text = message.content[0]?.text;
+              if (typeof text === "string") {
+                try {
+                  toolOutput = JSON.parse(text);
+                } catch (err) {
+                  console.error("Failed to parse tool output:", err);
+                }
+              }
+            }
+
+            const outputObj = toolOutput;
+            const results = outputObj?.results;
+            console.log(`tool_result_persist memory_search - results: ${JSON.stringify(results)}`);
+
+            counters.memoryReadEvents.add(1, {
+                "tool.name": toolName,
+                "session.key": sessionKey,
+            });
+
+            if (Array.isArray(results)) {
+              const totalChars = results.reduce((sum: number, r: any) => {
+                const snippet = r?.snippet ?? "";
+                return sum + snippet.length;
+              }, 0);
+              // Calculate memoryFragmentation
+              
+              if (results.length == 0) {
+                counters.memorySearchMiss.add(1, {
+                    "tool.name": toolName,
+                    "session.key": sessionKey,
+                });
+              }
+              else {
+                const uniquePaths = new Set(results.map((r: any) => r?.path)).size;
+                const memoryFragmentation = results.length > 0 ? (uniquePaths - 1) / results.length : 0;
+                
+                console.log(`tool_result_persist memory_search - memoryFragmentation: ${memoryFragmentation}`);
+
+                histograms.memorySearchFragmentation.record(memoryFragmentation, {
+                    "tool.name": toolName,
+                    "session.key": sessionKey,
+                });
+                counters.memorySearchHit.add(1, {
+                    "tool.name": toolName,
+                    "session.key": sessionKey,
+                });
+              }
+            }
+          }
 
           const contentArray = message?.content;
           if (contentArray && Array.isArray(contentArray)) {
@@ -1302,7 +1414,7 @@ export function registerHooks(
           cacheWriteTokens = diagUsage.usage.cacheWrite || 0;
           model = diagUsage.model || "unknown";
           costUsd = diagUsage.costUsd;
-          logger.debug(`[otel] agent_end using diagnostic data: cost=$${costUsd?.toFixed(4) || "?"}`);
+          logger.info(`[otel] agent_end using diagnostic data: cost=$${costUsd?.toFixed(4) || "?"}`);
         } else {
           // Fallback: parse messages manually
           for (const msg of messages) {
@@ -1320,7 +1432,7 @@ export function registerHooks(
         }
 
         const totalTokens = totalInputTokens + totalOutputTokens + cacheReadTokens + cacheWriteTokens;
-        logger.debug(`[otel] agent_end tokens: input=${totalInputTokens}, output=${totalOutputTokens}, cache_read=${cacheReadTokens}, cache_write=${cacheWriteTokens}, model=${model}`);
+        logger.info(`[otel] agent_end tokens: input=${totalInputTokens}, output=${totalOutputTokens}, cache_read=${cacheReadTokens}, cache_write=${cacheWriteTokens}, model=${model}`);
 
         const sessionCtx = getSessionTraceContext(event, ctx);
 

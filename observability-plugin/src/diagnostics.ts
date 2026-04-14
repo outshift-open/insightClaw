@@ -128,7 +128,7 @@ function resolveDiagnosticSessionIdentities(evt: any): string[] {
   return collectSessionIdentities(evt, evt?.metadata, evt?.context, evt?.context?.metadata);
 }
 
-function normalizeUsageData(rawUsage: any): PendingUsageData["usage"] {
+export function normalizeUsageData(rawUsage: any): PendingUsageData["usage"] {
   const usage = rawUsage || {};
   const metadata = usage.usageMetadata || usage.metadata || {};
   const input = firstNumber(

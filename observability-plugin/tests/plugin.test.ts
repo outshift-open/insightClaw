@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 
 import plugin from "../index.ts";
 import manifest from "../openclaw.plugin.json";
+import { register } from "node:module";
 
 test("plugin metadata and config schema stay aligned with the public contract", () => {
   assert.equal(plugin.id, manifest.id);
@@ -19,7 +20,7 @@ test("plugin metadata and config schema stay aligned with the public contract", 
   assert.equal(config.endpoint, "http://localhost:4318");
 });
 
-test("plugin register wires the gateway method, cli command, tool, and service", () => {
+test("plugin register wires the gateway method, cli command, tool, and service", async () => {
   const calls: Record<string, any[]> = {
     registerGatewayMethod: [],
     registerCli: [],
@@ -54,9 +55,11 @@ test("plugin register wires the gateway method, cli command, tool, and service",
     registerTool(tool: unknown, options: unknown) {
       calls.registerTool.push({ tool, options });
     },
+    on() {},
+    registerHook() {},
   };
 
-  plugin.register(api);
+  await plugin.register(api);
 
   assert.equal(calls.registerGatewayMethod.length, 1);
   assert.equal(calls.registerGatewayMethod[0]?.name, "openclaw-deep-observability.status");
@@ -64,6 +67,7 @@ test("plugin register wires the gateway method, cli command, tool, and service",
   assert.deepEqual(calls.registerCli[0]?.options, { commands: ["otel"] });
   assert.equal(calls.registerService.length, 1);
   assert.equal(calls.registerTool.length, 1);
+
 
   const statusHandler = calls.registerGatewayMethod[0]?.handler as (arg: { respond: Function }) => void;
   let payload: any;

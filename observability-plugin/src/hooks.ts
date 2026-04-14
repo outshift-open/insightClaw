@@ -70,6 +70,11 @@ interface RootSpanSeed {
   attributes?: Record<string, string | number | boolean>;
 }
 
+interface PendingToolSpan {
+  span: Span;
+  startedAt: number;
+}
+
 /** Map of sessionKey -> active trace context. Cleaned up on agent_end. */
 const sessionContextMap = new Map<string, SessionTraceContext>();
 const pendingSpawnHandoffs = new Map<string, PendingSpawnHandoff[]>();
@@ -515,7 +520,7 @@ export function registerHooks(
   };
 
   // Spans created in before_tool_call, completed in tool_result_persist
-  const pendingToolSpans = new Map<string, Span>();
+  const pendingToolSpans = new Map<string, PendingToolSpan>();
 
   api.on(
     "message_received",
@@ -867,7 +872,10 @@ export function registerHooks(
 
         // Store span so tool_result_persist can add the output and close it
         if (toolCallId) {
-          pendingToolSpans.set(toolCallId, span);
+          pendingToolSpans.set(toolCallId, {
+            span,
+            startedAt: Date.now(),
+          });
         } else {
           // No toolCallId to key on — close immediately with no output
           span.setStatus({ code: SpanStatusCode.OK });
@@ -897,12 +905,20 @@ export function registerHooks(
         const agentId = ctx?.agentId || "unknown";
 
         // Retrieve the span opened in before_tool_call
-        const span = toolCallId ? pendingToolSpans.get(toolCallId) : undefined;
-        if (!span) {
+        const pendingTool = toolCallId ? pendingToolSpans.get(toolCallId) : undefined;
+        if (!pendingTool) {
           logger.warn?.(`[otel] No pending span for toolCallId=${toolCallId}, tool=${toolName} — skipping output capture`);
           return undefined;
         }
         pendingToolSpans.delete(toolCallId);
+
+        const { span, startedAt } = pendingTool;
+        const durationMs = Math.max(0, Date.now() - startedAt);
+        span.setAttribute("openclaw.tool.duration_ms", durationMs);
+        histograms.toolDuration.record(durationMs, {
+          "tool.name": toolName,
+          "openclaw.agent.id": agentId,
+        });
 
         // Prefer toolInput captured on the span in before_tool_call; fall back to event fields.
         const toolInput =

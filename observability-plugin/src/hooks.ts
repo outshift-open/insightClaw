@@ -29,7 +29,7 @@
 import { SpanKind, SpanStatusCode, context, trace, type Span, type SpanContext, type Context, type Link } from "@opentelemetry/api";
 import type { TelemetryRuntime } from "./telemetry.js";
 import type { OtelObservabilityConfig } from "./config.js";
-import { getPendingUsage, registerActiveAgentSpan, unregisterActiveAgentSpan } from "./diagnostics.js";
+import { getPendingUsage, normalizeUsageData, registerActiveAgentSpan, unregisterActiveAgentSpan } from "./diagnostics.js";
 import { checkToolSecurity, checkMessageSecurity, type SecurityCounters } from "./security.js";
 import { onAgentStart, onAgentEnd, cleanupHandoff, getHandoffSequence, registerAgentSpan, seedHandoffState, setHandoffLogger } from "./handoff.js";
 import { registerToolSpan, finalizeAgentTurn, consumeJoin, cleanupForkJoin, setForkJoinLogger } from "./forkjoin.js";
@@ -1048,21 +1048,14 @@ export function registerHooks(
           // Fallback: parse messages manually
           for (const msg of messages) {
             if (msg?.role === "assistant" && msg?.usage) {
-              const u = msg.usage;
-              // pi-ai stores usage as .input/.output (normalized names)
-              if (typeof u.input === "number") totalInputTokens += u.input;
-              else if (typeof u.inputTokens === "number") totalInputTokens += u.inputTokens;
-              else if (typeof u.input_tokens === "number") totalInputTokens += u.input_tokens;
-
-              if (typeof u.output === "number") totalOutputTokens += u.output;
-              else if (typeof u.outputTokens === "number") totalOutputTokens += u.outputTokens;
-              else if (typeof u.output_tokens === "number") totalOutputTokens += u.output_tokens;
-
-              if (typeof u.cacheRead === "number") cacheReadTokens += u.cacheRead;
-              if (typeof u.cacheWrite === "number") cacheWriteTokens += u.cacheWrite;
+              const usage = normalizeUsageData(msg.usage);
+              totalInputTokens += usage.input || 0;
+              totalOutputTokens += usage.output || 0;
+              cacheReadTokens += usage.cacheRead || 0;
+              cacheWriteTokens += usage.cacheWrite || 0;
             }
-            if (msg?.role === "assistant" && msg?.model) {
-              model = msg.model;
+            if (msg?.role === "assistant") {
+              model = msg.model || msg.modelName || model;
             }
           }
         }

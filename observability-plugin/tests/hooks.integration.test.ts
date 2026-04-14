@@ -285,3 +285,76 @@ test("registerHooks links spawned subagent turns back to the spawning tool span"
   assert.equal(childAgent?.options.attributes["ioa_observe.agent.sequence"], 2);
   assert.equal(childAgent?.options.attributes["ioa_observe.agent.previous"], "planner");
 });
+
+test("registerHooks recovers Vertex usage fields from agent_end fallback payloads", async () => {
+  const telemetry = createTelemetry();
+  const { api, typedHooks } = createApi();
+  const originalSetInterval = globalThis.setInterval;
+
+  globalThis.setInterval = ((() => ({ unref() {} })) as unknown) as typeof setInterval;
+
+  try {
+    registerHooks(api as any, telemetry as any, {
+      endpoint: "http://localhost:4318",
+      protocol: "http",
+      serviceName: "test-service",
+      headers: {},
+      traces: true,
+      metrics: true,
+      logs: false,
+      captureContent: false,
+      metricsIntervalMs: 30_000,
+      resourceAttributes: {},
+    });
+
+    const sessionKey = "agent:planner:main";
+    const hookCtx = { conversationId: sessionKey, channelId: "chat", agentId: "planner" };
+
+    await typedHooks.get("message_received")?.(
+      {
+        content: "Summarize the incident",
+        metadata: { channelId: "chat", conversationId: sessionKey },
+      },
+      hookCtx
+    );
+
+    typedHooks.get("before_agent_start")?.(
+      { agentId: "planner", model: "gemini-2.0-flash", conversationId: sessionKey },
+      hookCtx
+    );
+
+    await typedHooks.get("agent_end")?.(
+      {
+        success: true,
+        durationMs: 180,
+        messages: [
+          {
+            role: "assistant",
+            model: "gemini-2.0-flash",
+            usage: {
+              usageMetadata: {
+                promptTokenCount: 13,
+                candidatesTokenCount: 9,
+                totalTokenCount: 22,
+              },
+            },
+          },
+        ],
+        conversationId: sessionKey,
+      },
+      hookCtx
+    );
+
+    const agent = telemetry.tracer.spans.find((entry) => entry.name === "openclaw.agent.turn")?.span;
+
+    assert.equal(agent?.attributes.get("gen_ai.usage.input_tokens"), 13);
+    assert.equal(agent?.attributes.get("gen_ai.usage.output_tokens"), 9);
+    assert.equal(agent?.attributes.get("gen_ai.usage.total_tokens"), 22);
+    assert.equal(agent?.attributes.get("gen_ai.response.model"), "gemini-2.0-flash");
+    assert.equal(telemetry.counters.tokensPrompt.calls.at(-1)?.value, 13);
+    assert.equal(telemetry.counters.tokensCompletion.calls.at(-1)?.value, 9);
+    assert.equal(telemetry.counters.tokensTotal.calls.at(-1)?.value, 22);
+  } finally {
+    globalThis.setInterval = originalSetInterval;
+  }
+});

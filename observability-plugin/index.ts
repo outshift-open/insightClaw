@@ -45,6 +45,9 @@ const registerHooks =
         ? (hooksModule.default as any).registerHooks
         : undefined;
 
+let telemetry: TelemetryRuntime | null = null;
+let unsubscribeDiagnostics: (() => void) | null = null;
+
 const otelObservabilityPlugin = {
   id: "openclaw-deep-observability",
   name: "OpenClaw Deep Observability Plugin",
@@ -57,12 +60,9 @@ const otelObservabilityPlugin = {
     },
   },
 
-  register(api: any) {
+  async register(api: any) {
     const config = parseConfig(api.pluginConfig);
     const logger = api.logger;
-
-    let telemetry: TelemetryRuntime | null = null;
-    let unsubscribeDiagnostics: (() => void) | null = null;
 
     // ── RPC: status endpoint ────────────────────────────────────────
 
@@ -111,6 +111,15 @@ const otelObservabilityPlugin = {
       { commands: ["otel"] }
     );
 
+
+    if (typeof registerHooks !== "function") {
+      throw new TypeError("hooks module did not provide a callable registerHooks export");
+    }
+
+    // Register hooks NOW (during register phase) so OpenClaw picks them up.
+    // Telemetry is resolved lazily on first hook invocation (after service.start()).
+    registerHooks(api, () => telemetry!, config);
+
     // ── Background service ──────────────────────────────────────────
 
     api.registerService({
@@ -122,7 +131,9 @@ const otelObservabilityPlugin = {
         // 1. Initialize our OTel providers FIRST (traces + metrics)
         //    This registers our TracerProvider as global, so all spans
         //    (including GenAI wraps) export through our pipeline.
-        telemetry = initTelemetry(config, logger);
+        if (!telemetry) {
+          telemetry = initTelemetry(config, logger);
+        }
 
         // 2. Wrap LLM SDKs AFTER provider is registered
         //    The wraps use trace.getTracer() which goes through our provider.
@@ -130,17 +141,11 @@ const otelObservabilityPlugin = {
           await initOpenLLMetry(config, logger);
         }
 
-        // 3. Register hooks for tool results and command events
-        if (typeof registerHooks !== "function") {
-          throw new TypeError("hooks module did not provide a callable registerHooks export");
-        }
-        registerHooks(api, telemetry, config);
+        // Start session lifecycle watcher (auto session.end detection)
+        startSessionWatcher(telemetry!.tracer, logger);
 
-        // 4. Start session lifecycle watcher (auto session.end detection)
-        startSessionWatcher(telemetry.tracer, logger);
-
-        // 5. Subscribe to OpenClaw diagnostic events (model.usage, etc.)
-        //    This gives us cost data and accurate token counts
+        // Subscribe to OpenClaw diagnostic events (model.usage, etc.)
+        // This gives us cost data and accurate token counts
         unsubscribeDiagnostics = await registerDiagnosticsListener(telemetry, logger);
         if (hasDiagnosticsSupport()) {
           logger.info("[otel] ✅ Integrated with OpenClaw diagnostics (cost tracking enabled)");

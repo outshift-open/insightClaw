@@ -76,7 +76,7 @@ test("registerHooks wires lifecycle hooks that create and complete request spans
   Date.now = () => now;
 
   try {
-    registerHooks(api as any, telemetry as any, {
+    registerHooks(api as any, () => telemetry as any, {
       endpoint: "http://localhost:4318",
       protocol: "http",
       serviceName: "test-service",
@@ -90,11 +90,14 @@ test("registerHooks wires lifecycle hooks that create and complete request spans
     });
 
     assert.deepEqual([...typedHooks.keys()].sort(), [
+      "after_tool_call",
       "agent_end",
       "before_agent_start",
       "before_model_resolve",
       "before_prompt_build",
       "before_tool_call",
+      "llm_input",
+      "llm_output",
       "message_received",
       "message_sent",
       "tool_result_persist",
@@ -213,7 +216,7 @@ test("registerHooks links spawned subagent turns back to the spawning tool span"
   globalThis.setInterval = ((() => ({ unref() {} })) as unknown) as typeof setInterval;
 
   try {
-    registerHooks(api as any, telemetry as any, {
+    registerHooks(api as any, () => telemetry as any, {
       endpoint: "http://localhost:4318",
       protocol: "http",
       serviceName: "test-service",
@@ -294,7 +297,7 @@ test("registerHooks recovers Vertex usage fields from agent_end fallback payload
   globalThis.setInterval = ((() => ({ unref() {} })) as unknown) as typeof setInterval;
 
   try {
-    registerHooks(api as any, telemetry as any, {
+    registerHooks(api as any, () => telemetry as any, {
       endpoint: "http://localhost:4318",
       protocol: "http",
       serviceName: "test-service",

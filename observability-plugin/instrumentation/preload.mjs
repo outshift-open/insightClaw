@@ -16,7 +16,12 @@ import { pathToFileURL } from 'node:url';
 // This MUST happen before any instrumented modules are imported.
 const require = createRequire(import.meta.url);
 const iitmHookPath = require.resolve('import-in-the-middle/hook.mjs');
-register(pathToFileURL(iitmHookPath).href, { parentURL: import.meta.url });
+// Preload the IITM hook with an include filter for @mariozechner/pi-ai to ensure it wraps the GenAI provider modules used by OpenClaw.
+// Add other modules to the include filter as needed.
+register(pathToFileURL(iitmHookPath).href, {
+  parentURL: import.meta.url,
+  data: { include: [/@mariozechner\/pi-ai/] },
+});
 
 // Step 2: Set up the OTel SDK with GenAI instrumentations
 const { NodeSDK } = await import("@opentelemetry/sdk-node");

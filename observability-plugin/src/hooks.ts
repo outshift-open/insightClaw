@@ -392,13 +392,18 @@ function extractToolOutputPayload(event: any, message: any): unknown {
   return undefined;
 }
 
-function process_memory_tool(toolName: string, toolInput: string, counters: any, histograms: any, sessionKey: string, message: any): void {
+function process_memory_tool(toolName: string, toolInput: string, counters: any, histograms: any, sessionKey: string, message: any, durationMs: number): void {
   console.log("process_memory_tool", { toolName, toolInput, sessionKey });
   if (toolName === "read") {
     console.log("tool_result_persist read - toolInput", toolInput, "message", message);
     // Heuristics: .md files, "memory" in path, or a "memoryId" field in the tool output    
     if (isLongTermMemoryAccess(toolInput)) {
       counters.memoryReadEvents.add(1, {
+        "tool.name": toolName,
+        "session.key": sessionKey,
+      });
+
+      histograms.memoryReadDuration.record(durationMs, {
         "tool.name": toolName,
         "session.key": sessionKey,
       });
@@ -412,6 +417,10 @@ function process_memory_tool(toolName: string, toolInput: string, counters: any,
         "tool.name": toolName,
         "session.key": sessionKey,
       });
+      histograms.memoryWriteDuration.record(durationMs, {
+        "tool.name": toolName,
+        "session.key": sessionKey,
+      });
     }
   }
   else if (toolName === "edit") {
@@ -419,6 +428,10 @@ function process_memory_tool(toolName: string, toolInput: string, counters: any,
     // Heuristics: .md files, "memory" in path, or a "memoryId" field in the tool output    
     if (isLongTermMemoryAccess(toolInput)) {
       counters.memoryEditEvents.add(1, {
+        "tool.name": toolName,
+        "session.key": sessionKey,
+      });
+      histograms.memoryEditDuration.record(durationMs, {
         "tool.name": toolName,
         "session.key": sessionKey,
       });
@@ -479,30 +492,30 @@ function process_memory_tool(toolName: string, toolInput: string, counters: any,
 }
 
 function isLongTermMemoryAccess(toolInput: any): boolean {
-    //Heuristics to determine if a tool call is accessing long-term memory:
-    // Check if toolInput has a "path" field that includes "memory" and ends with ".md"
+  //Heuristics to determine if a tool call is accessing long-term memory:
+  // Check if toolInput has a "path" field that includes "memory" and ends with ".md"
 
-    let path: string | undefined = undefined;
-    // Primary: extract path directly from toolInput
-    if (typeof toolInput?.path === "string") {
-        path = toolInput.path;
+  let path: string | undefined = undefined;
+  // Primary: extract path directly from toolInput
+  if (typeof toolInput?.path === "string") {
+    path = toolInput.path;
+  }
+
+  // Fallback: toolInput may be a JSON string
+  if (!path && typeof toolInput === "string") {
+    try {
+      const parsed = JSON.parse(toolInput);
+      if (typeof parsed?.path === "string") {
+        path = parsed.path;
+      }
+    } catch {
+      // Not JSON, ignore
     }
+  }
 
-    // Fallback: toolInput may be a JSON string
-    if (!path && typeof toolInput === "string") {
-        try {
-            const parsed = JSON.parse(toolInput);
-            if (typeof parsed?.path === "string") {
-                path = parsed.path;
-            }
-        } catch {
-            // Not JSON, ignore
-        }
-    }
-
-    const isMemory = typeof path === "string" && path.includes("memory") && path.endsWith(".md");
-    console.log("isLongTermMemoryAccess", { path, isMemory });
-    return isMemory;
+  const isMemory = typeof path === "string" && path.includes("memory") && path.endsWith(".md");
+  console.log("isLongTermMemoryAccess", { path, isMemory });
+  return isMemory;
 }
 
 function resolveMessageFrom(event?: any, ctx?: any): string {
@@ -1217,7 +1230,7 @@ export function registerHooks(
               );
             }
           }
-          process_memory_tool(toolName, toolInput, counters, histograms, sessionKey, message);
+          process_memory_tool(toolName, toolInput, counters, histograms, sessionKey, message, durationMs);
 
           const contentArray = message?.content;
           if (contentArray && Array.isArray(contentArray)) {
@@ -1334,7 +1347,7 @@ export function registerHooks(
               );
             }
           }
-          process_memory_tool(toolName, toolInput, counters, histograms, sessionKey, message);
+          process_memory_tool(toolName, toolInput, counters, histograms, sessionKey, message, durationMs);
 
           const contentArray = message?.content;
           if (contentArray && Array.isArray(contentArray)) {

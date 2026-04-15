@@ -62,17 +62,6 @@ export interface OtelCounters {
   promptInjection: Counter;
   /** Dangerous command executions */
   dangerousCommand: Counter;
-  /** Memory read operations */
-
-
-  /** TOKENS available only in agent -end */
-  //memoryReadToken: Counter;
-  /** Memory write operations */
-  //memoryWriteToken: Counter;
-  /** Memory edit operations */
-  //memoryEditToken: Counter;
-  /** Memory search operations */
-  //memorySearchToken: Counter; // -> this becomes toolCalls with "tool=memory_search" attribute
   /** Memory search failures */
   memorySearchMiss: Counter;
   /** Memory search successes */
@@ -95,6 +84,12 @@ export interface OtelHistograms {
   agentTurnDuration: Histogram;
   /** Memory search result fragmentation (0 to 1) */
   memorySearchFragmentation: Histogram;
+  /** Memory read duration in ms */
+  memoryReadDuration: Histogram;
+  /** Memory write duration in ms */
+  memoryWriteDuration: Histogram;
+  /** Memory edit duration in ms */
+  memoryEditDuration: Histogram;
 }
 
 export interface OtelGauges {
@@ -235,22 +230,6 @@ export function initTelemetry(config: OtelObservabilityConfig, logger: any): Tel
     }),
 
     // Memory operation counters
-    /*memoryReadToken: meter.createCounter("openclaw.memory.read_tokens", {
-      description: "Memory read tokens consumed",
-      unit: "tokens",
-    }),
-    memoryWriteToken: meter.createCounter("openclaw.memory.write_tokens", {
-      description: "Memory write tokens consumed",
-      unit: "tokens",
-    }),
-    memorySearchToken: meter.createCounter("openclaw.memory.search_tokens", {
-      description: "Memory search tokens consumed",
-      unit: "tokens",
-    }),
-    memoryReadToken: meter.createCounter("openclaw.memory.read_tokens", {
-      description: "Memory read tokens consumed",
-      unit: "tokens",
-    }),*/
     memoryWriteEvents: meter.createCounter("openclaw.memory.write_events", {
       description: "Memory write events (only .md files considered as long term memory)",
       unit: "events",
@@ -271,10 +250,6 @@ export function initTelemetry(config: OtelObservabilityConfig, logger: any): Tel
       description: "Memory search hits",
       unit: "events",
     }),
-    /*memoryEditToken: meter.createCounter("openclaw.memory.edit_tokens", {
-        description: "Memory edit tokens consumed",
-        unit: "tokens",
-    }),*/
   };
 
   const histograms: OtelHistograms = {
@@ -293,6 +268,18 @@ export function initTelemetry(config: OtelObservabilityConfig, logger: any): Tel
     memorySearchFragmentation: meter.createHistogram("openclaw.memory.search_fragmentation", {
       description: "Memory search result fragmentation (0 to 1)",
       unit: "1",
+    }),
+    memoryReadDuration: meter.createHistogram("openclaw.memory.read_duration", {
+      description: "Memory read duration in ms",
+      unit: "ms",
+    }),
+    memoryWriteDuration: meter.createHistogram("openclaw.memory.write_duration", {
+      description: "Memory write duration in ms",
+      unit: "ms",
+    }),
+    memoryEditDuration: meter.createHistogram("openclaw.memory.edit_duration", {
+        description: "Memory edit duration in ms",
+        unit: "ms",
     }),
   };
 
@@ -332,15 +319,11 @@ export function initTelemetry(config: OtelObservabilityConfig, logger: any): Tel
       counters.dangerousCommand.add(0, idleAttrs);
 
       // Memory operation counters
-      //counters.memoryReadToken.add(0, idleAttrs);
-      //counters.memoryWriteToken.add(0, idleAttrs);
-      //counters.memorySearchToken.add(0, idleAttrs);
       counters.memorySearchMiss.add(0, idleAttrs);
       counters.memorySearchHit.add(0, idleAttrs);
       counters.memoryWriteEvents.add(0, idleAttrs);
       counters.memoryReadEvents.add(0, idleAttrs);
       counters.memoryEditEvents.add(0, idleAttrs);
-      //counters.memoryEditToken.add(0, idleAttrs);
     } catch {
       // Never let metric heartbeat errors affect the gateway
     }

@@ -398,12 +398,12 @@ function process_memory_tool(toolName: string, toolInput: string, counters: any,
     if (isLongTermMemoryAccess(toolInput)) {
       counters.memoryReadEvents.add(1, {
         "tool.name": toolName,
-        "session.key": sessionKey,
+        "openclaw.session.key": sessionKey,
       });
 
       histograms.memoryReadDuration.record(durationMs, {
         "tool.name": toolName,
-        "session.key": sessionKey,
+        "openclaw.session.key": sessionKey,
       });
     }
   }
@@ -412,11 +412,11 @@ function process_memory_tool(toolName: string, toolInput: string, counters: any,
     if (isLongTermMemoryAccess(toolInput)) {
       counters.memoryWriteEvents.add(1, {
         "tool.name": toolName,
-        "session.key": sessionKey,
+        "openclaw.session.key": sessionKey,
       });
       histograms.memoryWriteDuration.record(durationMs, {
         "tool.name": toolName,
-        "session.key": sessionKey,
+        "openclaw.session.key": sessionKey,
       });
     }
   }
@@ -425,11 +425,11 @@ function process_memory_tool(toolName: string, toolInput: string, counters: any,
     if (isLongTermMemoryAccess(toolInput)) {
       counters.memoryEditEvents.add(1, {
         "tool.name": toolName,
-        "session.key": sessionKey,
+        "openclaw.session.key": sessionKey,
       });
       histograms.memoryEditDuration.record(durationMs, {
         "tool.name": toolName,
-        "session.key": sessionKey,
+        "openclaw.session.key": sessionKey,
       });
     }
   }
@@ -452,7 +452,7 @@ function process_memory_tool(toolName: string, toolInput: string, counters: any,
 
     counters.memoryReadEvents.add(1, {
       "tool.name": toolName,
-      "session.key": sessionKey,
+      "openclaw.session.key": sessionKey,
     });
 
     if (Array.isArray(results)) {
@@ -465,7 +465,7 @@ function process_memory_tool(toolName: string, toolInput: string, counters: any,
       if (results.length == 0) {
         counters.memorySearchMiss.add(1, {
           "tool.name": toolName,
-          "session.key": sessionKey,
+          "openclaw.session.key": sessionKey,
         });
       }
       else {
@@ -474,11 +474,11 @@ function process_memory_tool(toolName: string, toolInput: string, counters: any,
 
         histograms.memorySearchFragmentation.record(memoryFragmentation, {
           "tool.name": toolName,
-          "session.key": sessionKey,
+          "openclaw.session.key": sessionKey,
         });
         counters.memorySearchHit.add(1, {
           "tool.name": toolName,
-          "session.key": sessionKey,
+          "openclaw.session.key": sessionKey,
         });
       }
     }
@@ -1065,7 +1065,7 @@ export function registerHooks(
         // Record metric
         counters.toolCalls.add(1, {
           "tool.name": toolName,
-          "session.key": sessionKey,
+          "openclaw.session.key": sessionKey,
         });
 
         // Get parent context - prefer agent turn span, fall back to root

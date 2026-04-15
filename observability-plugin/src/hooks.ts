@@ -392,7 +392,93 @@ function extractToolOutputPayload(event: any, message: any): unknown {
   return undefined;
 }
 
-function isLongTermMemoryAccess(event: any, toolInput: any): boolean {
+function process_memory_tool(toolName: string, toolInput: string, counters: any, histograms: any, sessionKey: string, message: any): void {
+  console.log("process_memory_tool", { toolName, toolInput, sessionKey });
+  if (toolName === "read") {
+    console.log("tool_result_persist read - toolInput", toolInput, "message", message);
+    // Heuristics: .md files, "memory" in path, or a "memoryId" field in the tool output    
+    if (isLongTermMemoryAccess(toolInput)) {
+      counters.memoryReadEvents.add(1, {
+        "tool.name": toolName,
+        "session.key": sessionKey,
+      });
+    }
+  }
+  else if (toolName === "write") {
+    console.log("tool_result_persist write - toolInput", toolInput, "message", message);
+    // Heuristics: .md files, "memory" in path, or a "memoryId" field in the tool output    
+    if (isLongTermMemoryAccess(toolInput)) {
+      counters.memoryWriteEvents.add(1, {
+        "tool.name": toolName,
+        "session.key": sessionKey,
+      });
+    }
+  }
+  else if (toolName === "edit") {
+    console.log("tool_result_persist edit - toolInput", toolInput, "message", message);
+    // Heuristics: .md files, "memory" in path, or a "memoryId" field in the tool output    
+    if (isLongTermMemoryAccess(toolInput)) {
+      counters.memoryEditEvents.add(1, {
+        "tool.name": toolName,
+        "session.key": sessionKey,
+      });
+    }
+  }
+  else if (toolName === "memory_search") {
+    console.log("tool_result_persist memory_search");
+
+    // Prefer message.details if present, else parse content[0].text
+    let toolOutput = message?.details;
+    if (!toolOutput && Array.isArray(message?.content) && message.content.length > 0) {
+      const text = message.content[0]?.text;
+      if (typeof text === "string") {
+        try {
+          toolOutput = JSON.parse(text);
+        } catch (err) {
+          console.error("Failed to parse tool output:", err);
+        }
+      }
+    }
+
+    const outputObj = toolOutput;
+    const results = outputObj?.results;
+
+    counters.memoryReadEvents.add(1, {
+      "tool.name": toolName,
+      "session.key": sessionKey,
+    });
+
+    if (Array.isArray(results)) {
+      const totalChars = results.reduce((sum: number, r: any) => {
+        const snippet = r?.snippet ?? "";
+        return sum + snippet.length;
+      }, 0);
+      // Calculate memoryFragmentation
+
+      if (results.length == 0) {
+        counters.memorySearchMiss.add(1, {
+          "tool.name": toolName,
+          "session.key": sessionKey,
+        });
+      }
+      else {
+        const uniquePaths = new Set(results.map((r: any) => r?.path)).size;
+        const memoryFragmentation = results.length > 0 ? (uniquePaths - 1) / results.length : 0;
+
+        histograms.memorySearchFragmentation.record(memoryFragmentation, {
+          "tool.name": toolName,
+          "session.key": sessionKey,
+        });
+        counters.memorySearchHit.add(1, {
+          "tool.name": toolName,
+          "session.key": sessionKey,
+        });
+      }
+    }
+  }
+}
+
+function isLongTermMemoryAccess(toolInput: any): boolean {
     //Heuristics to determine if a tool call is accessing long-term memory:
     // Check if toolInput has a "path" field that includes "memory" and ends with ".md"
 
@@ -1080,6 +1166,7 @@ export function registerHooks(
           return undefined;
         }
         pendingToolSpans.delete(toolCallId);
+        console.log("after_tool_call - pendingTool", toolName);
 
         const { span, startedAt } = pendingTool;
         const durationMs = Math.max(0, Date.now() - startedAt);
@@ -1099,8 +1186,8 @@ export function registerHooks(
         const parentContext = sessionCtx?.agentContext || sessionCtx?.rootContext || context.active();
 
         const agentSequence = getHandoffSequence(sessionKey);
-        // Inspect the message for result metadata
-        const message = event?.message;
+        // Inspect the message/result for result metadata
+        const message = event?.result ?? event?.message;
         if (message) {
           if (toolName === "sessions_spawn") {
             const targetAgentIds = extractSpawnTargetAgentIds(toolInput, message);
@@ -1130,6 +1217,7 @@ export function registerHooks(
               );
             }
           }
+          process_memory_tool(toolName, toolInput, counters, histograms, sessionKey, message);
 
           const contentArray = message?.content;
           if (contentArray && Array.isArray(contentArray)) {
@@ -1246,91 +1334,7 @@ export function registerHooks(
               );
             }
           }
-          else if (toolName === "read") {
-            console.log("tool_result_persist read - toolInput", toolInput, "message", message);
-            // Heuristics: .md files, "memory" in path, or a "memoryId" field in the tool output    
-            if (isLongTermMemoryAccess(event, toolInput)) {
-                counters.memoryReadEvents.add(1, {
-                    "tool.name": toolName,
-                    "session.key": sessionKey,
-                });
-            }            
-          }
-          else if (toolName === "write") {
-            console.log("tool_result_persist write - toolInput", toolInput, "message", message);
-            // Heuristics: .md files, "memory" in path, or a "memoryId" field in the tool output    
-            if (isLongTermMemoryAccess(event, toolInput)) {
-                counters.memoryWriteEvents.add(1, {
-                    "tool.name": toolName,
-                    "session.key": sessionKey,
-                });
-            }   
-          }
-          else if (toolName === "edit") {
-            console.log("tool_result_persist edit - toolInput", toolInput, "message", message);
-            // Heuristics: .md files, "memory" in path, or a "memoryId" field in the tool output    
-            if (isLongTermMemoryAccess(event, toolInput)) {
-                counters.memoryEditEvents.add(1, {
-                    "tool.name": toolName,
-                    "session.key": sessionKey,
-                });
-            }
-          }
-          else if (toolName === "memory_search") {
-            console.log("tool_result_persist memory_search");
-
-            // Prefer message.details if present, else parse content[0].text
-            let toolOutput = message?.details;
-            if (!toolOutput && Array.isArray(message?.content) && message.content.length > 0) {
-              const text = message.content[0]?.text;
-              if (typeof text === "string") {
-                try {
-                  toolOutput = JSON.parse(text);
-                } catch (err) {
-                  console.error("Failed to parse tool output:", err);
-                }
-              }
-            }
-
-            const outputObj = toolOutput;
-            const results = outputObj?.results;
-            console.log(`tool_result_persist memory_search - results: ${JSON.stringify(results)}`);
-
-            counters.memoryReadEvents.add(1, {
-                "tool.name": toolName,
-                "session.key": sessionKey,
-            });
-
-            if (Array.isArray(results)) {
-              const totalChars = results.reduce((sum: number, r: any) => {
-                const snippet = r?.snippet ?? "";
-                return sum + snippet.length;
-              }, 0);
-              // Calculate memoryFragmentation
-              
-              if (results.length == 0) {
-                counters.memorySearchMiss.add(1, {
-                    "tool.name": toolName,
-                    "session.key": sessionKey,
-                });
-              }
-              else {
-                const uniquePaths = new Set(results.map((r: any) => r?.path)).size;
-                const memoryFragmentation = results.length > 0 ? (uniquePaths - 1) / results.length : 0;
-                
-                console.log(`tool_result_persist memory_search - memoryFragmentation: ${memoryFragmentation}`);
-
-                histograms.memorySearchFragmentation.record(memoryFragmentation, {
-                    "tool.name": toolName,
-                    "session.key": sessionKey,
-                });
-                counters.memorySearchHit.add(1, {
-                    "tool.name": toolName,
-                    "session.key": sessionKey,
-                });
-              }
-            }
-          }
+          process_memory_tool(toolName, toolInput, counters, histograms, sessionKey, message);
 
           const contentArray = message?.content;
           if (contentArray && Array.isArray(contentArray)) {

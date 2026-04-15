@@ -393,9 +393,7 @@ function extractToolOutputPayload(event: any, message: any): unknown {
 }
 
 function process_memory_tool(toolName: string, toolInput: string, counters: any, histograms: any, sessionKey: string, message: any, durationMs: number): void {
-  console.log("process_memory_tool", { toolName, toolInput, sessionKey });
   if (toolName === "read") {
-    console.log("tool_result_persist read - toolInput", toolInput, "message", message);
     // Heuristics: .md files, "memory" in path, or a "memoryId" field in the tool output    
     if (isLongTermMemoryAccess(toolInput)) {
       counters.memoryReadEvents.add(1, {
@@ -410,7 +408,6 @@ function process_memory_tool(toolName: string, toolInput: string, counters: any,
     }
   }
   else if (toolName === "write") {
-    console.log("tool_result_persist write - toolInput", toolInput, "message", message);
     // Heuristics: .md files, "memory" in path, or a "memoryId" field in the tool output    
     if (isLongTermMemoryAccess(toolInput)) {
       counters.memoryWriteEvents.add(1, {
@@ -424,7 +421,6 @@ function process_memory_tool(toolName: string, toolInput: string, counters: any,
     }
   }
   else if (toolName === "edit") {
-    console.log("tool_result_persist edit - toolInput", toolInput, "message", message);
     // Heuristics: .md files, "memory" in path, or a "memoryId" field in the tool output    
     if (isLongTermMemoryAccess(toolInput)) {
       counters.memoryEditEvents.add(1, {
@@ -438,8 +434,6 @@ function process_memory_tool(toolName: string, toolInput: string, counters: any,
     }
   }
   else if (toolName === "memory_search") {
-    console.log("tool_result_persist memory_search");
-
     // Prefer message.details if present, else parse content[0].text
     let toolOutput = message?.details;
     if (!toolOutput && Array.isArray(message?.content) && message.content.length > 0) {
@@ -514,7 +508,6 @@ function isLongTermMemoryAccess(toolInput: any): boolean {
   }
 
   const isMemory = typeof path === "string" && path.includes("memory") && path.endsWith(".md");
-  console.log("isLongTermMemoryAccess", { path, isMemory });
   return isMemory;
 }
 
@@ -1179,7 +1172,6 @@ export function registerHooks(
           return undefined;
         }
         pendingToolSpans.delete(toolCallId);
-        console.log("after_tool_call - pendingTool", toolName);
 
         const { span, startedAt } = pendingTool;
         const durationMs = Math.max(0, Date.now() - startedAt);
@@ -1431,7 +1423,7 @@ export function registerHooks(
           cacheWriteTokens = diagUsage.usage.cacheWrite || 0;
           model = diagUsage.model || "unknown";
           costUsd = diagUsage.costUsd;
-          logger.info(`[otel] agent_end using diagnostic data: cost=$${costUsd?.toFixed(4) || "?"}`);
+          logger.debug(`[otel] agent_end using diagnostic data: cost=$${costUsd?.toFixed(4) || "?"}`);
         } else {
           // Fallback: parse messages manually
           for (const msg of messages) {
@@ -1449,7 +1441,7 @@ export function registerHooks(
         }
 
         const totalTokens = totalInputTokens + totalOutputTokens + cacheReadTokens + cacheWriteTokens;
-        logger.info(`[otel] agent_end tokens: input=${totalInputTokens}, output=${totalOutputTokens}, cache_read=${cacheReadTokens}, cache_write=${cacheWriteTokens}, model=${model}`);
+        logger.debug(`[otel] agent_end tokens: input=${totalInputTokens}, output=${totalOutputTokens}, cache_read=${cacheReadTokens}, cache_write=${cacheWriteTokens}, model=${model}`);
 
         const sessionCtx = getSessionTraceContext(event, ctx);
 

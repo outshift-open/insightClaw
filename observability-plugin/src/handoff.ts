@@ -6,7 +6,7 @@
  *   - Span links with link.type = "agent_handoff" connect sequential agents
  *   - Cross-process propagation headers carry handoff context
  *
- * When agent B runs after agent A in the same session, agent B's span gets:
+ * When agent B runs after agent A in the same runtime session, agent B's span gets:
  *   - ioa_observe.agent.sequence = 2
  *   - ioa_observe.agent.previous = "agent_A_name"
  *   - A span link pointing to agent A's span with link.type = "agent_handoff"
@@ -23,7 +23,7 @@ export function setHandoffLogger(logger: any): void {
   loggerRef = logger;
 }
 
-// ── Per-Session Handoff State ──────────────────────────────────────
+// ── Per-Runtime-Session Handoff State ──────────────────────────────
 
 interface HandoffState {
   /** Last agent's span context (for creating span links) */
@@ -34,7 +34,7 @@ interface HandoffState {
   sequence: number;
 }
 
-/** Map of sessionKey → handoff state for tracking agent chains */
+/** Map of runtime session key → handoff state for tracking agent chains */
 const handoffMap = new Map<string, HandoffState>();
 
 export interface HandoffSeed {
@@ -62,7 +62,7 @@ export function onAgentStart(
   const attributes: Record<string, string | number> = {};
 
   if (state) {
-    // There was a previous agent in this session — create a handoff link
+    // There was a previous agent in this runtime session — create a handoff link
     const sequence = state.sequence + 1;
 
     links.push({
@@ -87,7 +87,7 @@ export function onAgentStart(
       previousAgentName: state.lastAgentName,
     };
   } else {
-    // First agent in this session
+    // First agent in this runtime session
     attributes["ioa_observe.agent.sequence"] = 1;
 
     return {
@@ -99,8 +99,8 @@ export function onAgentStart(
 }
 
 /**
- * Seed handoff state for a new session using a span context from another session.
- * This lets subagent sessions link back to the spawning agent on their first turn.
+ * Seed handoff state for a new runtime session using a span context from another runtime session.
+ * This lets subagent runtime sessions link back to the spawning agent on their first turn.
  */
 export function seedHandoffState(sessionKey: string, seed: HandoffSeed): boolean {
   if (handoffMap.has(sessionKey)) {
@@ -114,7 +114,7 @@ export function seedHandoffState(sessionKey: string, seed: HandoffSeed): boolean
   });
 
   loggerRef?.debug && loggerRef.debug(
-    `[otel:handoff] Seeded handoff state: session=${sessionKey}, ` +
+    `[otel:handoff] Seeded handoff state: runtimeSession=${sessionKey}, ` +
     `previous=${seed.lastAgentName}, seq=${seed.sequence}, spanId=${seed.lastAgentSpanContext.spanId}`
   );
 
@@ -139,12 +139,12 @@ export function registerAgentSpan(
 
   if (previousAgentName) {
     loggerRef?.info && loggerRef.info(
-      `[otel:handoff] Agent handoff detected: session=${sessionKey}, ` +
+      `[otel:handoff] Agent handoff detected: runtimeSession=${sessionKey}, ` +
       `previous=${previousAgentName} (seq=${sequence - 1}) → current=${agentId} (seq=${sequence})`
     );
   } else {
     loggerRef?.info && loggerRef.info(
-      `[otel:handoff] First agent in chain: session=${sessionKey}, agent=${agentId}, seq=${sequence}`
+      `[otel:handoff] First agent in chain: runtimeSession=${sessionKey}, agent=${agentId}, seq=${sequence}`
     );
   }
 }
@@ -159,26 +159,26 @@ export function onAgentEnd(sessionKey: string, agentId: string, agentSpan: Span)
     state.lastAgentSpanContext = agentSpan.spanContext();
     state.lastAgentName = agentId;
     loggerRef?.debug && loggerRef.debug(
-      `[otel:handoff] Agent ended, updated handoff state: session=${sessionKey}, ` +
+      `[otel:handoff] Agent ended, updated handoff state: runtimeSession=${sessionKey}, ` +
       `agent=${agentId}, seq=${state.sequence}, spanId=${agentSpan.spanContext().spanId}`
     );
   }
 }
 
 /**
- * Clean up handoff state for a session.
+ * Clean up handoff state for a runtime session.
  * Called when the root request span ends.
  */
 export function cleanupHandoff(sessionKey: string): void {
   const had = handoffMap.has(sessionKey);
   handoffMap.delete(sessionKey);
   if (had) {
-    loggerRef?.debug && loggerRef.debug(`[otel:handoff] Cleaned up handoff state for session=${sessionKey}`);
+    loggerRef?.debug && loggerRef.debug(`[otel:handoff] Cleaned up handoff state for runtimeSession=${sessionKey}`);
   }
 }
 
 /**
- * Get the current handoff sequence for a session.
+ * Get the current handoff sequence for a runtime session.
  */
 export function getHandoffSequence(sessionKey: string): number {
   return handoffMap.get(sessionKey)?.sequence ?? 0;

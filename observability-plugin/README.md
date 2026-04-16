@@ -35,6 +35,11 @@ openclaw.request (root span)
 - Webhook, queue, message, session, and tool-loop diagnostics recorded as OTel metrics/spans
 - Session state and stuck-session signals available alongside connected request traces
 
+**Session Semantics:**
+- `session.start` and `session.end` represent the plugin's user workflow session lifecycle
+- A session ends after 5 minutes of inactivity by default
+- OpenClaw `sessionKey` and `conversationId` are treated as runtime-session correlation identifiers and exported as `openclaw.runtime.session.*`
+
 **Agent Payload Visibility:**
 - Optional agent input/output payload capture on `openclaw.agent.turn`
 - Request input captured on the root request span

@@ -277,7 +277,7 @@ test("registerHooks links spawned subagent turns back to the spawning tool span"
   );
 
   const spans = telemetry.tracer.spans;
-  const childRoot = spans.find((entry) => entry.name === "openclaw.request" && entry.options.attributes["openclaw.session.key"] === childSession);
+  const childRoot = spans.find((entry) => entry.name === "openclaw.request" && entry.options.attributes["openclaw.runtime.session.key"] === childSession);
   const childAgent = spans.filter((entry) => entry.name === "openclaw.agent.turn").at(-1);
 
   assert.ok(childRoot);

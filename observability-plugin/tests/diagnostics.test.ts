@@ -117,7 +117,9 @@ test("registerDiagnosticsListener correlates model usage by sessionId", async ()
   assert.equal(telemetry.counters.llmRequests.calls[0]?.value, 1);
   assert.equal(telemetry.histograms.llmDuration.calls[0]?.value, 180);
   assert.equal(telemetry.metricCounters.get("openclaw.cost.usd")?.calls[0]?.value, 0.42);
-  assert.ok(telemetry.tracer.spans.some((entry) => entry.name === "openclaw.model.usage"));
+  const usageSpan = telemetry.tracer.spans.find((entry) => entry.name === "openclaw.model.usage");
+  assert.ok(usageSpan);
+  assert.equal(usageSpan?.options.attributes["openclaw.runtime.session.id"], "session-123");
   assert.equal(getPendingUsage("session-123"), undefined);
 
   unregisterActiveAgentSpan(["session-123"]);
@@ -199,6 +201,9 @@ test("registerDiagnosticsListener records the broader diagnostic event stream", 
 
   const toolLoopSpan = telemetry.tracer.spans.find((entry) => entry.name === "openclaw.tool.loop")?.span;
   assert.equal(toolLoopSpan?.statuses.at(-1)?.message, "loop detected");
+
+  const processedSpan = telemetry.tracer.spans.find((entry) => entry.name === "openclaw.message.processed");
+  assert.equal(processedSpan?.options.attributes["openclaw.runtime.session.id"], "session-456");
 
   unsubscribe();
   setOnDiagnosticEventForTest(null);

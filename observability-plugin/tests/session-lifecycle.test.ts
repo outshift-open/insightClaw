@@ -19,7 +19,7 @@ function createLogger() {
   };
 }
 
-test("session lifecycle tracks sessions and emits session.end on explicit end", () => {
+test("session lifecycle emits session.start and session.end around explicit end", () => {
   stopSessionWatcher();
   const tracer = new MockTracer();
   startSessionWatcher(tracer as any, createLogger(), 10_000);
@@ -30,10 +30,13 @@ test("session lifecycle tracks sessions and emits session.end on explicit end", 
   endSession("session-1");
 
   assert.equal(activeSessionCount(), 0);
-  assert.equal(tracer.spans.length, 1);
-  assert.equal(tracer.spans[0]?.name, "session.end");
+  assert.equal(tracer.spans.length, 2);
+  assert.equal(tracer.spans[0]?.name, "session.start");
   assert.equal(tracer.spans[0]?.options.attributes["session.id"], "session-1");
-  assert.equal(tracer.spans[0]?.options.attributes["ioa_observe.workflow.name"], "workflow-a");
+  assert.equal(tracer.spans[0]?.options.attributes["openclaw.runtime.session.key"], "session-1");
+  assert.equal(tracer.spans[1]?.name, "session.end");
+  assert.equal(tracer.spans[1]?.options.attributes["session.id"], "session-1");
+  assert.equal(tracer.spans[1]?.options.attributes["ioa_observe.workflow.name"], "workflow-a");
 
   stopSessionWatcher();
 });
@@ -50,7 +53,8 @@ test("session lifecycle updates existing sessions and removes without emission",
   removeSession("session-2");
 
   assert.equal(activeSessionCount(), 0);
-  assert.equal(tracer.spans.length, 0);
+  assert.equal(tracer.spans.length, 1);
+  assert.equal(tracer.spans[0]?.name, "session.start");
 
   stopSessionWatcher();
 });

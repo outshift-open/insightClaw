@@ -6,6 +6,7 @@
  * and are attached as metadata on our session spans.
  */
 
+import { randomUUID } from "node:crypto";
 import { SpanKind, SpanStatusCode, trace, context } from "@opentelemetry/api";
 import type { Tracer, Span, Context } from "@opentelemetry/api";
 import {
@@ -96,15 +97,16 @@ export function touchSession(
   runtimeSessionKey: string,
   rootContext: Context,
   workflowName?: string
-): void {
+): string {
   const existing = sessions.get(runtimeSessionKey);
   if (existing) {
     existing.lastActivityAt = Date.now();
     if (workflowName) existing.workflowName = workflowName;
+    return existing.sessionId;
   } else {
     const startedAt = Date.now();
     const session: SessionActivity = {
-      sessionId: runtimeSessionKey,
+      sessionId: randomUUID(),
       runtimeSessionKey,
       lastActivityAt: startedAt,
       rootContext,
@@ -116,7 +118,12 @@ export function touchSession(
     loggerRef?.info?.(
       `[otel:session] New session tracked: session=${session.sessionId}, runtimeSession=${runtimeSessionKey}, activeSessions=${sessions.size}`
     );
+    return session.sessionId;
   }
+}
+
+export function getSessionId(runtimeSessionKey: string): string | undefined {
+  return sessions.get(runtimeSessionKey)?.sessionId;
 }
 
 /**
@@ -189,7 +196,7 @@ function emitSessionStart(session: SessionActivity): void {
           [ATTR_OBSERVE_SPAN_KIND]: ObserveSpanKind.WORKFLOW,
           "session.id": session.sessionId,
           "session.started_at": new Date(session.lastActivityAt).toISOString(),
-          "openclaw.runtime.session.key": session.runtimeSessionKey,
+          "openclaw.session.key": session.runtimeSessionKey,
           ...(session.workflowName
             ? { "ioa_observe.workflow.name": session.workflowName }
             : {}),
@@ -221,7 +228,7 @@ function emitSessionEnd(session: SessionActivity): void {
           [ATTR_OBSERVE_SPAN_KIND]: ObserveSpanKind.WORKFLOW,
           "session.id": session.sessionId,
           "session.ended_at": new Date(session.lastActivityAt).toISOString(),
-          "openclaw.runtime.session.key": session.runtimeSessionKey,
+          "openclaw.session.key": session.runtimeSessionKey,
           ...(session.workflowName
             ? { "ioa_observe.workflow.name": session.workflowName }
             : {}),

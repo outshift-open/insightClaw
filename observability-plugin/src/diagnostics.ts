@@ -9,6 +9,7 @@
 
 import { SpanKind, SpanStatusCode, context, trace, type Attributes, type Span } from "@opentelemetry/api";
 import type { TelemetryRuntime } from "./telemetry.js";
+import { getSessionId } from "./session-lifecycle.js";
 
 // Import from OpenClaw plugin SDK (loaded lazily)
 type DiagnosticEventSubscriber = (listener: (evt: any) => void) => () => void;
@@ -395,7 +396,11 @@ export async function registerDiagnosticsListener(
     const runtimeSessionId = firstString(evt?.sessionId, evt?.metadata?.sessionId, evt?.context?.sessionId);
 
     if (runtimeSessionKey) {
-      attrs["openclaw.runtime.session.key"] = runtimeSessionKey;
+      attrs["openclaw.session.key"] = runtimeSessionKey;
+      const sessionId = getSessionId(runtimeSessionKey);
+      if (sessionId) {
+        attrs["session.id"] = sessionId;
+      }
     }
     if (runtimeSessionId) {
       attrs["openclaw.runtime.session.id"] = runtimeSessionId;

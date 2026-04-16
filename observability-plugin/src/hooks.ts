@@ -40,7 +40,7 @@ import {
   ATTR_OBSERVE_ENTITY_INPUT,
   ATTR_OBSERVE_ENTITY_OUTPUT,
 } from "./observe-attributes.js";
-import { touchSession, endSession } from "./session-lifecycle.js";
+import { touchSession, endSession, getSessionId } from "./session-lifecycle.js";
 
 /** Active trace context for an OpenClaw runtime session. */
 interface SessionTraceContext {
@@ -261,6 +261,15 @@ function deleteSessionTraceContext(sessionCtx: SessionTraceContext | undefined):
   }
 }
 
+function getSessionIdAttrs(runtimeSessionKey: string): Record<string, string> {
+  if (runtimeSessionKey === "unknown") {
+    return {};
+  }
+
+  const sessionId = getSessionId(runtimeSessionKey);
+  return sessionId ? { "session.id": sessionId } : {};
+}
+
 function extractMessageText(event: any): string {
   if (typeof event?.text === "string") return event.text;
   if (typeof event?.message === "string") return event.message;
@@ -392,18 +401,18 @@ function extractToolOutputPayload(event: any, message: any): unknown {
   return undefined;
 }
 
-function process_memory_tool(toolName: string, toolInput: string, counters: any, histograms: any, sessionKey: string, message: any, durationMs: number): void {
+function process_memory_tool(toolName: string, toolInput: string, counters: any, histograms: any, runtimeSessionKey: string, message: any, durationMs: number): void {
   if (toolName === "read") {
     // Heuristics: .md files, "memory" in path, or a "memoryId" field in the tool output    
     if (isLongTermMemoryAccess(toolInput)) {
       counters.memoryReadEvents.add(1, {
         "tool.name": toolName,
-        "openclaw.session.key": sessionKey,
+        "openclaw.session.key": runtimeSessionKey,
       });
 
       histograms.memoryReadDuration.record(durationMs, {
         "tool.name": toolName,
-        "openclaw.session.key": sessionKey,
+        "openclaw.session.key": runtimeSessionKey,
       });
     }
   }
@@ -412,11 +421,11 @@ function process_memory_tool(toolName: string, toolInput: string, counters: any,
     if (isLongTermMemoryAccess(toolInput)) {
       counters.memoryWriteEvents.add(1, {
         "tool.name": toolName,
-        "openclaw.session.key": sessionKey,
+        "openclaw.session.key": runtimeSessionKey,
       });
       histograms.memoryWriteDuration.record(durationMs, {
         "tool.name": toolName,
-        "openclaw.session.key": sessionKey,
+        "openclaw.session.key": runtimeSessionKey,
       });
     }
   }
@@ -425,11 +434,11 @@ function process_memory_tool(toolName: string, toolInput: string, counters: any,
     if (isLongTermMemoryAccess(toolInput)) {
       counters.memoryEditEvents.add(1, {
         "tool.name": toolName,
-        "openclaw.session.key": sessionKey,
+        "openclaw.session.key": runtimeSessionKey,
       });
       histograms.memoryEditDuration.record(durationMs, {
         "tool.name": toolName,
-        "openclaw.session.key": sessionKey,
+        "openclaw.session.key": runtimeSessionKey,
       });
     }
   }
@@ -452,7 +461,7 @@ function process_memory_tool(toolName: string, toolInput: string, counters: any,
 
     counters.memoryReadEvents.add(1, {
       "tool.name": toolName,
-      "openclaw.session.key": sessionKey,
+      "openclaw.session.key": runtimeSessionKey,
     });
 
     if (Array.isArray(results)) {
@@ -465,7 +474,7 @@ function process_memory_tool(toolName: string, toolInput: string, counters: any,
       if (results.length == 0) {
         counters.memorySearchMiss.add(1, {
           "tool.name": toolName,
-          "openclaw.session.key": sessionKey,
+          "openclaw.session.key": runtimeSessionKey,
         });
       }
       else {
@@ -474,11 +483,11 @@ function process_memory_tool(toolName: string, toolInput: string, counters: any,
 
         histograms.memorySearchFragmentation.record(memoryFragmentation, {
           "tool.name": toolName,
-          "openclaw.session.key": sessionKey,
+          "openclaw.session.key": runtimeSessionKey,
         });
         counters.memorySearchHit.add(1, {
           "tool.name": toolName,
-          "openclaw.session.key": sessionKey,
+          "openclaw.session.key": runtimeSessionKey,
         });
       }
     }
@@ -564,7 +573,7 @@ function startRootSpan(
         [ATTR_OBSERVE_SPAN_KIND]: ObserveSpanKind.WORKFLOW,
         [ATTR_OBSERVE_ENTITY_NAME]: "openclaw.request",
         "openclaw.message.channel": channel,
-        "openclaw.runtime.session.key": primaryRuntimeSessionKey,
+        "openclaw.session.key": primaryRuntimeSessionKey,
         "openclaw.message.direction": "inbound",
         "openclaw.message.from": from,
         ...seed?.attributes,
@@ -587,6 +596,8 @@ function startRootSpan(
   }
 
   const rootContext = trace.setSpan(parentContext, rootSpan);
+  const sessionId = touchSession(primaryRuntimeSessionKey, rootContext);
+  rootSpan.setAttribute("session.id", sessionId);
   const capturedInput = config.captureContent
     ? setCapturedContent(rootSpan, "input", messageText, ["openclaw.request"])
     : undefined;
@@ -599,7 +610,6 @@ function startRootSpan(
   };
 
   setSessionTraceContext(sessionCtx, event, ctx);
-  touchSession(primaryRuntimeSessionKey, rootContext);
 
   counters.messagesReceived.add(1, {
     "openclaw.message.channel": channel,
@@ -702,6 +712,9 @@ export function registerHooks(
         const parentContext = sessionCtx?.rootContext || context.active();
         const channel = event?.channel || ctx?.channelId || event?.metadata?.channelId || "unknown";
         const messageText = extractMessageText(event);
+        const sessionId = runtimeSessionKey !== "unknown"
+          ? touchSession(runtimeSessionKey, parentContext)
+          : undefined;
 
         const span = tracer.startSpan(
           "openclaw.message.sent",
@@ -712,7 +725,8 @@ export function registerHooks(
               [ATTR_OBSERVE_ENTITY_NAME]: "openclaw.message.sent",
               "openclaw.message.channel": channel,
               "openclaw.message.direction": "outbound",
-              "openclaw.runtime.session.key": runtimeSessionKey,
+              "openclaw.session.key": runtimeSessionKey,
+              ...(sessionId ? { "session.id": sessionId } : {}),
             },
           },
           parentContext
@@ -725,11 +739,6 @@ export function registerHooks(
         counters.messagesSent.add(1, {
           "openclaw.message.channel": channel,
         });
-
-        if (runtimeSessionKey !== "unknown") {
-          touchSession(runtimeSessionKey, parentContext);
-        }
-
         span.setStatus({ code: SpanStatusCode.OK });
         span.end();
       } catch (error) {
@@ -801,6 +810,9 @@ export function registerHooks(
           );
         }
         const parentContext = sessionCtx?.rootContext || context.active();
+        const sessionId = runtimeSessionKey !== "unknown"
+          ? touchSession(runtimeSessionKey, parentContext)
+          : undefined;
 
         if (pendingSpawnHandoff?.sourceAgentSpanContext) {
           seedHandoffState(runtimeSessionKey, {
@@ -833,7 +845,8 @@ export function registerHooks(
               [ATTR_OBSERVE_SPAN_KIND]: ObserveSpanKind.AGENT,
               [ATTR_OBSERVE_ENTITY_NAME]: agentId,
               "openclaw.agent.id": agentId,
-              "openclaw.runtime.session.key": runtimeSessionKey,
+              "openclaw.session.key": runtimeSessionKey,
+              ...(sessionId ? { "session.id": sessionId } : {}),
               "openclaw.agent.model": model,
               ...handoff.attributes,
             },
@@ -940,6 +953,9 @@ export function registerHooks(
 
         const sessionCtx = getSessionTraceContext(event, ctx);
         const parentContext = sessionCtx?.agentContext || sessionCtx?.rootContext || context.active();
+        const sessionId = runtimeSessionKey !== "unknown"
+          ? touchSession(runtimeSessionKey, parentContext)
+          : undefined;
 
         const span = tracer.startSpan(
           "openclaw.llm.call",
@@ -948,7 +964,8 @@ export function registerHooks(
             attributes: {
               [ATTR_OBSERVE_SPAN_KIND]: ObserveSpanKind.TASK,
               [ATTR_OBSERVE_ENTITY_NAME]: "openclaw.llm.call",
-              "openclaw.runtime.session.key": runtimeSessionKey,
+              "openclaw.session.key": runtimeSessionKey,
+              ...(sessionId ? { "session.id": sessionId } : {}),
               "openclaw.agent.id": agentId,
               "gen_ai.request.model": model,
             },
@@ -961,11 +978,6 @@ export function registerHooks(
         if (config.captureContent && messages != null) {
           setCapturedContent(span, "input", messages, ["openclaw.llm"]);
         }
-
-        if (runtimeSessionKey !== "unknown") {
-          touchSession(runtimeSessionKey, parentContext);
-        }
-
         pendingLlmSpans.set(callId, span);
         logger.info?.(`[otel] LLM span started: model=${model}, callId=${callId}, runtimeSession=${runtimeSessionKey}`);
       } catch {
@@ -1071,6 +1083,9 @@ export function registerHooks(
         // Get parent context - prefer agent turn span, fall back to root
         const sessionCtx = getSessionTraceContext(event, ctx);
         const parentContext = sessionCtx?.agentContext || sessionCtx?.rootContext || context.active();
+        const sessionId = runtimeSessionKey !== "unknown"
+          ? touchSession(runtimeSessionKey, parentContext)
+          : undefined;
 
         // Create tool span as child of agent turn
         const span = tracer.startSpan(
@@ -1083,15 +1098,13 @@ export function registerHooks(
               "openclaw.tool.name": toolName,
               "openclaw.tool.call_id": toolCallId,
               "openclaw.tool.is_synthetic": isSynthetic,
-              "openclaw.runtime.session.key": runtimeSessionKey,
+              "openclaw.session.key": runtimeSessionKey,
+              ...(sessionId ? { "session.id": sessionId } : {}),
               "openclaw.agent.id": agentId,
             },
           },
           parentContext
         );
-
-        // Track session activity
-        touchSession(runtimeSessionKey, parentContext);
 
         // Fork detection - register this tool span for parallel detection
         const agentSequence = getHandoffSequence(runtimeSessionKey);
@@ -1222,7 +1235,7 @@ export function registerHooks(
               );
             }
           }
-          process_memory_tool(toolName, toolInput, counters, histograms, sessionKey, message, durationMs);
+          process_memory_tool(toolName, toolInput, counters, histograms, runtimeSessionKey, message, durationMs);
 
           const contentArray = message?.content;
           if (contentArray && Array.isArray(contentArray)) {
@@ -1339,7 +1352,7 @@ export function registerHooks(
               );
             }
           }
-          process_memory_tool(toolName, toolInput, counters, histograms, sessionKey, message, durationMs);
+          process_memory_tool(toolName, toolInput, counters, histograms, runtimeSessionKey, message, durationMs);
 
           const contentArray = message?.content;
           if (contentArray && Array.isArray(contentArray)) {
@@ -1594,6 +1607,7 @@ export function registerHooks(
         // Get parent context if available
         const sessionCtx = sessionContextMap.get(runtimeSessionKey);
         const parentContext = sessionCtx?.rootContext || context.active();
+        const sessionAttrs = getSessionIdAttrs(runtimeSessionKey);
 
         const span = tracer.startSpan(
           `openclaw.command.${action}`,
@@ -1602,6 +1616,7 @@ export function registerHooks(
             attributes: {
               "openclaw.command.action": action,
               "openclaw.command.runtime_session_key": runtimeSessionKey,
+              ...sessionAttrs,
               "openclaw.command.source": event?.context?.commandSource || "unknown",
             },
           },

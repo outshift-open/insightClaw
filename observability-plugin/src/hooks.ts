@@ -392,6 +392,125 @@ function extractToolOutputPayload(event: any, message: any): unknown {
   return undefined;
 }
 
+function process_memory_tool(toolName: string, toolInput: string, counters: any, histograms: any, sessionKey: string, message: any, durationMs: number): void {
+  if (toolName === "read") {
+    // Heuristics: .md files, "memory" in path, or a "memoryId" field in the tool output    
+    if (isLongTermMemoryAccess(toolInput)) {
+      counters.memoryReadEvents.add(1, {
+        "tool.name": toolName,
+        "openclaw.session.key": sessionKey,
+      });
+
+      histograms.memoryReadDuration.record(durationMs, {
+        "tool.name": toolName,
+        "openclaw.session.key": sessionKey,
+      });
+    }
+  }
+  else if (toolName === "write") {
+    // Heuristics: .md files, "memory" in path, or a "memoryId" field in the tool output    
+    if (isLongTermMemoryAccess(toolInput)) {
+      counters.memoryWriteEvents.add(1, {
+        "tool.name": toolName,
+        "openclaw.session.key": sessionKey,
+      });
+      histograms.memoryWriteDuration.record(durationMs, {
+        "tool.name": toolName,
+        "openclaw.session.key": sessionKey,
+      });
+    }
+  }
+  else if (toolName === "edit") {
+    // Heuristics: .md files, "memory" in path, or a "memoryId" field in the tool output    
+    if (isLongTermMemoryAccess(toolInput)) {
+      counters.memoryEditEvents.add(1, {
+        "tool.name": toolName,
+        "openclaw.session.key": sessionKey,
+      });
+      histograms.memoryEditDuration.record(durationMs, {
+        "tool.name": toolName,
+        "openclaw.session.key": sessionKey,
+      });
+    }
+  }
+  else if (toolName === "memory_search") {
+    // Prefer message.details if present, else parse content[0].text
+    let toolOutput = message?.details;
+    if (!toolOutput && Array.isArray(message?.content) && message.content.length > 0) {
+      const text = message.content[0]?.text;
+      if (typeof text === "string") {
+        try {
+          toolOutput = JSON.parse(text);
+        } catch (err) {
+          console.error("Failed to parse tool output:", err);
+        }
+      }
+    }
+
+    const outputObj = toolOutput;
+    const results = outputObj?.results;
+
+    counters.memoryReadEvents.add(1, {
+      "tool.name": toolName,
+      "openclaw.session.key": sessionKey,
+    });
+
+    if (Array.isArray(results)) {
+      const totalChars = results.reduce((sum: number, r: any) => {
+        const snippet = r?.snippet ?? "";
+        return sum + snippet.length;
+      }, 0);
+      // Calculate memoryFragmentation
+
+      if (results.length == 0) {
+        counters.memorySearchMiss.add(1, {
+          "tool.name": toolName,
+          "openclaw.session.key": sessionKey,
+        });
+      }
+      else {
+        const uniquePaths = new Set(results.map((r: any) => r?.path)).size;
+        const memoryFragmentation = results.length > 0 ? (uniquePaths - 1) / results.length : 0;
+
+        histograms.memorySearchFragmentation.record(memoryFragmentation, {
+          "tool.name": toolName,
+          "openclaw.session.key": sessionKey,
+        });
+        counters.memorySearchHit.add(1, {
+          "tool.name": toolName,
+          "openclaw.session.key": sessionKey,
+        });
+      }
+    }
+  }
+}
+
+function isLongTermMemoryAccess(toolInput: any): boolean {
+  //Heuristics to determine if a tool call is accessing long-term memory:
+  // Check if toolInput has a "path" field that includes "memory" and ends with ".md"
+
+  let path: string | undefined = undefined;
+  // Primary: extract path directly from toolInput
+  if (typeof toolInput?.path === "string") {
+    path = toolInput.path;
+  }
+
+  // Fallback: toolInput may be a JSON string
+  if (!path && typeof toolInput === "string") {
+    try {
+      const parsed = JSON.parse(toolInput);
+      if (typeof parsed?.path === "string") {
+        path = parsed.path;
+      }
+    } catch {
+      // Not JSON, ignore
+    }
+  }
+
+  const isMemory = typeof path === "string" && path.includes("memory") && path.endsWith(".md");
+  return isMemory;
+}
+
 function resolveMessageFrom(event?: any, ctx?: any): string {
   const metadata = event?.metadata;
   const candidates = [
@@ -946,7 +1065,7 @@ export function registerHooks(
         // Record metric
         counters.toolCalls.add(1, {
           "tool.name": toolName,
-          "runtime.session.key": runtimeSessionKey,
+          "openclaw.session.key": runtimeSessionKey,
         });
 
         // Get parent context - prefer agent turn span, fall back to root
@@ -1103,6 +1222,7 @@ export function registerHooks(
               );
             }
           }
+          process_memory_tool(toolName, toolInput, counters, histograms, sessionKey, message, durationMs);
 
           const contentArray = message?.content;
           if (contentArray && Array.isArray(contentArray)) {
@@ -1219,6 +1339,7 @@ export function registerHooks(
               );
             }
           }
+          process_memory_tool(toolName, toolInput, counters, histograms, sessionKey, message, durationMs);
 
           const contentArray = message?.content;
           if (contentArray && Array.isArray(contentArray)) {

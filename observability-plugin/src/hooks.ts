@@ -505,7 +505,7 @@ export function parseContext(event: any, histograms: any, sessionKey: any, agent
   console.info("Parsing LLM input context:", { systemPrompt, prompt, historyMessages });
   console.info("Parsing LLM input Session key:", sessionKey, "Agent ID:", agentId);
 
-  const system_data = typeof systemPrompt === 'string' ? systemPrompt.length : 0;
+  const system_data = typeof systemPrompt === 'string' ? new TextEncoder().encode(systemPrompt).length : 0;
   let tool_desc = 0;
   let history_tool = 0;
   let history_user = 0;
@@ -531,13 +531,13 @@ export function parseContext(event: any, histograms: any, sessionKey: any, agent
           is_memory_tool = true;
         }
         if (is_memory_tool) {
-          history_memory += JSON.stringify(elem.content ?? '').length;
+          history_memory += new TextEncoder().encode(elem.content ?? '').length;
         }
-        history_tool += JSON.stringify(elem.content ?? []).length;
+        history_tool += new TextEncoder().encode(elem.content ?? '').length;
       } else if (role === 'user') {
-        history_user += JSON.stringify(elem.content ?? []).length;
+        history_user += new TextEncoder().encode(elem.content ?? '').length;
       } else {
-        history_others += JSON.stringify(elem.content ?? []).length;
+        history_others += new TextEncoder().encode(elem.content ?? '').length;
       }
     }
   } catch (e) {
@@ -1264,7 +1264,8 @@ export function registerHooks(
 
         const agentSequence = getHandoffSequence(runtimeSessionKey);
         // Inspect the message for result metadata
-        const message = event?.message;
+        const message = event?.message ?? event?.result;
+
         if (message) {
           if (toolName === "sessions_spawn") {
             const targetAgentIds = extractSpawnTargetAgentIds(toolInput, message);

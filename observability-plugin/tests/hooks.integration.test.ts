@@ -33,6 +33,7 @@ function createTelemetry() {
       contextHistoryToolSize: histogram(),
       contextHistoryUserSize: histogram(),
       contextHistoryOtherSize: histogram(),
+      contextPromptSize: histogram(),
     },
     gauges: {
       activeSessions: counter(),
@@ -122,6 +123,7 @@ test("registerHooks wires lifecycle hooks that create and complete request spans
     const llmInputUserMessage = "Previous user message";
     const llmInputToolResult = "Previous tool result message";
     const llmInputHistoryOtherMessage = "Previous other message";
+    
     typedHooks.get("llm_input")?.(
       { agentId: "planner", model: "claude-sonnet-4", conversationId: sessionKey,
         systemPrompt: llmInputSystemPrompt,
@@ -230,6 +232,7 @@ test("registerHooks wires lifecycle hooks that create and complete request spans
     assert.equal(telemetry.histograms.contextHistoryToolSize.calls[0]?.value, new TextEncoder().encode(llmInputToolResult).length);
     assert.equal(telemetry.histograms.contextHistoryOtherSize.calls[0]?.value, new TextEncoder().encode(llmInputHistoryOtherMessage).length);
     assert.equal(telemetry.histograms.contextHistoryMemorySize.calls[0]?.value, 2 * new TextEncoder().encode(llmInputToolResult).length);
+    assert.equal(telemetry.histograms.contextPromptSize.calls[0]?.value, new TextEncoder().encode(llmInputPrompt).length);
 
   } finally {
     globalThis.setInterval = originalSetInterval;

@@ -502,9 +502,6 @@ export function parseContext(event: any, histograms: any, sessionKey: any, agent
   const systemPrompt = event?.systemPrompt;
   const prompt = event?.prompt;
   const historyMessages = event?.historyMessages;
-  console.info("Parsing LLM input context:", { systemPrompt, prompt, historyMessages });
-  console.info("Parsing LLM input Session key:", sessionKey, "Agent ID:", agentId);
-
   const system_data = typeof systemPrompt === 'string' ? new TextEncoder().encode(systemPrompt).length : 0;
   //let tool_desc = 0; not available at the moment
   let history_tool = 0;
@@ -547,14 +544,6 @@ export function parseContext(event: any, histograms: any, sessionKey: any, agent
 
   history_tool -= history_memory;
 
-  console.info("CONTEXT counters:", { 
-    system_data,
-    history_tool,
-    history_user,
-    history_memory,
-    history_others,
-  });
-
   histograms.contextSystemSize.record(system_data, { 
     "openclaw.agent.id": agentId,
     "openclaw.session.key": sessionKey,
@@ -579,6 +568,11 @@ export function parseContext(event: any, histograms: any, sessionKey: any, agent
   });
 
   histograms.contextHistoryOtherSize.record(history_others, { 
+    "openclaw.agent.id": agentId,
+    "openclaw.session.key": sessionKey,
+  });
+  
+  histograms.contextPromptSize.record(prompt ? new TextEncoder().encode(prompt).length : 0, {
     "openclaw.agent.id": agentId,
     "openclaw.session.key": sessionKey,
   });

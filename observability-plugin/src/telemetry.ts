@@ -94,6 +94,8 @@ export interface OtelHistograms {
   contextHistoryUserSize: Histogram;
   /** Size of message history other context in bytes */
   contextHistoryOtherSize: Histogram;
+  /** Size of prompt context in bytes */
+  contextPromptSize: Histogram;
   /** Size of other context in bytes */
   //contextOtherSize: Histogram; not available at the moment
 }
@@ -288,6 +290,10 @@ export function initTelemetry(config: OtelObservabilityConfig, logger: any): Tel
     }),
      contextHistoryOtherSize: meter.createHistogram("openclaw.context.history_other_size", {
         description: "Size of message history other context in bytes",
+        unit: "bytes",
+    }),
+    contextPromptSize: meter.createHistogram("openclaw.context.prompt_size", {
+        description: "Size of prompt context in bytes",
         unit: "bytes",
     }),
   };

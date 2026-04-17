@@ -30,7 +30,6 @@ import { SpanKind, SpanStatusCode, context, trace, type Span, type SpanContext, 
 import type { TelemetryRuntime } from "./telemetry.js";
 import type { OtelObservabilityConfig } from "./config.js";
 import { getPendingUsage, normalizeUsageData, registerActiveAgentSpan, unregisterActiveAgentSpan } from "./diagnostics.js";
-import { checkToolSecurity, checkMessageSecurity, type SecurityCounters } from "./security.js";
 import { onAgentStart, onAgentEnd, cleanupHandoff, getHandoffSequence, registerAgentSpan, seedHandoffState, setHandoffLogger } from "./handoff.js";
 import { registerToolSpan, finalizeAgentTurn, consumeJoin, cleanupForkJoin, setForkJoinLogger } from "./forkjoin.js";
 import {
@@ -548,7 +547,6 @@ function startRootSpan(
   ctx: any,
   config: OtelObservabilityConfig,
   logger: any,
-  securityCounters: SecurityCounters,
   counters: any,
   seed?: RootSpanSeed
 ) {
@@ -583,17 +581,7 @@ function startRootSpan(
     parentContext
   );
 
-  if (messageText.length > 0) {
-    const securityEvent = checkMessageSecurity(
-      messageText,
-      rootSpan,
-      securityCounters,
-      primaryRuntimeSessionKey
-    );
-    if (securityEvent) {
-      logger.warn(`[otel] SECURITY: ${securityEvent.detection} - ${securityEvent.description}`);
-    }
-  }
+
 
   const rootContext = trace.setSpan(parentContext, rootSpan);
   const sessionId = touchSession(primaryRuntimeSessionKey, rootContext);
@@ -633,7 +621,6 @@ export function registerHooks(
   let tracer!: TelemetryRuntime["tracer"];
   let counters!: TelemetryRuntime["counters"];
   let histograms!: TelemetryRuntime["histograms"];
-  let securityCounters!: SecurityCounters;
 
   function ensureRuntime() {
     if (tracer) return;
@@ -641,12 +628,6 @@ export function registerHooks(
     tracer = rt.tracer;
     counters = rt.counters;
     histograms = rt.histograms;
-    securityCounters = {
-      securityEvents: counters.securityEvents,
-      sensitiveFileAccess: counters.sensitiveFileAccess,
-      promptInjection: counters.promptInjection,
-      dangerousCommand: counters.dangerousCommand,
-    };
   }
 
   const logger = api.logger;
@@ -690,7 +671,7 @@ export function registerHooks(
             ) ?? sessionCtx.latestInput;
           }
         } else {
-          startRootSpan(tracer, event, ctx, config, logger, securityCounters, counters);
+          startRootSpan(tracer, event, ctx, config, logger, counters);
         }
       } catch (error) {
         logger.debug(`[otel] message_received hook failed: ${String(error)}`);
@@ -804,7 +785,6 @@ export function registerHooks(
             ctx,
             config,
             logger,
-            securityCounters,
             counters,
             rootSeed
           );
@@ -1122,24 +1102,6 @@ export function registerHooks(
         // Capture tool input if configured
         if (config.captureContent) {
           setCapturedContent(span, "input", toolInput, ["openclaw.tool"]);
-        }
-
-        // SECURITY DETECTION 1 & 3: File Access & Dangerous Commands
-        const securityEvent = checkToolSecurity(
-          toolName,
-          toolInput,
-          span,
-          securityCounters,
-          runtimeSessionKey,
-          agentId
-        );
-        if (securityEvent) {
-          logger.warn(`[otel] SECURITY: ${securityEvent.detection} - ${securityEvent.description}`);
-          // Add tool input details to span for forensics
-          if (toolInput) {
-            const inputStr = JSON.stringify(toolInput).slice(0, 1000);
-            span.setAttribute("openclaw.tool.input_preview", inputStr);
-          }
         }
 
         // Store span so tool_result_persist can add the output and close it

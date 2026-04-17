@@ -41,10 +41,6 @@ function createTelemetry() {
       sessionResets: new MockCounter(),
       messagesReceived: new MockCounter(),
       messagesSent: new MockCounter(),
-      securityEvents: new MockCounter(),
-      sensitiveFileAccess: new MockCounter(),
-      promptInjection: new MockCounter(),
-      dangerousCommand: new MockCounter(),
     },
     histograms: {
       llmDuration: new MockHistogram(),

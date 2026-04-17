@@ -49,7 +49,7 @@ jobs:
           zip -r "../openclaw-deep-observability-${VERSION}.zip" .
 
       - name: Publish GitHub release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: ./observability-plugin/artifact/*.zip
           generate_release_notes: true

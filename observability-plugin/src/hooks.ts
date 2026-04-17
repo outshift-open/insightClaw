@@ -40,6 +40,33 @@ import {
   ATTR_OBSERVE_ENTITY_OUTPUT,
 } from "./observe-attributes.js";
 import { touchSession, endSession, getSessionId } from "./session-lifecycle.js";
+import { recordSpan, type SpanRecord } from "./span-cache.js";
+
+/** Snapshot span attributes and identifiers into the span cache just before span.end(). */
+function captureSpanToCache(
+  span: Span,
+  spanName: string,
+  spanKind: string,
+  sessionKey: string,
+  sessionId?: string
+): void {
+  try {
+    const { traceId, spanId } = span.spanContext();
+    const record: SpanRecord = {
+      traceId,
+      spanId,
+      spanName,
+      spanKind,
+      sessionKey,
+      sessionId,
+      attributes: { ...(span as any).attributes } as Record<string, string | number | boolean>,
+      recordedAt: Date.now(),
+    };
+    recordSpan(record);
+  } catch {
+    // Never let cache errors affect span emission
+  }
+}
 
 /** Active trace context for an OpenClaw runtime session. */
 interface SessionTraceContext {
@@ -721,6 +748,7 @@ export function registerHooks(
           "openclaw.message.channel": channel,
         });
         span.setStatus({ code: SpanStatusCode.OK });
+        captureSpanToCache(span, "openclaw.message.sent", "message", runtimeSessionKey, sessionId);
         span.end();
       } catch (error) {
         logger.debug(`[otel] message_sent hook failed: ${String(error)}`);
@@ -1023,6 +1051,7 @@ export function registerHooks(
           span.setStatus({ code: SpanStatusCode.OK });
         }
 
+        captureSpanToCache(span, "openclaw.llm.call", "llm", runtimeSessionKey, getSessionId(runtimeSessionKey));
         span.end();
         logger.info?.(`[otel] LLM span ended: callId=${callId}, agent=${agentId}, runtimeSession=${runtimeSessionKey}`);
       } catch {
@@ -1228,6 +1257,7 @@ export function registerHooks(
           span.setStatus({ code: SpanStatusCode.OK });
         }
 
+        captureSpanToCache(span, `tool.${toolName}`, "tool", runtimeSessionKey, getSessionId(runtimeSessionKey));
         span.end();
   logger.info?.(`[otel] Tool span ended: tool=${toolName}, callId=${toolCallId}, runtimeSession=${runtimeSessionKey}`);
       } catch {
@@ -1345,6 +1375,7 @@ export function registerHooks(
           span.setStatus({ code: SpanStatusCode.OK });
         }
 
+        captureSpanToCache(span, `tool.${toolName}`, "tool", runtimeSessionKey, getSessionId(runtimeSessionKey));
         span.end();
   logger.info?.(`[otel] Tool span ended: tool=${toolName}, callId=${toolCallId}, runtimeSession=${runtimeSessionKey}`);
       } catch {
@@ -1522,6 +1553,7 @@ export function registerHooks(
             agentSpan.setStatus({ code: SpanStatusCode.OK });
           }
 
+          captureSpanToCache(agentSpan, "openclaw.agent.turn", "agent", runtimeSessionKey, getSessionId(runtimeSessionKey));
           agentSpan.end();
         }
 
@@ -1530,6 +1562,7 @@ export function registerHooks(
           const totalMs = Date.now() - sessionCtx.startTime;
           sessionCtx.rootSpan.setAttribute("openclaw.request.duration_ms", totalMs);
           sessionCtx.rootSpan.setStatus({ code: SpanStatusCode.OK });
+          captureSpanToCache(sessionCtx.rootSpan, "openclaw.request", "request", runtimeSessionKey, getSessionId(runtimeSessionKey));
           sessionCtx.rootSpan.end();
         }
 

@@ -15,6 +15,7 @@ test("parseConfig returns documented defaults for missing values", () => {
     metrics: true,
     logs: true,
     captureContent: false,
+    spanCache: false,
     metricsIntervalMs: 30_000,
     resourceAttributes: {},
   });
@@ -33,6 +34,7 @@ test("parseConfig preserves supported overrides and rejects invalid shapes", () 
     metrics: false,
     logs: false,
     captureContent: true,
+    spanCache: true,
     metricsIntervalMs: 1500,
     resourceAttributes,
   });
@@ -45,6 +47,7 @@ test("parseConfig preserves supported overrides and rejects invalid shapes", () 
   assert.equal(config.metrics, false);
   assert.equal(config.logs, false);
   assert.equal(config.captureContent, true);
+  assert.equal(config.spanCache, true);
   assert.equal(config.metricsIntervalMs, 1500);
   assert.equal(config.resourceAttributes, resourceAttributes);
 });
@@ -59,6 +62,7 @@ test("parseConfig falls back when values are unsupported", () => {
     metrics: null,
     logs: 1,
     captureContent: "no",
+    spanCache: "no",
     metricsIntervalMs: 999,
     resourceAttributes: [],
   });
@@ -71,6 +75,7 @@ test("parseConfig falls back when values are unsupported", () => {
   assert.equal(config.metrics, true);
   assert.equal(config.logs, true);
   assert.equal(config.captureContent, false);
+  assert.equal(config.spanCache, false);
   assert.equal(config.metricsIntervalMs, 30_000);
   assert.deepEqual(config.resourceAttributes, {});
 });

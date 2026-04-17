@@ -33,8 +33,6 @@ function createTelemetry() {
       contextHistoryToolSize: histogram(),
       contextHistoryUserSize: histogram(),
       contextHistoryOtherSize: histogram(),
-      contextToolDescSize: histogram(),
-      contextOtherSize: histogram(),
     },
     gauges: {
       activeSessions: counter(),
@@ -219,7 +217,6 @@ test("registerHooks wires lifecycle hooks that create and complete request spans
     assert.equal(root.ended, true);
     assert.equal(outbound.ended, true);
 
-    console.log("Counters:", telemetry.histograms.contextHistoryUserSize.calls);
     assert.equal(telemetry.counters.messagesReceived.calls.length, 1);
     assert.equal(telemetry.counters.messagesSent.calls.length, 1);
     assert.equal(telemetry.counters.toolCalls.calls.length, 1);

@@ -85,7 +85,7 @@ export interface OtelHistograms {
   /** Size of system context in bytes */
   contextSystemSize: Histogram;
   /** Size of tool description context in bytes */
-  contextToolDescSize: Histogram;
+  //contextToolDescSize: Histogram; not available at the moment
   /** Size of message history memory context in bytes */
   contextHistoryMemorySize: Histogram;
   /** Size of message history tool context in bytes */
@@ -95,7 +95,7 @@ export interface OtelHistograms {
   /** Size of message history other context in bytes */
   contextHistoryOtherSize: Histogram;
   /** Size of other context in bytes */
-  contextOtherSize: Histogram;
+  //contextOtherSize: Histogram; not available at the moment
 }
 
 export interface OtelGauges {
@@ -274,10 +274,6 @@ export function initTelemetry(config: OtelObservabilityConfig, logger: any): Tel
         description: "Size of system context in bytes",
         unit: "bytes",
     }),
-    contextToolDescSize: meter.createHistogram("openclaw.context.tool_desc_size", {
-        description: "Size of tool description context in bytes",
-        unit: "bytes",
-    }),
     contextHistoryMemorySize: meter.createHistogram("openclaw.context.history_memory_size", {
         description: "Size of message history memory context in bytes",
         unit: "bytes",
@@ -292,10 +288,6 @@ export function initTelemetry(config: OtelObservabilityConfig, logger: any): Tel
     }),
      contextHistoryOtherSize: meter.createHistogram("openclaw.context.history_other_size", {
         description: "Size of message history other context in bytes",
-        unit: "bytes",
-    }),
-     contextOtherSize: meter.createHistogram("openclaw.context.other_size", {
-        description: "Size of other context in bytes",
         unit: "bytes",
     }),
   };

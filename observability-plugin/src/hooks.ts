@@ -506,12 +506,12 @@ export function parseContext(event: any, histograms: any, sessionKey: any, agent
   console.info("Parsing LLM input Session key:", sessionKey, "Agent ID:", agentId);
 
   const system_data = typeof systemPrompt === 'string' ? new TextEncoder().encode(systemPrompt).length : 0;
-  let tool_desc = 0;
+  //let tool_desc = 0; not available at the moment
   let history_tool = 0;
   let history_user = 0;
   let history_others = 0;
   let history_memory = 0;
-  let others = 0;
+  //let others = 0; // not available at the moment
 
   try {
     const data = historyMessages || [];
@@ -549,22 +549,22 @@ export function parseContext(event: any, histograms: any, sessionKey: any, agent
 
   console.info("CONTEXT counters:", { 
     system_data,
-    tool_desc,
     history_tool,
     history_user,
     history_memory,
     history_others,
-    others,
   });
 
   histograms.contextSystemSize.record(system_data, { 
     "openclaw.agent.id": agentId,
     "openclaw.session.key": sessionKey,
   });
-  histograms.contextToolDescSize.record(tool_desc, { 
-    "openclaw.agent.id": agentId,
-    "openclaw.session.key": sessionKey,
-  });
+  
+  // not available at the moment
+  // histograms.contextToolDescSize.record(tool_desc, { 
+  //   "openclaw.agent.id": agentId,
+  //   "openclaw.session.key": sessionKey,
+  // });
   histograms.contextHistoryMemorySize.record(history_memory, { 
     "openclaw.agent.id": agentId,
     "openclaw.session.key": sessionKey,
@@ -583,10 +583,11 @@ export function parseContext(event: any, histograms: any, sessionKey: any, agent
     "openclaw.session.key": sessionKey,
   });
 
-  histograms.contextOtherSize.record(others, { 
-    "openclaw.agent.id": agentId,
-    "openclaw.session.key": sessionKey,
-  });
+  // not available at the moment
+  // histograms.contextOtherSize.record(others, { 
+  //   "openclaw.agent.id": agentId,
+  //   "openclaw.session.key": sessionKey,
+  // });
 }
 
 function isLongTermMemoryAccess(toolInput: any): boolean {

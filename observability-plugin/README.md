@@ -35,6 +35,11 @@ openclaw.request (root span)
 - Webhook, queue, message, session, and tool-loop diagnostics recorded as OTel metrics/spans
 - Session state and stuck-session signals available alongside connected request traces
 
+**Session Semantics:**
+- `session.start` and `session.end` represent the plugin's user workflow session lifecycle
+- A session ends after 5 minutes of inactivity by default
+- OpenClaw `sessionKey` and `conversationId` are treated as runtime-session correlation identifiers and exported as `openclaw.runtime.session.*`
+
 **Agent Payload Visibility:**
 - Optional agent input/output payload capture on `openclaw.agent.turn`
 - Request input captured on the root request span
@@ -143,50 +148,4 @@ Using `NODE_OPTIONS=--import .../preload.mjs` fixes that by registering the ESM 
 hook before the SDKs are imported.
 
 ---
-
-## Comparing the Two Approaches
-
-| Feature | Official Diagnostics Otel Plugin | Deep Observability Plugin |
-|---------|-----------------|---------------|
-| Token metrics | ✅ Per model | ✅ Per session + model |
-| Cost tracking | ✅ Yes | ✅ Yes (from diagnostics) |
-| Gateway health | ✅ Webhooks, queues, sessions | ✅ Via diagnostics listener |
-| Session state | ✅ State transitions | ✅ Via diagnostics listener |
-| **Tool call tracing** | ❌ No | ✅ Individual tool spans |
-| **Request lifecycle** | ❌ No | ✅ Full request → response |
-| **Connected traces** | ❌ Separate spans | ✅ Parent-child hierarchy |
-| Setup complexity | 🟢 Config only | 🟡 Plugin installation |
-
----
-
-## Configuration Reference
-
-### Official Plugin Options
-
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `diagnostics.enabled` | boolean | false | Enable diagnostics system |
-| `diagnostics.otel.enabled` | boolean | false | Enable OTel export |
-| `diagnostics.otel.endpoint` | string | — | OTLP endpoint URL |
-| `diagnostics.otel.protocol` | string | "http/protobuf" | Protocol |
-| `diagnostics.otel.headers` | object | — | Custom headers |
-| `diagnostics.otel.serviceName` | string | "openclaw" | Service name |
-| `diagnostics.otel.traces` | boolean | true | Enable traces |
-| `diagnostics.otel.metrics` | boolean | true | Enable metrics |
-| `diagnostics.otel.logs` | boolean | false | Enable logs |
-| `diagnostics.otel.sampleRate` | number | 1.0 | Trace sampling (0-1) |
-
-### Custom Plugin Options
-
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `endpoint` | string | — | OTLP endpoint URL |
-| `serviceName` | string | "openclaw-gateway" | Service name |
-| `exporterType` | string | "otlp" | Exporter type |
-| `enableTraces` | boolean | true | Enable traces |
-| `enableMetrics` | boolean | true | Enable metrics |
-| `captureContent` | boolean | false | Capture request, agent, tool, and response payload content in spans |
-
----
-
 

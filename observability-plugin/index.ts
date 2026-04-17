@@ -105,7 +105,7 @@ const otelObservabilityPlugin = {
             console.log(`  Cost tracking:   ${hasDiagnosticsSupport() ? "✅ (via diagnostics API)" : "❌"}`);
             console.log(`  Agent handoff:   ✅ (span links)`);
             console.log(`  Fork/join:       ✅ (parallel tool detection)`);
-            console.log(`  Session lifecycle: ✅ (auto session.end)`);
+            console.log(`  Session lifecycle: ✅ (session.start + session.end after 5m idle)`);
           });
       },
       { commands: ["otel"] }
@@ -141,7 +141,7 @@ const otelObservabilityPlugin = {
           await initOpenLLMetry(config, logger);
         }
 
-        // Start session lifecycle watcher (auto session.end detection)
+        // Start session lifecycle watcher (session.start + idle-based session.end detection)
         startSessionWatcher(telemetry!.tracer, logger);
 
         // Subscribe to OpenClaw diagnostic events (model.usage, etc.)

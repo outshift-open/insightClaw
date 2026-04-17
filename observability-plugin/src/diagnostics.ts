@@ -9,6 +9,7 @@
 
 import { SpanKind, SpanStatusCode, context, trace, type Attributes, type Span } from "@opentelemetry/api";
 import type { TelemetryRuntime } from "./telemetry.js";
+import { getSessionId } from "./session-lifecycle.js";
 
 // Import from OpenClaw plugin SDK (loaded lazily)
 type DiagnosticEventSubscriber = (listener: (evt: any) => void) => () => void;
@@ -55,7 +56,7 @@ function pushIdentity(target: string[], value: unknown): void {
   target.push(trimmed);
 }
 
-function collectSessionIdentities(...sources: any[]): string[] {
+function collectRuntimeSessionIdentities(...sources: any[]): string[] {
   const identities: string[] = [];
 
   for (const source of sources) {
@@ -120,12 +121,12 @@ function firstString(...values: unknown[]): string | undefined {
   return undefined;
 }
 
-function resolveDiagnosticSessionKey(evt: any): string {
-  return resolveDiagnosticSessionIdentities(evt)[0] || "unknown";
+function resolveDiagnosticRuntimeSessionKey(evt: any): string {
+  return resolveDiagnosticRuntimeSessionIdentities(evt)[0] || "unknown";
 }
 
-function resolveDiagnosticSessionIdentities(evt: any): string[] {
-  return collectSessionIdentities(evt, evt?.metadata, evt?.context, evt?.context?.metadata);
+function resolveDiagnosticRuntimeSessionIdentities(evt: any): string[] {
+  return collectRuntimeSessionIdentities(evt, evt?.metadata, evt?.context, evt?.context?.metadata);
 }
 
 export function normalizeUsageData(rawUsage: any): PendingUsageData["usage"] {
@@ -251,10 +252,10 @@ function summarizeDiagnosticShape(evt: any): Record<string, unknown> {
   };
 }
 
-/** Map of sessionKey → pending usage data from diagnostic events */
+/** Map of runtime session key → pending usage data from diagnostic events */
 const pendingUsageMap = new Map<string, PendingUsageData>();
 
-/** Map of sessionKey → active agent span (set by hooks.ts) */
+/** Map of runtime session key → active agent span (set by hooks.ts) */
 export const activeAgentSpans = new Map<string, Span>();
 
 export function registerActiveAgentSpan(sessionIdentities: string[], span: Span): void {
@@ -390,27 +391,31 @@ export async function registerDiagnosticsListener(
     unit: "events",
   });
 
-  function addSessionIdentityAttrs(attrs: Record<string, string | number>, evt: any): void {
-    const sessionKey = firstString(evt?.sessionKey, evt?.metadata?.sessionKey, evt?.context?.sessionKey);
-    const sessionId = firstString(evt?.sessionId, evt?.metadata?.sessionId, evt?.context?.sessionId);
+  function addRuntimeSessionAttrs(attrs: Record<string, string | number>, evt: any): void {
+    const runtimeSessionKey = firstString(evt?.sessionKey, evt?.metadata?.sessionKey, evt?.context?.sessionKey);
+    const runtimeSessionId = firstString(evt?.sessionId, evt?.metadata?.sessionId, evt?.context?.sessionId);
 
-    if (sessionKey) {
-      attrs["openclaw.session.key"] = sessionKey;
+    if (runtimeSessionKey) {
+      attrs["openclaw.session.key"] = runtimeSessionKey;
+      const sessionId = getSessionId(runtimeSessionKey);
+      if (sessionId) {
+        attrs["session.id"] = sessionId;
+      }
     }
-    if (sessionId) {
-      attrs["openclaw.session.id"] = sessionId;
+    if (runtimeSessionId) {
+      attrs["openclaw.runtime.session.id"] = runtimeSessionId;
     }
   }
 
   function resolveActiveAgentSpan(evt: any): Span | undefined {
-    return findMapEntry(activeAgentSpans, resolveDiagnosticSessionIdentities(evt));
+    return findMapEntry(activeAgentSpans, resolveDiagnosticRuntimeSessionIdentities(evt));
   }
 
   const unsubscribe = onDiagnosticEvent((evt: any) => {
     switch (evt.type) {
       case "model.usage": {
-        const sessionIdentities = resolveDiagnosticSessionIdentities(evt);
-        const sessionKey = sessionIdentities[0] || "unknown";
+        const runtimeSessionIdentities = resolveDiagnosticRuntimeSessionIdentities(evt);
+        const runtimeSessionKey = runtimeSessionIdentities[0] || "unknown";
         const usage = normalizeUsageData(evt.usage);
         const costUsd = evt.costUsd;
         const channel = firstString(evt.channel) || "unknown";
@@ -425,7 +430,7 @@ export async function registerDiagnosticsListener(
           model,
         };
 
-        setMapEntries(pendingUsageMap, sessionIdentities, pendingUsage);
+        setMapEntries(pendingUsageMap, runtimeSessionIdentities, pendingUsage);
 
         const metricAttrs = {
           "gen_ai.response.model": model,
@@ -477,13 +482,13 @@ export async function registerDiagnosticsListener(
           "openclaw.tokens.cache_write": usage.cacheWrite ?? 0,
           "openclaw.tokens.total": usage.total ?? 0,
         };
-        addSessionIdentityAttrs(spanAttrs, evt);
+        addRuntimeSessionAttrs(spanAttrs, evt);
         startDiagnosticSpan(telemetry, "openclaw.model.usage", spanAttrs, {
           durationMs: evt.durationMs,
           parentSpan: agentSpan,
         });
 
-        logger.debug(`[otel] model.usage: session=${sessionKey}, model=${model}, cost=$${costUsd?.toFixed(4) || "?"}, tokens=${usage.total || "?"}`);
+        logger.debug(`[otel] model.usage: runtimeSession=${runtimeSessionKey}, model=${model}, cost=$${costUsd?.toFixed(4) || "?"}, tokens=${usage.total || "?"}`);
         return;
       }
 
@@ -555,7 +560,7 @@ export async function registerDiagnosticsListener(
           messageDurationHistogram.record(evt.durationMs, attrs);
         }
         const spanAttrs: Record<string, string | number> = { ...attrs };
-        addSessionIdentityAttrs(spanAttrs, evt);
+        addRuntimeSessionAttrs(spanAttrs, evt);
         if (evt.chatId !== undefined) {
           spanAttrs["openclaw.chat_id"] = String(evt.chatId);
         }
@@ -619,7 +624,7 @@ export async function registerDiagnosticsListener(
           "openclaw.age_ms": typeof evt.ageMs === "number" ? evt.ageMs : 0,
           "openclaw.queue_depth": typeof evt.queueDepth === "number" ? evt.queueDepth : 0,
         };
-        addSessionIdentityAttrs(spanAttrs, evt);
+        addRuntimeSessionAttrs(spanAttrs, evt);
         startDiagnosticSpan(telemetry, "openclaw.session.stuck", spanAttrs, {
           errorMessage: "session stuck",
         });
@@ -662,7 +667,7 @@ export async function registerDiagnosticsListener(
           "openclaw.count": typeof evt.count === "number" ? evt.count : 0,
           "openclaw.message": firstString(evt.message) || "tool loop detected",
         };
-        addSessionIdentityAttrs(spanAttrs, evt);
+        addRuntimeSessionAttrs(spanAttrs, evt);
         if (evt.pairedToolName) {
           spanAttrs["openclaw.paired_tool"] = String(evt.pairedToolName);
         }
@@ -682,11 +687,13 @@ export async function registerDiagnosticsListener(
 }
 
 /**
- * Get pending usage data for a session (if any).
+ * Get pending usage data for a runtime session identity (if any).
  * Called by agent_end hook to attach data to span.
  */
-export function getPendingUsage(sessionIdentities: string | string[]): PendingUsageData | undefined {
-  const identities = Array.isArray(sessionIdentities) ? sessionIdentities : [sessionIdentities];
+export function getPendingUsage(runtimeSessionIdentities: string | string[]): PendingUsageData | undefined {
+  const identities = Array.isArray(runtimeSessionIdentities)
+    ? runtimeSessionIdentities
+    : [runtimeSessionIdentities];
   const data = findMapEntry(pendingUsageMap, identities);
   if (data) {
     deleteMapEntriesByValue(pendingUsageMap, data);

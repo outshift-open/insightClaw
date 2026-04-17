@@ -59,6 +59,9 @@ export class MockTracer {
       traceFlags: 1,
     });
     this.nextSpanId += 1;
+    for (const [key, value] of Object.entries(options?.attributes ?? {})) {
+      span.setAttribute(key, value);
+    }
     this.spans.push({ name, options, context: activeContext, span });
     return span as unknown as Span;
   }

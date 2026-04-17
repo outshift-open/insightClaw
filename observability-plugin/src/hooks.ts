@@ -30,7 +30,6 @@ import { SpanKind, SpanStatusCode, context, trace, type Span, type SpanContext, 
 import type { TelemetryRuntime } from "./telemetry.js";
 import type { OtelObservabilityConfig } from "./config.js";
 import { getPendingUsage, normalizeUsageData, registerActiveAgentSpan, unregisterActiveAgentSpan } from "./diagnostics.js";
-import { checkToolSecurity, checkMessageSecurity, type SecurityCounters } from "./security.js";
 import { onAgentStart, onAgentEnd, cleanupHandoff, getHandoffSequence, registerAgentSpan, seedHandoffState, setHandoffLogger } from "./handoff.js";
 import { registerToolSpan, finalizeAgentTurn, consumeJoin, cleanupForkJoin, setForkJoinLogger } from "./forkjoin.js";
 import {
@@ -40,11 +39,11 @@ import {
   ATTR_OBSERVE_ENTITY_INPUT,
   ATTR_OBSERVE_ENTITY_OUTPUT,
 } from "./observe-attributes.js";
-import { touchSession, endSession } from "./session-lifecycle.js";
+import { touchSession, endSession, getSessionId } from "./session-lifecycle.js";
 
-/** Active trace context for a session - allows connecting spans into one trace. */
+/** Active trace context for an OpenClaw runtime session. */
 interface SessionTraceContext {
-  sessionKey: string;
+  runtimeSessionKey: string;
   rootSpan: Span;
   rootContext: Context;
   agentSpan?: Span;
@@ -55,7 +54,7 @@ interface SessionTraceContext {
 
 interface PendingSpawnHandoff {
   targetAgentId: string;
-  sourceSessionKey: string;
+  sourceRuntimeSessionKey: string;
   sourceAgentId: string;
   sourceAgentSequence: number;
   sourceAgentSpanContext?: SpanContext;
@@ -75,7 +74,7 @@ interface PendingToolSpan {
   startedAt: number;
 }
 
-/** Map of sessionKey -> active trace context. Cleaned up on agent_end. */
+/** Map of runtime session key -> active trace context. Cleaned up on agent_end. */
 const sessionContextMap = new Map<string, SessionTraceContext>();
 const pendingSpawnHandoffs = new Map<string, PendingSpawnHandoff[]>();
 const PENDING_SPAWN_TTL_MS = 60_000;
@@ -200,11 +199,11 @@ function consumePendingSpawnHandoff(agentId: string): PendingSpawnHandoff | unde
   return next;
 }
 
-function resolveSessionKey(event?: any, ctx?: any): string {
-  return resolveSessionIdentities(event, ctx)[0] || "unknown";
+function resolveRuntimeSessionKey(event?: any, ctx?: any): string {
+  return resolveRuntimeSessionIdentities(event, ctx)[0] || "unknown";
 }
 
-function resolveSessionIdentities(event?: any, ctx?: any): string[] {
+function resolveRuntimeSessionIdentities(event?: any, ctx?: any): string[] {
   const keys: string[] = [];
   const metadata = event?.metadata;
   const ctxMetadata = ctx?.metadata;
@@ -226,8 +225,8 @@ function resolveSessionIdentities(event?: any, ctx?: any): string[] {
 }
 
 function getSessionTraceContext(event?: any, ctx?: any): SessionTraceContext | undefined {
-  for (const sessionIdentity of resolveSessionIdentities(event, ctx)) {
-    const sessionCtx = sessionContextMap.get(sessionIdentity);
+  for (const runtimeSessionIdentity of resolveRuntimeSessionIdentities(event, ctx)) {
+    const sessionCtx = sessionContextMap.get(runtimeSessionIdentity);
     if (sessionCtx) {
       return sessionCtx;
     }
@@ -237,10 +236,10 @@ function getSessionTraceContext(event?: any, ctx?: any): SessionTraceContext | u
 }
 
 function setSessionTraceContext(sessionCtx: SessionTraceContext, event?: any, ctx?: any): void {
-  const sessionIdentities = resolveSessionIdentities(event, ctx);
+  const sessionIdentities = resolveRuntimeSessionIdentities(event, ctx);
 
   if (sessionIdentities.length === 0) {
-    sessionContextMap.set(sessionCtx.sessionKey, sessionCtx);
+    sessionContextMap.set(sessionCtx.runtimeSessionKey, sessionCtx);
     return;
   }
 
@@ -259,6 +258,15 @@ function deleteSessionTraceContext(sessionCtx: SessionTraceContext | undefined):
       sessionContextMap.delete(sessionIdentity);
     }
   }
+}
+
+function getSessionIdAttrs(runtimeSessionKey: string): Record<string, string> {
+  if (runtimeSessionKey === "unknown") {
+    return {};
+  }
+
+  const sessionId = getSessionId(runtimeSessionKey);
+  return sessionId ? { "session.id": sessionId } : {};
 }
 
 function extractMessageText(event: any): string {
@@ -392,18 +400,18 @@ function extractToolOutputPayload(event: any, message: any): unknown {
   return undefined;
 }
 
-function process_memory_tool(toolName: string, toolInput: string, counters: any, histograms: any, sessionKey: string, message: any, durationMs: number): void {
+function process_memory_tool(toolName: string, toolInput: string, counters: any, histograms: any, runtimeSessionKey: string, message: any, durationMs: number): void {
   if (toolName === "read") {
     // Heuristics: .md files, "memory" in path, or a "memoryId" field in the tool output    
     if (isLongTermMemoryAccess(toolInput)) {
       counters.memoryReadEvents.add(1, {
         "tool.name": toolName,
-        "openclaw.session.key": sessionKey,
+        "openclaw.session.key": runtimeSessionKey,
       });
 
       histograms.memoryReadDuration.record(durationMs, {
         "tool.name": toolName,
-        "openclaw.session.key": sessionKey,
+        "openclaw.session.key": runtimeSessionKey,
       });
     }
   }
@@ -412,11 +420,11 @@ function process_memory_tool(toolName: string, toolInput: string, counters: any,
     if (isLongTermMemoryAccess(toolInput)) {
       counters.memoryWriteEvents.add(1, {
         "tool.name": toolName,
-        "openclaw.session.key": sessionKey,
+        "openclaw.session.key": runtimeSessionKey,
       });
       histograms.memoryWriteDuration.record(durationMs, {
         "tool.name": toolName,
-        "openclaw.session.key": sessionKey,
+        "openclaw.session.key": runtimeSessionKey,
       });
     }
   }
@@ -425,11 +433,11 @@ function process_memory_tool(toolName: string, toolInput: string, counters: any,
     if (isLongTermMemoryAccess(toolInput)) {
       counters.memoryEditEvents.add(1, {
         "tool.name": toolName,
-        "openclaw.session.key": sessionKey,
+        "openclaw.session.key": runtimeSessionKey,
       });
       histograms.memoryEditDuration.record(durationMs, {
         "tool.name": toolName,
-        "openclaw.session.key": sessionKey,
+        "openclaw.session.key": runtimeSessionKey,
       });
     }
   }
@@ -452,7 +460,7 @@ function process_memory_tool(toolName: string, toolInput: string, counters: any,
 
     counters.memoryReadEvents.add(1, {
       "tool.name": toolName,
-      "openclaw.session.key": sessionKey,
+      "openclaw.session.key": runtimeSessionKey,
     });
 
     if (Array.isArray(results)) {
@@ -465,7 +473,7 @@ function process_memory_tool(toolName: string, toolInput: string, counters: any,
       if (results.length == 0) {
         counters.memorySearchMiss.add(1, {
           "tool.name": toolName,
-          "openclaw.session.key": sessionKey,
+          "openclaw.session.key": runtimeSessionKey,
         });
       }
       else {
@@ -474,11 +482,11 @@ function process_memory_tool(toolName: string, toolInput: string, counters: any,
 
         histograms.memorySearchFragmentation.record(memoryFragmentation, {
           "tool.name": toolName,
-          "openclaw.session.key": sessionKey,
+          "openclaw.session.key": runtimeSessionKey,
         });
         counters.memorySearchHit.add(1, {
           "tool.name": toolName,
-          "openclaw.session.key": sessionKey,
+          "openclaw.session.key": runtimeSessionKey,
         });
       }
     }
@@ -539,15 +547,14 @@ function startRootSpan(
   ctx: any,
   config: OtelObservabilityConfig,
   logger: any,
-  securityCounters: SecurityCounters,
   counters: any,
   seed?: RootSpanSeed
 ) {
-  const sessionIdentities = resolveSessionIdentities(event, ctx);
-  const primarySessionKey = sessionIdentities[0] || "unknown";
+  const runtimeSessionIdentities = resolveRuntimeSessionIdentities(event, ctx);
+  const primaryRuntimeSessionKey = runtimeSessionIdentities[0] || "unknown";
 
-  if (primarySessionKey === "unknown") {
-    logger.debug("[otel] Skipping eager request span start because no stable session/conversation key is available yet");
+  if (primaryRuntimeSessionKey === "unknown") {
+    logger.debug("[otel] Skipping eager request span start because no stable runtime session/conversation key is available yet");
     return undefined;
   }
 
@@ -564,7 +571,7 @@ function startRootSpan(
         [ATTR_OBSERVE_SPAN_KIND]: ObserveSpanKind.WORKFLOW,
         [ATTR_OBSERVE_ENTITY_NAME]: "openclaw.request",
         "openclaw.message.channel": channel,
-        "openclaw.session.key": primarySessionKey,
+        "openclaw.session.key": primaryRuntimeSessionKey,
         "openclaw.message.direction": "inbound",
         "openclaw.message.from": from,
         ...seed?.attributes,
@@ -574,24 +581,16 @@ function startRootSpan(
     parentContext
   );
 
-  if (messageText.length > 0) {
-    const securityEvent = checkMessageSecurity(
-      messageText,
-      rootSpan,
-      securityCounters,
-      primarySessionKey
-    );
-    if (securityEvent) {
-      logger.warn(`[otel] SECURITY: ${securityEvent.detection} - ${securityEvent.description}`);
-    }
-  }
+
 
   const rootContext = trace.setSpan(parentContext, rootSpan);
+  const sessionId = touchSession(primaryRuntimeSessionKey, rootContext);
+  rootSpan.setAttribute("session.id", sessionId);
   const capturedInput = config.captureContent
     ? setCapturedContent(rootSpan, "input", messageText, ["openclaw.request"])
     : undefined;
   const sessionCtx: SessionTraceContext = {
-    sessionKey: primarySessionKey,
+    runtimeSessionKey: primaryRuntimeSessionKey,
     rootSpan,
     rootContext,
     latestInput: capturedInput,
@@ -599,13 +598,12 @@ function startRootSpan(
   };
 
   setSessionTraceContext(sessionCtx, event, ctx);
-  touchSession(primarySessionKey, rootContext);
 
   counters.messagesReceived.add(1, {
     "openclaw.message.channel": channel,
   });
 
-  logger.info(`[otel] Root span started for session=${primarySessionKey}, channel=${channel}`);
+  logger.info(`[otel] Root span started for runtimeSession=${primaryRuntimeSessionKey}, channel=${channel}`);
   return sessionCtx;
 }
 
@@ -623,7 +621,6 @@ export function registerHooks(
   let tracer!: TelemetryRuntime["tracer"];
   let counters!: TelemetryRuntime["counters"];
   let histograms!: TelemetryRuntime["histograms"];
-  let securityCounters!: SecurityCounters;
 
   function ensureRuntime() {
     if (tracer) return;
@@ -631,12 +628,6 @@ export function registerHooks(
     tracer = rt.tracer;
     counters = rt.counters;
     histograms = rt.histograms;
-    securityCounters = {
-      securityEvents: counters.securityEvents,
-      sensitiveFileAccess: counters.sensitiveFileAccess,
-      promptInjection: counters.promptInjection,
-      dangerousCommand: counters.dangerousCommand,
-    };
   }
 
   const logger = api.logger;
@@ -662,12 +653,12 @@ export function registerHooks(
     async (event: any, ctx: any) => {
       try {
         ensureRuntime();
-        const sessionKey = resolveSessionKey(event, ctx);
+        const runtimeSessionKey = resolveRuntimeSessionKey(event, ctx);
         const sessionCtx = getSessionTraceContext(event, ctx);
         if (sessionCtx) {
           setSessionTraceContext(sessionCtx, event, ctx);
-          if (sessionKey !== "unknown") {
-            touchSession(sessionKey, sessionCtx.rootContext);
+          if (runtimeSessionKey !== "unknown") {
+            touchSession(runtimeSessionKey, sessionCtx.rootContext);
           }
 
           const messageText = extractMessageText(event);
@@ -680,7 +671,7 @@ export function registerHooks(
             ) ?? sessionCtx.latestInput;
           }
         } else {
-          startRootSpan(tracer, event, ctx, config, logger, securityCounters, counters);
+          startRootSpan(tracer, event, ctx, config, logger, counters);
         }
       } catch (error) {
         logger.debug(`[otel] message_received hook failed: ${String(error)}`);
@@ -697,11 +688,14 @@ export function registerHooks(
     async (event: any, ctx: any) => {
       try {
         ensureRuntime();
-        const sessionKey = resolveSessionKey(event, ctx);
+        const runtimeSessionKey = resolveRuntimeSessionKey(event, ctx);
         const sessionCtx = getSessionTraceContext(event, ctx);
         const parentContext = sessionCtx?.rootContext || context.active();
         const channel = event?.channel || ctx?.channelId || event?.metadata?.channelId || "unknown";
         const messageText = extractMessageText(event);
+        const sessionId = runtimeSessionKey !== "unknown"
+          ? touchSession(runtimeSessionKey, parentContext)
+          : undefined;
 
         const span = tracer.startSpan(
           "openclaw.message.sent",
@@ -712,7 +706,8 @@ export function registerHooks(
               [ATTR_OBSERVE_ENTITY_NAME]: "openclaw.message.sent",
               "openclaw.message.channel": channel,
               "openclaw.message.direction": "outbound",
-              "openclaw.session.key": sessionKey,
+              "openclaw.session.key": runtimeSessionKey,
+              ...(sessionId ? { "session.id": sessionId } : {}),
             },
           },
           parentContext
@@ -725,11 +720,6 @@ export function registerHooks(
         counters.messagesSent.add(1, {
           "openclaw.message.channel": channel,
         });
-
-        if (sessionKey !== "unknown") {
-          touchSession(sessionKey, parentContext);
-        }
-
         span.setStatus({ code: SpanStatusCode.OK });
         span.end();
       } catch (error) {
@@ -751,8 +741,8 @@ export function registerHooks(
     (event: any, ctx: any) => {
       try {
         ensureRuntime();
-        const sessionIdentities = resolveSessionIdentities(event, ctx);
-        const sessionKey = sessionIdentities[0] || "unknown";
+        const runtimeSessionIdentities = resolveRuntimeSessionIdentities(event, ctx);
+        const runtimeSessionKey = runtimeSessionIdentities[0] || "unknown";
         const agentId = event?.agentId || ctx?.agentId || "unknown";
         const model = event?.model || "unknown";
 
@@ -767,7 +757,7 @@ export function registerHooks(
                     context: pendingSpawnHandoff.spawnToolSpanContext,
                     attributes: {
                       "link.type": "agent_spawn",
-                      "openclaw.handoff.source_session": pendingSpawnHandoff.sourceSessionKey,
+                      "openclaw.handoff.source_runtime_session": pendingSpawnHandoff.sourceRuntimeSessionKey,
                       "openclaw.handoff.source_agent": pendingSpawnHandoff.sourceAgentId,
                     },
                   },
@@ -783,7 +773,7 @@ export function registerHooks(
                     : []),
                 ],
                 attributes: {
-                  "openclaw.handoff.source_session": pendingSpawnHandoff.sourceSessionKey,
+                  "openclaw.handoff.source_runtime_session": pendingSpawnHandoff.sourceRuntimeSessionKey,
                   "openclaw.handoff.source_agent": pendingSpawnHandoff.sourceAgentId,
                 },
               }
@@ -795,15 +785,17 @@ export function registerHooks(
             ctx,
             config,
             logger,
-            securityCounters,
             counters,
             rootSeed
           );
         }
         const parentContext = sessionCtx?.rootContext || context.active();
+        const sessionId = runtimeSessionKey !== "unknown"
+          ? touchSession(runtimeSessionKey, parentContext)
+          : undefined;
 
         if (pendingSpawnHandoff?.sourceAgentSpanContext) {
-          seedHandoffState(sessionKey, {
+          seedHandoffState(runtimeSessionKey, {
             lastAgentSpanContext: pendingSpawnHandoff.sourceAgentSpanContext,
             lastAgentName: pendingSpawnHandoff.sourceAgentId,
             sequence: pendingSpawnHandoff.sourceAgentSequence,
@@ -811,7 +803,7 @@ export function registerHooks(
         }
 
         // Check for join from a previous parallel fork
-        const joinInfo = consumeJoin(sessionKey);
+        const joinInfo = consumeJoin(runtimeSessionKey);
         const joinLinks: Link[] = joinInfo?.links ?? [];
         if (joinInfo) {
           logger.info(
@@ -821,7 +813,7 @@ export function registerHooks(
         }
 
         // Prepare handoff links before span creation so OTel records them.
-        const handoff = onAgentStart(sessionKey, agentId);
+        const handoff = onAgentStart(runtimeSessionKey, agentId);
         const agentLinks: Link[] = [...joinLinks, ...handoff.links];
 
         // Create agent turn span as child of root span
@@ -833,7 +825,8 @@ export function registerHooks(
               [ATTR_OBSERVE_SPAN_KIND]: ObserveSpanKind.AGENT,
               [ATTR_OBSERVE_ENTITY_NAME]: agentId,
               "openclaw.agent.id": agentId,
-              "openclaw.session.key": sessionKey,
+              "openclaw.session.key": runtimeSessionKey,
+              ...(sessionId ? { "session.id": sessionId } : {}),
               "openclaw.agent.model": model,
               ...handoff.attributes,
             },
@@ -857,7 +850,7 @@ export function registerHooks(
           });
         }
 
-        registerAgentSpan(sessionKey, agentId, agentSpan, handoff.sequence, handoff.previousAgentName);
+        registerAgentSpan(runtimeSessionKey, agentId, agentSpan, handoff.sequence, handoff.previousAgentName);
         if (handoff.links.length > 0) {
           logger.debug(
             `[otel] Handoff links prepared for agent=${agentId}: ${handoff.links.length} link(s), ` +
@@ -878,9 +871,9 @@ export function registerHooks(
           setSessionTraceContext(sessionCtx, event, ctx);
           sessionCtx.agentSpan = agentSpan;
           sessionCtx.agentContext = agentContext;
-        } else if (sessionKey !== "unknown") {
+        } else if (runtimeSessionKey !== "unknown") {
           setSessionTraceContext({
-            sessionKey,
+            runtimeSessionKey,
             rootSpan: agentSpan,
             rootContext: agentContext,
             agentSpan,
@@ -890,9 +883,9 @@ export function registerHooks(
         }
 
         // Register in activeAgentSpans for diagnostics integration
-        registerActiveAgentSpan(sessionIdentities, agentSpan);
+        registerActiveAgentSpan(runtimeSessionIdentities, agentSpan);
 
-        logger.info?.(`[otel] Agent turn started: agent=${agentId}, model=${model}, session=${sessionKey}`);
+        logger.info?.(`[otel] Agent turn started: agent=${agentId}, model=${model}, runtimeSession=${runtimeSessionKey}`);
       } catch (error) {
         logger.debug(`[otel] before_agent_start hook failed: ${String(error)}`);
       }
@@ -933,13 +926,16 @@ export function registerHooks(
     (event: any, ctx: any) => {
       try {
         ensureRuntime();
-        const sessionKey = resolveSessionKey(event, ctx);
+        const runtimeSessionKey = resolveRuntimeSessionKey(event, ctx);
         const agentId = ctx?.agentId || event?.agentId || "unknown";
         const model = event?.model || ctx?.model || "unknown";
-        const callId = event?.callId || event?.requestId || sessionKey;
+        const callId = event?.callId || event?.requestId || runtimeSessionKey;
 
         const sessionCtx = getSessionTraceContext(event, ctx);
         const parentContext = sessionCtx?.agentContext || sessionCtx?.rootContext || context.active();
+        const sessionId = runtimeSessionKey !== "unknown"
+          ? touchSession(runtimeSessionKey, parentContext)
+          : undefined;
 
         const span = tracer.startSpan(
           "openclaw.llm.call",
@@ -948,7 +944,8 @@ export function registerHooks(
             attributes: {
               [ATTR_OBSERVE_SPAN_KIND]: ObserveSpanKind.TASK,
               [ATTR_OBSERVE_ENTITY_NAME]: "openclaw.llm.call",
-              "openclaw.session.key": sessionKey,
+              "openclaw.session.key": runtimeSessionKey,
+              ...(sessionId ? { "session.id": sessionId } : {}),
               "openclaw.agent.id": agentId,
               "gen_ai.request.model": model,
             },
@@ -961,13 +958,8 @@ export function registerHooks(
         if (config.captureContent && messages != null) {
           setCapturedContent(span, "input", messages, ["openclaw.llm"]);
         }
-
-        if (sessionKey !== "unknown") {
-          touchSession(sessionKey, parentContext);
-        }
-
         pendingLlmSpans.set(callId, span);
-        logger.info?.(`[otel] LLM span started: model=${model}, callId=${callId}, session=${sessionKey}`);
+        logger.info?.(`[otel] LLM span started: model=${model}, callId=${callId}, runtimeSession=${runtimeSessionKey}`);
       } catch {
         // Never let telemetry errors break the main flow
       }
@@ -986,9 +978,9 @@ export function registerHooks(
     "llm_output",
     (event: any, ctx: any) => {
       try {
-        const sessionKey = resolveSessionKey(event, ctx);
+        const runtimeSessionKey = resolveRuntimeSessionKey(event, ctx);
         const agentId = ctx?.agentId || event?.agentId || "unknown";
-        const callId = event?.callId || event?.requestId || sessionKey;
+        const callId = event?.callId || event?.requestId || runtimeSessionKey;
 
         const span = pendingLlmSpans.get(callId);
         if (!span) {
@@ -1032,7 +1024,7 @@ export function registerHooks(
         }
 
         span.end();
-        logger.info?.(`[otel] LLM span ended: callId=${callId}, agent=${agentId}, session=${sessionKey}`);
+        logger.info?.(`[otel] LLM span ended: callId=${callId}, agent=${agentId}, runtimeSession=${runtimeSessionKey}`);
       } catch {
         // Never let telemetry errors break the main flow
       }
@@ -1056,7 +1048,7 @@ export function registerHooks(
         const toolName = event?.toolName || event?.name || "unknown";
         const toolCallId = event?.toolCallId || event?.id || "";
         const isSynthetic = event?.isSynthetic === true;
-        const sessionKey = resolveSessionKey(event, ctx);
+        const runtimeSessionKey = resolveRuntimeSessionKey(event, ctx);
         const agentId = ctx?.agentId || "unknown";
 
         // Tool input is available in event.input for security checks
@@ -1065,12 +1057,15 @@ export function registerHooks(
         // Record metric
         counters.toolCalls.add(1, {
           "tool.name": toolName,
-          "openclaw.session.key": sessionKey,
+          "openclaw.session.key": runtimeSessionKey,
         });
 
         // Get parent context - prefer agent turn span, fall back to root
         const sessionCtx = getSessionTraceContext(event, ctx);
         const parentContext = sessionCtx?.agentContext || sessionCtx?.rootContext || context.active();
+        const sessionId = runtimeSessionKey !== "unknown"
+          ? touchSession(runtimeSessionKey, parentContext)
+          : undefined;
 
         // Create tool span as child of agent turn
         const span = tracer.startSpan(
@@ -1083,19 +1078,17 @@ export function registerHooks(
               "openclaw.tool.name": toolName,
               "openclaw.tool.call_id": toolCallId,
               "openclaw.tool.is_synthetic": isSynthetic,
-              "openclaw.session.key": sessionKey,
+              "openclaw.session.key": runtimeSessionKey,
+              ...(sessionId ? { "session.id": sessionId } : {}),
               "openclaw.agent.id": agentId,
             },
           },
           parentContext
         );
 
-        // Track session activity
-        touchSession(sessionKey, parentContext);
-
         // Fork detection - register this tool span for parallel detection
-        const agentSequence = getHandoffSequence(sessionKey);
-        const forkAttrs = registerToolSpan(sessionKey, toolName, span, agentId, agentSequence);
+        const agentSequence = getHandoffSequence(runtimeSessionKey);
+        const forkAttrs = registerToolSpan(runtimeSessionKey, toolName, span, agentId, agentSequence);
         if (forkAttrs) {
           for (const key of Object.keys(forkAttrs)) {
             span.setAttribute(key, forkAttrs[key]);
@@ -1111,24 +1104,6 @@ export function registerHooks(
           setCapturedContent(span, "input", toolInput, ["openclaw.tool"]);
         }
 
-        // SECURITY DETECTION 1 & 3: File Access & Dangerous Commands
-        const securityEvent = checkToolSecurity(
-          toolName,
-          toolInput,
-          span,
-          securityCounters,
-          sessionKey,
-          agentId
-        );
-        if (securityEvent) {
-          logger.warn(`[otel] SECURITY: ${securityEvent.detection} - ${securityEvent.description}`);
-          // Add tool input details to span for forensics
-          if (toolInput) {
-            const inputStr = JSON.stringify(toolInput).slice(0, 1000);
-            span.setAttribute("openclaw.tool.input_preview", inputStr);
-          }
-        }
-
         // Store span so tool_result_persist can add the output and close it
         if (toolCallId) {
           pendingToolSpans.set(toolCallId, {
@@ -1141,7 +1116,7 @@ export function registerHooks(
           span.end();
         }
 
-        logger.info?.(`[otel] Tool span started: tool=${toolName}, callId=${toolCallId}, session=${sessionKey}`);
+        logger.info?.(`[otel] Tool span started: tool=${toolName}, callId=${toolCallId}, runtimeSession=${runtimeSessionKey}`);
       } catch {
         // Never let telemetry errors break the main flow
       }
@@ -1161,7 +1136,7 @@ export function registerHooks(
         ensureRuntime();
         const toolName = event?.toolName || "unknown";
         const toolCallId = event?.toolCallId || "";
-        const sessionKey = resolveSessionKey(event, ctx);
+        const runtimeSessionKey = resolveRuntimeSessionKey(event, ctx);
         const agentId = ctx?.agentId || "unknown";
 
         // Retrieve the span opened in before_tool_call
@@ -1190,9 +1165,9 @@ export function registerHooks(
         const sessionCtx = getSessionTraceContext(event, ctx);
         const parentContext = sessionCtx?.agentContext || sessionCtx?.rootContext || context.active();
 
-        const agentSequence = getHandoffSequence(sessionKey);
-        // Inspect the message/result for result metadata
-        const message = event?.result ?? event?.message;
+        const agentSequence = getHandoffSequence(runtimeSessionKey);
+        // Inspect the message for result metadata
+        const message = event?.message;
         if (message) {
           if (toolName === "sessions_spawn") {
             const targetAgentIds = extractSpawnTargetAgentIds(toolInput, message);
@@ -1201,7 +1176,7 @@ export function registerHooks(
             for (const targetAgentId of targetAgentIds) {
               queuePendingSpawnHandoff({
                 targetAgentId,
-                sourceSessionKey: sessionKey,
+                sourceRuntimeSessionKey: runtimeSessionKey,
                 sourceAgentId: agentId,
                 sourceAgentSequence: agentSequence,
                 sourceAgentSpanContext,
@@ -1214,15 +1189,15 @@ export function registerHooks(
             if (targetAgentIds.length > 0) {
               logger.info(
                 `[otel] Prepared subagent handoff from agent=${agentId} to ` +
-                `[${targetAgentIds.join(", ")}], session=${sessionKey}`
+                `[${targetAgentIds.join(", ")}], runtimeSession=${runtimeSessionKey}`
               );
             } else {
               logger.debug(
-                `[otel] sessions_spawn result captured but target agent could not be resolved, session=${sessionKey}`
+                `[otel] sessions_spawn result captured but target agent could not be resolved, runtimeSession=${runtimeSessionKey}`
               );
             }
           }
-          process_memory_tool(toolName, toolInput, counters, histograms, sessionKey, message, durationMs);
+          process_memory_tool(toolName, toolInput, counters, histograms, runtimeSessionKey, message, durationMs);
 
           const contentArray = message?.content;
           if (contentArray && Array.isArray(contentArray)) {
@@ -1254,7 +1229,7 @@ export function registerHooks(
         }
 
         span.end();
-        logger.info?.(`[otel] Tool span ended: tool=${toolName}, callId=${toolCallId}, session=${sessionKey}`);
+  logger.info?.(`[otel] Tool span ended: tool=${toolName}, callId=${toolCallId}, runtimeSession=${runtimeSessionKey}`);
       } catch {
         // Never let telemetry errors break the main flow
       }
@@ -1279,7 +1254,7 @@ export function registerHooks(
         ensureRuntime();
         const toolName = event?.toolName || "unknown";
         const toolCallId = event?.toolCallId || "";
-        const sessionKey = resolveSessionKey(event, ctx);
+        const runtimeSessionKey = resolveRuntimeSessionKey(event, ctx);
         const agentId = ctx?.agentId || "unknown";
 
         // Retrieve the span opened in before_tool_call
@@ -1307,7 +1282,7 @@ export function registerHooks(
         const sessionCtx = getSessionTraceContext(event, ctx);
         const parentContext = sessionCtx?.agentContext || sessionCtx?.rootContext || context.active();
 
-        const agentSequence = getHandoffSequence(sessionKey);
+        const agentSequence = getHandoffSequence(runtimeSessionKey);
         // Inspect the message for result metadata
         const message = event?.message;
         if (message) {
@@ -1318,7 +1293,7 @@ export function registerHooks(
             for (const targetAgentId of targetAgentIds) {
               queuePendingSpawnHandoff({
                 targetAgentId,
-                sourceSessionKey: sessionKey,
+                sourceRuntimeSessionKey: runtimeSessionKey,
                 sourceAgentId: agentId,
                 sourceAgentSequence: agentSequence,
                 sourceAgentSpanContext,
@@ -1331,15 +1306,15 @@ export function registerHooks(
             if (targetAgentIds.length > 0) {
               logger.info(
                 `[otel] Prepared subagent handoff from agent=${agentId} to ` +
-                `[${targetAgentIds.join(", ")}], session=${sessionKey}`
+                `[${targetAgentIds.join(", ")}], runtimeSession=${runtimeSessionKey}`
               );
             } else {
               logger.debug(
-                `[otel] sessions_spawn result captured but target agent could not be resolved, session=${sessionKey}`
+                `[otel] sessions_spawn result captured but target agent could not be resolved, runtimeSession=${runtimeSessionKey}`
               );
             }
           }
-          process_memory_tool(toolName, toolInput, counters, histograms, sessionKey, message, durationMs);
+          process_memory_tool(toolName, toolInput, counters, histograms, runtimeSessionKey, message, durationMs);
 
           const contentArray = message?.content;
           if (contentArray && Array.isArray(contentArray)) {
@@ -1371,7 +1346,7 @@ export function registerHooks(
         }
 
         span.end();
-        logger.info?.(`[otel] Tool span ended: tool=${toolName}, callId=${toolCallId}, session=${sessionKey}`);
+  logger.info?.(`[otel] Tool span ended: tool=${toolName}, callId=${toolCallId}, runtimeSession=${runtimeSessionKey}`);
       } catch {
         // Never let telemetry errors break the main flow
       }
@@ -1396,15 +1371,15 @@ export function registerHooks(
     async (event: any, ctx: any) => {
       try {
         ensureRuntime();
-        const sessionIdentities = resolveSessionIdentities(event, ctx);
-        const sessionKey = sessionIdentities[0] || "unknown";
+        const runtimeSessionIdentities = resolveRuntimeSessionIdentities(event, ctx);
+        const runtimeSessionKey = runtimeSessionIdentities[0] || "unknown";
         const agentId = event?.agentId || ctx?.agentId || "unknown";
         const durationMs = event?.durationMs;
         const success = event?.success !== false;
         const errorMsg = event?.error;
 
         // Try to get usage from diagnostic events (includes cost!)
-        const diagUsage = getPendingUsage(sessionIdentities);
+        const diagUsage = getPendingUsage(runtimeSessionIdentities);
 
         // Fallback: Extract token usage from the messages array
         const messages: any[] = event?.messages || [];
@@ -1519,7 +1494,7 @@ export function registerHooks(
           }
 
           // Finalize fork/join detection for this agent turn
-          const forkResult = finalizeAgentTurn(sessionKey);
+          const forkResult = finalizeAgentTurn(runtimeSessionKey);
           if (forkResult) {
             agentSpan.setAttribute("ioa_observe.fork.id", forkResult.forkId);
             agentSpan.setAttribute("ioa_observe.fork.branch_count", forkResult.branchCount);
@@ -1533,9 +1508,9 @@ export function registerHooks(
           }
 
           // Update handoff state so next agent can link back
-          onAgentEnd(sessionKey, agentId, agentSpan);
+          onAgentEnd(runtimeSessionKey, agentId, agentSpan);
           logger.info(
-            `[otel] Agent turn ended: agent=${agentId}, session=${sessionKey}, ` +
+            `[otel] Agent turn ended: agent=${agentId}, runtimeSession=${runtimeSessionKey}, ` +
             `success=${success}, duration=${durationMs ?? "?"}ms, ` +
             `tokens=${totalTokens}, cost=$${costUsd?.toFixed(4) ?? "?"}`
           );
@@ -1560,13 +1535,13 @@ export function registerHooks(
 
         // Clean up all per-session state
         deleteSessionTraceContext(sessionCtx);
-        unregisterActiveAgentSpan(sessionIdentities);
-        cleanupHandoff(sessionKey);
-        cleanupForkJoin(sessionKey);
+        unregisterActiveAgentSpan(runtimeSessionIdentities);
+        cleanupHandoff(runtimeSessionKey);
+        cleanupForkJoin(runtimeSessionKey);
         // Clear the global agent context fallback set in before_agent_start
         (globalThis as any).__OPENCLAW_ACTIVE_AGENT_CONTEXT = undefined;
 
-        logger.info(`[otel] Trace completed for session=${sessionKey}`);
+        logger.info(`[otel] Trace completed for runtimeSession=${runtimeSessionKey}`);
       } catch (error) {
         logger.debug(`[otel] agent_end hook failed: ${String(error)}`);
         // Silently ignore
@@ -1589,11 +1564,12 @@ export function registerHooks(
       try {
         ensureRuntime();
         const action = event?.action || "unknown";
-        const sessionKey = event?.sessionKey || "unknown";
+        const runtimeSessionKey = event?.sessionKey || "unknown";
 
         // Get parent context if available
-        const sessionCtx = sessionContextMap.get(sessionKey);
+        const sessionCtx = sessionContextMap.get(runtimeSessionKey);
         const parentContext = sessionCtx?.rootContext || context.active();
+        const sessionAttrs = getSessionIdAttrs(runtimeSessionKey);
 
         const span = tracer.startSpan(
           `openclaw.command.${action}`,
@@ -1601,7 +1577,8 @@ export function registerHooks(
             kind: SpanKind.INTERNAL,
             attributes: {
               "openclaw.command.action": action,
-              "openclaw.command.session_key": sessionKey,
+              "openclaw.command.runtime_session_key": runtimeSessionKey,
+              ...sessionAttrs,
               "openclaw.command.source": event?.context?.commandSource || "unknown",
             },
           },
@@ -1613,8 +1590,8 @@ export function registerHooks(
             "command.source": event?.context?.commandSource || "unknown",
           });
           // End session lifecycle tracking on reset
-          endSession(sessionKey);
-          logger.info(`[otel] Session ended via command:${action}: session=${sessionKey}`);
+          endSession(runtimeSessionKey);
+          logger.info(`[otel] Session ended via command:${action}: runtimeSession=${runtimeSessionKey}`);
         }
 
         span.setStatus({ code: SpanStatusCode.OK });
@@ -1660,7 +1637,7 @@ export function registerHooks(
   logger.info("[otel] Registered gateway:startup hook (via api.registerHook)");
 
   // -- Periodic cleanup ------------------------------------------------
-  // Safety net: clean up stale session contexts (e.g., if agent_end never fires)
+  // Safety net: clean up stale runtime-session contexts (e.g., if agent_end never fires)
   setInterval(() => {
     const now = Date.now();
     const maxAge = 5 * 60 * 1000; // 5 minutes
@@ -1677,10 +1654,10 @@ export function registerHooks(
           if (ctx.rootSpan !== ctx.agentSpan) ctx.rootSpan?.end();
         } catch { /* ignore */ }
         deleteSessionTraceContext(ctx);
-        unregisterActiveAgentSpan([ctx.sessionKey]);
-        cleanupHandoff(ctx.sessionKey);
-        cleanupForkJoin(ctx.sessionKey);
-        logger.debug(`[otel] Cleaned up stale trace context for session=${ctx.sessionKey}`);
+        unregisterActiveAgentSpan([ctx.runtimeSessionKey]);
+        cleanupHandoff(ctx.runtimeSessionKey);
+        cleanupForkJoin(ctx.runtimeSessionKey);
+        logger.debug(`[otel] Cleaned up stale trace context for runtimeSession=${ctx.runtimeSessionKey}`);
       }
     }
   }, 60_000).unref();

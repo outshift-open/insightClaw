@@ -19,7 +19,12 @@ function createLogger() {
   };
 }
 
-test("session lifecycle tracks sessions and emits session.end on explicit end", () => {
+function assertUuid(value: unknown): asserts value is string {
+  assert.equal(typeof value, "string");
+  assert.match(value, /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
+}
+
+test("session lifecycle emits session.start and session.end around explicit end", () => {
   stopSessionWatcher();
   const tracer = new MockTracer();
   startSessionWatcher(tracer as any, createLogger(), 10_000);
@@ -30,10 +35,15 @@ test("session lifecycle tracks sessions and emits session.end on explicit end", 
   endSession("session-1");
 
   assert.equal(activeSessionCount(), 0);
-  assert.equal(tracer.spans.length, 1);
-  assert.equal(tracer.spans[0]?.name, "session.end");
-  assert.equal(tracer.spans[0]?.options.attributes["session.id"], "session-1");
-  assert.equal(tracer.spans[0]?.options.attributes["ioa_observe.workflow.name"], "workflow-a");
+  assert.equal(tracer.spans.length, 2);
+  assert.equal(tracer.spans[0]?.name, "session.start");
+  const sessionId = tracer.spans[0]?.options.attributes["session.id"];
+  assertUuid(sessionId);
+  assert.notEqual(sessionId, "session-1");
+  assert.equal(tracer.spans[0]?.options.attributes["openclaw.session.key"], "session-1");
+  assert.equal(tracer.spans[1]?.name, "session.end");
+  assert.equal(tracer.spans[1]?.options.attributes["session.id"], sessionId);
+  assert.equal(tracer.spans[1]?.options.attributes["ioa_observe.workflow.name"], "workflow-a");
 
   stopSessionWatcher();
 });
@@ -50,7 +60,8 @@ test("session lifecycle updates existing sessions and removes without emission",
   removeSession("session-2");
 
   assert.equal(activeSessionCount(), 0);
-  assert.equal(tracer.spans.length, 0);
+  assert.equal(tracer.spans.length, 1);
+  assert.equal(tracer.spans[0]?.name, "session.start");
 
   stopSessionWatcher();
 });

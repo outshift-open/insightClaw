@@ -28,6 +28,13 @@ function createTelemetry() {
       llmDuration: histogram(),
       toolDuration: histogram(),
       agentTurnDuration: histogram(),
+      contextSystemSize: histogram(),
+      contextHistoryMemorySize: histogram(),
+      contextHistoryToolSize: histogram(),
+      contextHistoryUserSize: histogram(),
+      contextHistoryOtherSize: histogram(),
+      contextToolDescSize: histogram(),
+      contextOtherSize: histogram(),
     },
     gauges: {
       activeSessions: counter(),
@@ -112,6 +119,26 @@ test("registerHooks wires lifecycle hooks that create and complete request spans
       hookCtx
     );
 
+    const llmInputSystemPrompt = "System instructions"
+    const llmInputPrompt = "User query";
+    const llmInputUserMessage = "Previous user message";
+    const llmInputToolResult = "Previous tool result message";
+    const llmInputHistoryOtherMessage = "Previous other message";
+    typedHooks.get("llm_input")?.(
+      { agentId: "planner", model: "claude-sonnet-4", conversationId: sessionKey,
+        systemPrompt: llmInputSystemPrompt,
+        prompt: llmInputPrompt,
+        historyMessages: [
+          { role: "user", content: llmInputUserMessage},
+          { role: "assistant", content: llmInputHistoryOtherMessage },
+          { role: "toolResult", toolName: "memory_get", content: llmInputToolResult },
+          { role: "toolResult", toolName: "memory_get", content: llmInputToolResult },
+          { role: "toolResult", toolName: "write", content: llmInputToolResult },
+        ]
+       },
+      hookCtx
+    );
+
     typedHooks.get("before_agent_start")?.(
       { agentId: "planner", model: "claude-sonnet-4", conversationId: sessionKey },
       hookCtx
@@ -167,13 +194,13 @@ test("registerHooks wires lifecycle hooks that create and complete request spans
     const spans = telemetry.tracer.spans;
     assert.deepEqual(
       spans.map((entry) => entry.name),
-      ["openclaw.request", "openclaw.agent.turn", "tool.Read", "openclaw.message.sent"]
+      ["openclaw.request", "openclaw.llm.call", "openclaw.agent.turn", "tool.Read", "openclaw.message.sent"]
     );
 
     const root = spans[0]?.span;
-    const agent = spans[1]?.span;
-    const tool = spans[2]?.span;
-    const outbound = spans[3]?.span;
+    const agent = spans[2]?.span;
+    const tool = spans[3]?.span;
+    const outbound = spans[4]?.span;
     const sessionId = root.attributes.get("session.id");
 
     assert.equal(typeof sessionId, "string");
@@ -192,6 +219,7 @@ test("registerHooks wires lifecycle hooks that create and complete request spans
     assert.equal(root.ended, true);
     assert.equal(outbound.ended, true);
 
+    console.log("Counters:", telemetry.histograms.contextHistoryUserSize.calls);
     assert.equal(telemetry.counters.messagesReceived.calls.length, 1);
     assert.equal(telemetry.counters.messagesSent.calls.length, 1);
     assert.equal(telemetry.counters.toolCalls.calls.length, 1);
@@ -200,6 +228,12 @@ test("registerHooks wires lifecycle hooks that create and complete request spans
     assert.equal(tool.attributes.get("openclaw.tool.duration_ms"), 42);
     assert.equal(telemetry.histograms.agentTurnDuration.calls[0]?.value, 250);
     assert.equal(activeAgentSpans.has(sessionKey), false);
+    assert.equal(telemetry.histograms.contextSystemSize.calls[0]?.value, new TextEncoder().encode(llmInputSystemPrompt).length);
+    assert.equal(telemetry.histograms.contextHistoryUserSize.calls[0]?.value, new TextEncoder().encode(llmInputUserMessage).length);
+    assert.equal(telemetry.histograms.contextHistoryToolSize.calls[0]?.value, new TextEncoder().encode(llmInputToolResult).length);
+    assert.equal(telemetry.histograms.contextHistoryOtherSize.calls[0]?.value, new TextEncoder().encode(llmInputHistoryOtherMessage).length);
+    assert.equal(telemetry.histograms.contextHistoryMemorySize.calls[0]?.value, 2 * new TextEncoder().encode(llmInputToolResult).length);
+
   } finally {
     globalThis.setInterval = originalSetInterval;
     Date.now = originalDateNow;

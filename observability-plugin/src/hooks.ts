@@ -493,6 +493,102 @@ function process_memory_tool(toolName: string, toolInput: string, counters: any,
   }
 }
 
+/**
+ * Summarizes the content lengths of an LLM input context, similar to parse_llm_input_context in debug.py.
+ * @param context The LLM input context object (parsed from JSON)
+ */
+export function parseContext(event: any, histograms: any, sessionKey: any, agentId: any): void {
+  // systemPrompt is a string
+  const systemPrompt = event?.systemPrompt;
+  const prompt = event?.prompt;
+  const historyMessages = event?.historyMessages;
+  console.info("Parsing LLM input context:", { systemPrompt, prompt, historyMessages });
+  console.info("Parsing LLM input Session key:", sessionKey, "Agent ID:", agentId);
+
+  const system_data = typeof systemPrompt === 'string' ? systemPrompt.length : 0;
+  let tool_desc = 0;
+  let history_tool = 0;
+  let history_user = 0;
+  let history_others = 0;
+  let history_memory = 0;
+  let others = 0;
+
+  try {
+    const data = historyMessages || [];
+    for (const elem of data) {
+      const role = elem.role;
+      if (role === 'toolResult') {
+        const toolName = elem.toolName;
+        let is_memory_tool = false;
+        if (toolName === 'memory_get') {
+          is_memory_tool = true;
+        } else if (
+          toolName === 'read' &&
+          elem.arguments &&
+          typeof elem.arguments.path === 'string' &&
+          elem.arguments.path.includes('memory')
+        ) {
+          is_memory_tool = true;
+        }
+        if (is_memory_tool) {
+          history_memory += JSON.stringify(elem.content ?? '').length;
+        }
+        history_tool += JSON.stringify(elem.content ?? []).length;
+      } else if (role === 'user') {
+        history_user += JSON.stringify(elem.content ?? []).length;
+      } else {
+        history_others += JSON.stringify(elem.content ?? []).length;
+      }
+    }
+  } catch (e) {
+    console.error('Error decoding historyMessages content, skipping context parsing.', e);
+    return;
+  }
+
+  history_tool -= history_memory;
+
+  console.info("CONTEXT counters:", { 
+    system_data,
+    tool_desc,
+    history_tool,
+    history_user,
+    history_memory,
+    history_others,
+    others,
+  });
+
+  histograms.contextSystemSize.record(system_data, { 
+    "openclaw.agent.id": agentId,
+    "openclaw.session.key": sessionKey,
+  });
+  histograms.contextToolDescSize.record(tool_desc, { 
+    "openclaw.agent.id": agentId,
+    "openclaw.session.key": sessionKey,
+  });
+  histograms.contextHistoryMemorySize.record(history_memory, { 
+    "openclaw.agent.id": agentId,
+    "openclaw.session.key": sessionKey,
+  });
+  histograms.contextHistoryToolSize.record(history_tool, { 
+    "openclaw.agent.id": agentId,
+    "openclaw.session.key": sessionKey,
+  });
+  histograms.contextHistoryUserSize.record(history_user, { 
+    "openclaw.agent.id": agentId,
+    "openclaw.session.key": sessionKey,
+  });
+
+  histograms.contextHistoryOtherSize.record(history_others, { 
+    "openclaw.agent.id": agentId,
+    "openclaw.session.key": sessionKey,
+  });
+
+  histograms.contextOtherSize.record(others, { 
+    "openclaw.agent.id": agentId,
+    "openclaw.session.key": sessionKey,
+  });
+}
+
 function isLongTermMemoryAccess(toolInput: any): boolean {
   //Heuristics to determine if a tool call is accessing long-term memory:
   // Check if toolInput has a "path" field that includes "memory" and ends with ".md"
@@ -960,6 +1056,7 @@ export function registerHooks(
         }
         pendingLlmSpans.set(callId, span);
         logger.info?.(`[otel] LLM span started: model=${model}, callId=${callId}, runtimeSession=${runtimeSessionKey}`);
+        parseContext(event, histograms, runtimeSessionKey, agentId);
       } catch {
         // Never let telemetry errors break the main flow
       }

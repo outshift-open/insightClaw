@@ -82,6 +82,20 @@ export interface OtelHistograms {
   memoryWriteDuration: Histogram;
   /** Memory edit duration in ms */
   memoryEditDuration: Histogram;
+  /** Size of system context in bytes */
+  contextSystemSize: Histogram;
+  /** Size of tool description context in bytes */
+  contextToolDescSize: Histogram;
+  /** Size of message history memory context in bytes */
+  contextHistoryMemorySize: Histogram;
+  /** Size of message history tool context in bytes */
+  contextHistoryToolSize: Histogram;
+  /** Size of message history user context in bytes */
+  contextHistoryUserSize: Histogram;
+  /** Size of message history other context in bytes */
+  contextHistoryOtherSize: Histogram;
+  /** Size of other context in bytes */
+  contextOtherSize: Histogram;
 }
 
 export interface OtelGauges {
@@ -255,6 +269,34 @@ export function initTelemetry(config: OtelObservabilityConfig, logger: any): Tel
     memoryEditDuration: meter.createHistogram("openclaw.memory.edit_duration", {
         description: "Memory edit duration in ms",
         unit: "ms",
+    }),
+    contextSystemSize: meter.createHistogram("openclaw.context.system_size", {
+        description: "Size of system context in bytes",
+        unit: "bytes",
+    }),
+    contextToolDescSize: meter.createHistogram("openclaw.context.tool_desc_size", {
+        description: "Size of tool description context in bytes",
+        unit: "bytes",
+    }),
+    contextHistoryMemorySize: meter.createHistogram("openclaw.context.history_memory_size", {
+        description: "Size of message history memory context in bytes",
+        unit: "bytes",
+    }), 
+    contextHistoryToolSize: meter.createHistogram("openclaw.context.history_tool_size", {
+        description: "Size of message history tool context in bytes",
+        unit: "bytes",
+    }), 
+    contextHistoryUserSize: meter.createHistogram("openclaw.context.history_user_size", {
+        description: "Size of message history user context in bytes",
+        unit: "bytes",
+    }),
+     contextHistoryOtherSize: meter.createHistogram("openclaw.context.history_other_size", {
+        description: "Size of message history other context in bytes",
+        unit: "bytes",
+    }),
+     contextOtherSize: meter.createHistogram("openclaw.context.other_size", {
+        description: "Size of other context in bytes",
+        unit: "bytes",
     }),
   };
 

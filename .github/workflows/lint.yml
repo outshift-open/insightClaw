@@ -13,6 +13,29 @@ on:
 permissions: read-all
 
 jobs:
+  typecheck:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: observability-plugin
+    steps:
+      - name: 🔒 harden runner
+        uses: step-security/harden-runner@5c7944e73c4c2a096b17a9cb74d65b6c2bbafbde # v2.9.1
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: npm
+          cache-dependency-path: observability-plugin/package-lock.json
+      - name: 📦 install dependencies
+        run: npm ci
+      - name: 🔍 typecheck
+        run: npm run typecheck
+      - name: 🧹 lint
+        run: npm run lint
+
   super-linter:
     if: 0 # Temp fix to disable super-linter until we can fix the linting errors
     runs-on: ubuntu-latest

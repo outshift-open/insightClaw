@@ -55,7 +55,7 @@ export interface AgentHandoffStart {
  */
 export function onAgentStart(
   sessionKey: string,
-  agentId: string
+  _agentId: string
 ): AgentHandoffStart {
   const state = handoffMap.get(sessionKey);
   const links: Link[] = [];

@@ -48,7 +48,6 @@ import {
 } from "./observe-attributes.js";
 import {
   annotateMemoryToolSpan,
-  isLongTermMemoryAccess,
   recordMemoryFailureRateFromCache,
   recordMemoryToolMetrics,
 } from "./memory-metrics.js";
@@ -619,18 +618,19 @@ function handleToolOutput(
     }
 
     const toolStatus = getToolStatus(result);
-    console.log("TOOL STATUS");
-    console.log(toolStatus);
-    // if (toolStatus) {
-    // }
-    if (result?.is_error === true || result?.isError === true) {
-      config.counters.toolErrors.add(1, { "tool.name": toolName });
-      span.setStatus({ code: SpanStatusCode.ERROR, message: "Tool execution error" });
-    } else {
-      span.setStatus({ code: SpanStatusCode.OK });
+    if (toolStatus) {
+      if (toolStatus.status.toLowerCase() === "completed" || toolStatus.status.toLowerCase() === "accepted" || toolStatus.status.toLowerCase() === "yielded") {
+        if (toolStatus.exitCode <= 0) {
+          span.setStatus({ code: SpanStatusCode.OK });
+        } else {
+          span.setStatus({ code: SpanStatusCode.ERROR, message: `Tool exited with code ${toolStatus.exitCode}` });
+          config.counters.toolErrors.add(1, { "tool.name": toolName });
+        }
+      } else if (toolStatus.status.toLowerCase() === "failed" || toolStatus.status.toLowerCase() === "error") {
+        span.setStatus({ code: SpanStatusCode.ERROR, message: `Tool execution failed with status ${toolStatus.status}` });
+        config.counters.toolErrors.add(1, { "tool.name": toolName });
+      }
     }
-  } else {
-    span.setStatus({ code: SpanStatusCode.OK });
   }
   captureSpanToCache(span, `tool.${toolName}`, "tool", runtimeSessionKey, getSessionId(runtimeSessionKey));
   if (memoryOperation) {
@@ -1601,7 +1601,7 @@ export function registerHooks(
 
   api.on(
     "before_model_resolve",
-    (event: any, ctx: any) => {
+    (_event: any, _ctx: any) => {
       // Not implemented at the moment
       return undefined;
     }
@@ -1609,7 +1609,7 @@ export function registerHooks(
  logger.info("[otel] Registered before_model_resolve hook (via api.on)");
   api.on(
     "before_prompt_build",
-    (event: any, ctx: any) => {
+    (_event: any, _ctx: any) => {
       // Not implemented at the moment
       return undefined;
     }
@@ -2052,7 +2052,7 @@ export function registerHooks(
 
   api.registerHook(
     "gateway:startup",
-    async (event: any) => {
+    async (_event: any) => {
       try {
         ensureRuntime();
         const span = tracer.startSpan("openclaw.gateway.startup", {

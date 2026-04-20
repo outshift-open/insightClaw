@@ -5,6 +5,7 @@ import {
   getPendingUsage,
   registerActiveAgentSpan,
   registerDiagnosticsListener,
+  setMessageProcessedObserver,
   setOnDiagnosticEventForTest,
   unregisterActiveAgentSpan,
 } from "../src/diagnostics.ts";
@@ -202,5 +203,42 @@ test("registerDiagnosticsListener records the broader diagnostic event stream", 
   assert.equal(processedSpan?.options.attributes["openclaw.runtime.session.id"], "session-456");
 
   unsubscribe();
+  setOnDiagnosticEventForTest(null);
+});
+
+test("registerDiagnosticsListener forwards message.processed events to the observer", async () => {
+  const bus = createDiagnosticBus();
+  const telemetry = createTelemetry();
+  const received: Array<{ runtimeSessionKey: string; outcome: string; channel: string }> = [];
+
+  setOnDiagnosticEventForTest(bus.subscribe);
+  setMessageProcessedObserver((evt) => {
+    received.push({
+      runtimeSessionKey: evt.runtimeSessionKey,
+      outcome: evt.outcome,
+      channel: evt.channel,
+    });
+  });
+
+  const unsubscribe = await registerDiagnosticsListener(telemetry as any, logger);
+
+  bus.emit({
+    type: "message.processed",
+    sessionKey: "agent:planner:main",
+    channel: "webchat",
+    outcome: "ok",
+    durationMs: 42,
+  });
+
+  assert.deepEqual(received, [
+    {
+      runtimeSessionKey: "agent:planner:main",
+      outcome: "ok",
+      channel: "webchat",
+    },
+  ]);
+
+  unsubscribe();
+  setMessageProcessedObserver(null);
   setOnDiagnosticEventForTest(null);
 });

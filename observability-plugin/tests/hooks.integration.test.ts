@@ -87,6 +87,8 @@ test("registerHooks wires lifecycle hooks that create and complete request spans
       metrics: true,
       logs: false,
       captureContent: true,
+      spanCache: false,
+      spanCacheVerboseLogs: false,
       metricsIntervalMs: 30_000,
       resourceAttributes: {},
     });
@@ -240,6 +242,150 @@ test("registerHooks wires lifecycle hooks that create and complete request spans
   }
 });
 
+test("registerHooks completes a pending request root when message_sent arrives after agent_end", async () => {
+  const telemetry = createTelemetry();
+  const { api, typedHooks } = createApi();
+  const originalSetInterval = globalThis.setInterval;
+
+  globalThis.setInterval = ((() => ({ unref() {} })) as unknown) as typeof setInterval;
+
+  try {
+    registerHooks(api as any, () => telemetry as any, {
+      endpoint: "http://localhost:4318",
+      protocol: "http",
+      serviceName: "test-service",
+      headers: {},
+      traces: true,
+      metrics: true,
+      logs: false,
+      captureContent: true,
+      spanCache: false,
+      spanCacheVerboseLogs: false,
+      metricsIntervalMs: 30_000,
+      resourceAttributes: {},
+    });
+
+    const sessionKey = "agent:planner:main";
+    const hookCtx = { conversationId: sessionKey, channelId: "chat", agentId: "planner" };
+
+    await typedHooks.get("message_received")?.(
+      {
+        content: "Draft the response",
+        metadata: { channelId: "chat", conversationId: sessionKey },
+      },
+      hookCtx
+    );
+
+    typedHooks.get("before_agent_start")?.(
+      { agentId: "planner", model: "claude-sonnet-4", conversationId: sessionKey },
+      hookCtx
+    );
+
+    await typedHooks.get("agent_end")?.(
+      {
+        success: true,
+        durationMs: 125,
+        messages: [
+          { role: "assistant", model: "claude-sonnet-4", usage: { input: 9, output: 4 } },
+          { role: "assistant", content: [{ type: "text", text: "Here is the response." }] },
+        ],
+        conversationId: sessionKey,
+      },
+      hookCtx
+    );
+
+    const root = telemetry.tracer.spans.find((entry) => entry.name === "openclaw.request")?.span;
+    const agent = telemetry.tracer.spans.find((entry) => entry.name === "openclaw.agent.turn")?.span;
+
+    assert.equal(agent?.ended, true);
+    assert.equal(root?.ended, false);
+    assert.equal(root?.attributes.get("openclaw.request.completion_reason"), undefined);
+
+    await typedHooks.get("message_sent")?.(
+      {
+        content: [{ type: "text", text: "Here is the response." }],
+        conversationId: sessionKey,
+      },
+      hookCtx
+    );
+
+    const outbound = telemetry.tracer.spans.find((entry) => entry.name === "openclaw.message.sent")?.span;
+
+    assert.equal(outbound?.ended, true);
+    assert.equal(root?.ended, true);
+    assert.equal(root?.attributes.get("openclaw.request.completion_reason"), "message_sent");
+    assert.equal(telemetry.counters.messagesSent.calls.length, 1);
+  } finally {
+    globalThis.setInterval = originalSetInterval;
+  }
+});
+
+test("registerHooks infers outbound completion from agent_end for webchat when no outbound signal exists", async () => {
+  const telemetry = createTelemetry();
+  const { api, typedHooks } = createApi();
+  const originalSetInterval = globalThis.setInterval;
+
+  globalThis.setInterval = ((() => ({ unref() {} })) as unknown) as typeof setInterval;
+
+  try {
+    registerHooks(api as any, () => telemetry as any, {
+      endpoint: "http://localhost:4318",
+      protocol: "http",
+      serviceName: "test-service",
+      headers: {},
+      traces: true,
+      metrics: true,
+      logs: false,
+      captureContent: true,
+      spanCache: false,
+      spanCacheVerboseLogs: false,
+      metricsIntervalMs: 30_000,
+      resourceAttributes: {},
+    });
+
+    const sessionKey = "agent:planner:main";
+    const hookCtx = { conversationId: sessionKey, channelId: "webchat", agentId: "planner" };
+
+    await typedHooks.get("message_received")?.(
+      {
+        content: "Draft the response",
+        metadata: { channelId: "webchat", conversationId: sessionKey },
+      },
+      hookCtx
+    );
+
+    typedHooks.get("before_agent_start")?.(
+      { agentId: "planner", model: "claude-sonnet-4", conversationId: sessionKey },
+      hookCtx
+    );
+
+    await typedHooks.get("agent_end")?.(
+      {
+        success: true,
+        durationMs: 125,
+        messages: [
+          { role: "assistant", model: "claude-sonnet-4", usage: { input: 9, output: 4 } },
+          { role: "assistant", content: [{ type: "text", text: "Here is the response." }] },
+        ],
+        conversationId: sessionKey,
+      },
+      hookCtx
+    );
+
+    const root = telemetry.tracer.spans.find((entry) => entry.name === "openclaw.request")?.span;
+    const outbound = telemetry.tracer.spans.find((entry) => entry.name === "openclaw.message.sent")?.span;
+
+    assert.equal(outbound?.ended, true);
+    assert.equal(outbound?.attributes.get("openclaw.message.delivery_signal"), "inferred.agent_end.webchat");
+    assert.equal(outbound?.attributes.get("openclaw.message.output"), "Here is the response.");
+    assert.equal(root?.ended, true);
+    assert.equal(root?.attributes.get("openclaw.request.completion_reason"), "agent_end_inferred_outbound");
+    assert.equal(telemetry.counters.messagesSent.calls.length, 1);
+  } finally {
+    globalThis.setInterval = originalSetInterval;
+  }
+});
+
 test("registerHooks links spawned subagent turns back to the spawning tool span", () => {
   const telemetry = createTelemetry();
   const { api, typedHooks } = createApi();
@@ -257,6 +403,8 @@ test("registerHooks links spawned subagent turns back to the spawning tool span"
       metrics: true,
       logs: false,
       captureContent: false,
+      spanCache: false,
+      spanCacheVerboseLogs: false,
       metricsIntervalMs: 30_000,
       resourceAttributes: {},
     });
@@ -338,6 +486,8 @@ test("registerHooks recovers Vertex usage fields from agent_end fallback payload
       metrics: true,
       logs: false,
       captureContent: false,
+      spanCache: false,
+      spanCacheVerboseLogs: false,
       metricsIntervalMs: 30_000,
       resourceAttributes: {},
     });

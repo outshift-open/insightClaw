@@ -29,7 +29,14 @@
 import { SpanKind, SpanStatusCode, context, trace, type Span, type SpanContext, type Context, type Link } from "@opentelemetry/api";
 import type { TelemetryRuntime } from "./telemetry.js";
 import type { OtelObservabilityConfig } from "./config.js";
-import { getPendingUsage, normalizeUsageData, registerActiveAgentSpan, unregisterActiveAgentSpan } from "./diagnostics.js";
+import {
+  getPendingUsage,
+  normalizeUsageData,
+  registerActiveAgentSpan,
+  setMessageProcessedObserver,
+  unregisterActiveAgentSpan,
+  type MessageProcessedDiagnosticEvent,
+} from "./diagnostics.js";
 import { onAgentStart, onAgentEnd, cleanupHandoff, getHandoffSequence, registerAgentSpan, seedHandoffState, setHandoffLogger } from "./handoff.js";
 import { registerToolSpan, finalizeAgentTurn, consumeJoin, cleanupForkJoin, setForkJoinLogger } from "./forkjoin.js";
 import {
@@ -71,12 +78,19 @@ function captureSpanToCache(
 /** Active trace context for an OpenClaw runtime session. */
 interface SessionTraceContext {
   runtimeSessionKey: string;
+  messageChannel: string;
   rootSpan: Span;
   rootContext: Context;
   agentSpan?: Span;
   agentContext?: Context;
   agentId?: string;
+  messageSentAt?: number;
+  pendingRootRuntimeSessionIdentities?: string[];
+  rootCompletionDeadlineAt?: number;
   latestInput?: string;
+  latestOutput?: unknown;
+  lastLifecycleEvent?: string;
+  lastLifecycleAt?: number;
   startTime: number;
 }
 
@@ -127,10 +141,11 @@ interface DeferredAgentCompletion {
   sessionCtx?: SessionTraceContext;
 }
 
-/** Map of runtime session key -> active trace context. Cleaned up on agent_end. */
+/** Map of runtime session key -> active trace context. Cleaned up when the request span closes. */
 const sessionContextMap = new Map<string, SessionTraceContext>();
 const pendingSpawnHandoffs = new Map<string, PendingSpawnHandoff[]>();
 const PENDING_SPAWN_TTL_MS = 60_000;
+const ROOT_COMPLETION_GRACE_MS = 30_000;
 const MAX_CAPTURE_CONTENT_CHARS = 4_096;
 
 function pushCandidate(target: string[], value: unknown): void {
@@ -288,6 +303,17 @@ function getSessionTraceContext(event?: any, ctx?: any): SessionTraceContext | u
   return undefined;
 }
 
+function getSessionTraceContextByIdentities(runtimeSessionIdentities: string[]): SessionTraceContext | undefined {
+  for (const runtimeSessionIdentity of runtimeSessionIdentities) {
+    const sessionCtx = sessionContextMap.get(runtimeSessionIdentity);
+    if (sessionCtx) {
+      return sessionCtx;
+    }
+  }
+
+  return undefined;
+}
+
 function setSessionTraceContext(sessionCtx: SessionTraceContext, event?: any, ctx?: any): void {
   const sessionIdentities = resolveRuntimeSessionIdentities(event, ctx);
 
@@ -311,6 +337,32 @@ function deleteSessionTraceContext(sessionCtx: SessionTraceContext | undefined):
       sessionContextMap.delete(sessionIdentity);
     }
   }
+}
+
+function markLifecycleEvent(sessionCtx: SessionTraceContext | undefined, eventName: string): void {
+  if (!sessionCtx) {
+    return;
+  }
+
+  sessionCtx.lastLifecycleEvent = eventName;
+  sessionCtx.lastLifecycleAt = Date.now();
+}
+
+function formatSessionTraceState(sessionCtx: SessionTraceContext | undefined): string {
+  if (!sessionCtx) {
+    return "hasSessionCtx=false";
+  }
+
+  const lastEvent = sessionCtx.lastLifecycleEvent || "unknown";
+  const lastEventAgeMs = sessionCtx.lastLifecycleAt == null
+    ? "?"
+    : Math.max(0, Date.now() - sessionCtx.lastLifecycleAt);
+
+  return (
+    `hasSessionCtx=true, pendingRoot=${sessionCtx.pendingRootRuntimeSessionIdentities ? "true" : "false"}, ` +
+    `agentActive=${sessionCtx.agentSpan ? "true" : "false"}, lastEvent=${lastEvent}, ` +
+    `lastEventAgeMs=${lastEventAgeMs}`
+  );
 }
 
 function getSessionIdAttrs(runtimeSessionKey: string): Record<string, string> {
@@ -735,9 +787,12 @@ function startRootSpan(
     : undefined;
   const sessionCtx: SessionTraceContext = {
     runtimeSessionKey: primaryRuntimeSessionKey,
+    messageChannel: channel,
     rootSpan,
     rootContext,
     latestInput: capturedInput,
+    lastLifecycleEvent: "root_started",
+    lastLifecycleAt: Date.now(),
     startTime: Date.now(),
   };
 
@@ -803,6 +858,165 @@ export function registerHooks(
     return count;
   }
 
+  function finalizeRootSpan(
+    sessionCtx: SessionTraceContext | undefined,
+    runtimeSessionIdentities: string[],
+    runtimeSessionKey: string,
+    reason: string
+  ): void {
+    if (!sessionCtx) {
+      return;
+    }
+
+    sessionCtx.pendingRootRuntimeSessionIdentities = undefined;
+    sessionCtx.rootCompletionDeadlineAt = undefined;
+
+    if (sessionCtx.rootSpan && sessionCtx.rootSpan !== sessionCtx.agentSpan) {
+      const totalMs = Date.now() - sessionCtx.startTime;
+      sessionCtx.rootSpan.setAttribute("openclaw.request.duration_ms", totalMs);
+      sessionCtx.rootSpan.setAttribute("openclaw.request.completion_reason", reason);
+      sessionCtx.rootSpan.setStatus({ code: SpanStatusCode.OK });
+      captureSpanToCache(
+        sessionCtx.rootSpan,
+        "openclaw.request",
+        "request",
+        runtimeSessionKey,
+        getSessionId(runtimeSessionKey)
+      );
+      sessionCtx.rootSpan.end();
+    }
+
+    deleteSessionTraceContext(sessionCtx);
+    logger.info(
+      `[otel] Trace completed for runtimeSession=${runtimeSessionKey} ` +
+      `(reason=${reason}, ${formatSessionTraceState(sessionCtx)})`
+    );
+  }
+
+  function emitOutboundSpan(
+    runtimeSessionKey: string,
+    channel: string,
+    parentContext: Context,
+    output: unknown,
+    options?: {
+      sessionId?: string;
+      statusCode?: SpanStatusCode;
+      statusMessage?: string;
+      signal?: string;
+      outcome?: string;
+    }
+  ): void {
+    const span = tracer.startSpan(
+      "openclaw.message.sent",
+      {
+        kind: SpanKind.PRODUCER,
+        attributes: {
+          [ATTR_OBSERVE_SPAN_KIND]: ObserveSpanKind.WORKFLOW,
+          [ATTR_OBSERVE_ENTITY_NAME]: "openclaw.message.sent",
+          "openclaw.message.channel": channel,
+          "openclaw.message.direction": "outbound",
+          "openclaw.session.key": runtimeSessionKey,
+          ...(options?.sessionId ? { "session.id": options.sessionId } : {}),
+          ...(options?.signal ? { "openclaw.message.delivery_signal": options.signal } : {}),
+          ...(options?.outcome ? { "openclaw.message.outcome": options.outcome } : {}),
+        },
+      },
+      parentContext
+    );
+
+    if (config.captureContent && output != null) {
+      setCapturedContent(span, "output", output, ["openclaw.message"]);
+    }
+
+    counters.messagesSent.add(1, {
+      "openclaw.message.channel": channel,
+    });
+    span.setStatus({
+      code: options?.statusCode ?? SpanStatusCode.OK,
+      ...(options?.statusMessage ? { message: options.statusMessage } : {}),
+    });
+    captureSpanToCache(
+      span,
+      "openclaw.message.sent",
+      "message",
+      runtimeSessionKey,
+      options?.sessionId
+    );
+    span.end();
+  }
+
+  function shouldInferOutboundCompletion(sessionCtx: SessionTraceContext): boolean {
+    return sessionCtx.messageChannel === "webchat";
+  }
+
+  function handleMessageProcessed(evt: MessageProcessedDiagnosticEvent): void {
+    try {
+      ensureRuntime();
+      const sessionCtx = getSessionTraceContextByIdentities(evt.runtimeSessionIdentities);
+      logger.info(
+        `[otel] message.processed observed: runtimeSession=${evt.runtimeSessionKey}, ` +
+        `channel=${evt.channel}, outcome=${evt.outcome}, ${formatSessionTraceState(sessionCtx)}`
+      );
+
+      if (!sessionCtx) {
+        logger.warn?.(
+          `[otel] message.processed observed without active trace context: ` +
+          `runtimeSession=${evt.runtimeSessionKey}, channel=${evt.channel}, outcome=${evt.outcome}`
+        );
+        return;
+      }
+
+      if (sessionCtx.messageSentAt) {
+        logger.info(
+          `[otel] message.processed observed after outbound completion already recorded: ` +
+          `runtimeSession=${evt.runtimeSessionKey}, channel=${evt.channel}, outcome=${evt.outcome}`
+        );
+        return;
+      }
+
+      markLifecycleEvent(sessionCtx, "message_processed");
+      sessionCtx.messageSentAt = Date.now();
+
+      if (sessionCtx.pendingRootRuntimeSessionIdentities) {
+        const sessionId = getSessionId(evt.runtimeSessionKey);
+        const parentContext = sessionCtx.rootContext || context.active();
+        emitOutboundSpan(
+          evt.runtimeSessionKey,
+          evt.channel,
+          parentContext,
+          undefined,
+          {
+            sessionId,
+            signal: "diagnostic.message.processed",
+            outcome: evt.outcome,
+            statusCode: evt.outcome === "error" ? SpanStatusCode.ERROR : SpanStatusCode.OK,
+            statusMessage: evt.outcome === "error"
+              ? (evt.error || evt.reason || "message processing error")
+              : undefined,
+          }
+        );
+
+        finalizeRootSpan(
+          sessionCtx,
+          sessionCtx.pendingRootRuntimeSessionIdentities,
+          evt.runtimeSessionKey,
+          evt.outcome === "error" ? "message_processed_error" : "message_processed"
+        );
+        return;
+      }
+
+      logger.info(
+        `[otel] message.processed observed with no pending request root to close: ` +
+        `runtimeSession=${evt.runtimeSessionKey}, channel=${evt.channel}, outcome=${evt.outcome}, ` +
+        `${formatSessionTraceState(sessionCtx)}`
+      );
+    } catch (error) {
+      logger.debug(`[otel] message.processed observer failed: ${String(error)}`);
+    }
+  }
+
+  setMessageProcessedObserver(handleMessageProcessed);
+
   function finalizeAgentCompletion(completion: DeferredAgentCompletion): void {
     const {
       runtimeSessionIdentities,
@@ -822,6 +1036,7 @@ export function registerHooks(
       costUsd,
       sessionCtx,
     } = completion;
+    const assistantOutput = extractLatestAssistantOutput(messages);
 
     if (sessionCtx?.agentSpan) {
       const agentSpan = sessionCtx.agentSpan;
@@ -830,7 +1045,7 @@ export function registerHooks(
         setCapturedContent(
           agentSpan,
           "output",
-          extractLatestAssistantOutput(messages),
+          assistantOutput,
           ["openclaw.agent"]
         );
       }
@@ -919,21 +1134,64 @@ export function registerHooks(
       agentSpan.end();
     }
 
-    if (sessionCtx?.rootSpan && sessionCtx.rootSpan !== sessionCtx.agentSpan) {
-      const totalMs = Date.now() - sessionCtx.startTime;
-      sessionCtx.rootSpan.setAttribute("openclaw.request.duration_ms", totalMs);
-      sessionCtx.rootSpan.setStatus({ code: SpanStatusCode.OK });
-      captureSpanToCache(sessionCtx.rootSpan, "openclaw.request", "request", runtimeSessionKey, getSessionId(runtimeSessionKey));
-      sessionCtx.rootSpan.end();
-    }
-
-    deleteSessionTraceContext(sessionCtx);
     unregisterActiveAgentSpan(runtimeSessionIdentities);
     cleanupHandoff(runtimeSessionKey);
     cleanupForkJoin(runtimeSessionKey);
     (globalThis as any).__OPENCLAW_ACTIVE_AGENT_CONTEXT = undefined;
 
-    logger.info(`[otel] Trace completed for runtimeSession=${runtimeSessionKey}`);
+    if (!sessionCtx || sessionCtx.rootSpan === sessionCtx.agentSpan) {
+      deleteSessionTraceContext(sessionCtx);
+      logger.info(`[otel] Trace completed for runtimeSession=${runtimeSessionKey} (reason=agent_end)`);
+      return;
+    }
+
+    sessionCtx.agentSpan = undefined;
+    sessionCtx.agentContext = undefined;
+    sessionCtx.agentId = undefined;
+    sessionCtx.latestOutput = assistantOutput;
+    sessionCtx.pendingRootRuntimeSessionIdentities = runtimeSessionIdentities;
+    sessionCtx.rootCompletionDeadlineAt = Date.now() + ROOT_COMPLETION_GRACE_MS;
+    markLifecycleEvent(sessionCtx, "agent_end");
+
+    if (sessionCtx.messageSentAt) {
+      finalizeRootSpan(sessionCtx, runtimeSessionIdentities, runtimeSessionKey, "agent_end_after_message_sent");
+      return;
+    }
+
+    if (shouldInferOutboundCompletion(sessionCtx)) {
+      const sessionId = getSessionId(runtimeSessionKey);
+      sessionCtx.messageSentAt = Date.now();
+      markLifecycleEvent(sessionCtx, "agent_end_inferred_outbound");
+      emitOutboundSpan(
+        runtimeSessionKey,
+        sessionCtx.messageChannel,
+        sessionCtx.rootContext || context.active(),
+        sessionCtx.latestOutput,
+        {
+          sessionId,
+          signal: "inferred.agent_end.webchat",
+          outcome: success ? "ok" : "error",
+          statusCode: success ? SpanStatusCode.OK : SpanStatusCode.ERROR,
+          statusMessage: success ? undefined : String(errorMsg ?? "agent_end failed").slice(0, 200),
+        }
+      );
+      logger.info(
+        `[otel] Inferred outbound completion from agent_end for runtimeSession=${runtimeSessionKey}, ` +
+        `channel=${sessionCtx.messageChannel}`
+      );
+      finalizeRootSpan(
+        sessionCtx,
+        runtimeSessionIdentities,
+        runtimeSessionKey,
+        success ? "agent_end_inferred_outbound" : "agent_end_inferred_outbound_error"
+      );
+      return;
+    }
+
+    logger.info(
+      `[otel] Request span awaiting outbound completion: runtimeSession=${runtimeSessionKey}, ` +
+      `graceMs=${ROOT_COMPLETION_GRACE_MS}, ${formatSessionTraceState(sessionCtx)}`
+    );
   }
 
   api.on(
@@ -942,12 +1200,25 @@ export function registerHooks(
       try {
         ensureRuntime();
         const runtimeSessionKey = resolveRuntimeSessionKey(event, ctx);
-        const sessionCtx = getSessionTraceContext(event, ctx);
+        let sessionCtx = getSessionTraceContext(event, ctx);
+        if (sessionCtx?.pendingRootRuntimeSessionIdentities && !sessionCtx.agentSpan) {
+          logger.warn?.(
+            `[otel] Closing previous request span before new inbound message: runtimeSession=${sessionCtx.runtimeSessionKey}`
+          );
+          finalizeRootSpan(
+            sessionCtx,
+            sessionCtx.pendingRootRuntimeSessionIdentities,
+            sessionCtx.runtimeSessionKey,
+            "superseded_by_new_message"
+          );
+          sessionCtx = undefined;
+        }
         if (sessionCtx) {
           setSessionTraceContext(sessionCtx, event, ctx);
           if (runtimeSessionKey !== "unknown") {
             touchSession(runtimeSessionKey, sessionCtx.rootContext);
           }
+          markLifecycleEvent(sessionCtx, "message_received");
 
           const messageText = extractMessageText(event);
           if (config.captureContent) {
@@ -959,7 +1230,8 @@ export function registerHooks(
             ) ?? sessionCtx.latestInput;
           }
         } else {
-          startRootSpan(tracer, event, ctx, config, logger, counters);
+          const startedSessionCtx = startRootSpan(tracer, event, ctx, config, logger, counters);
+          markLifecycleEvent(startedSessionCtx, "message_received");
         }
       } catch (error) {
         logger.debug(`[otel] message_received hook failed: ${String(error)}`);
@@ -981,36 +1253,41 @@ export function registerHooks(
         const parentContext = sessionCtx?.rootContext || context.active();
         const channel = event?.channel || ctx?.channelId || event?.metadata?.channelId || "unknown";
         const messageText = extractMessageText(event);
+        markLifecycleEvent(sessionCtx, "message_sent");
+        logger.info(
+          `[otel] message_sent observed: runtimeSession=${runtimeSessionKey}, ` +
+          `channel=${channel}, ${formatSessionTraceState(sessionCtx)}`
+        );
         const sessionId = runtimeSessionKey !== "unknown"
           ? touchSession(runtimeSessionKey, parentContext)
           : undefined;
-
-        const span = tracer.startSpan(
-          "openclaw.message.sent",
-          {
-            kind: SpanKind.PRODUCER,
-            attributes: {
-              [ATTR_OBSERVE_SPAN_KIND]: ObserveSpanKind.WORKFLOW,
-              [ATTR_OBSERVE_ENTITY_NAME]: "openclaw.message.sent",
-              "openclaw.message.channel": channel,
-              "openclaw.message.direction": "outbound",
-              "openclaw.session.key": runtimeSessionKey,
-              ...(sessionId ? { "session.id": sessionId } : {}),
-            },
-          },
-          parentContext
-        );
-
-        if (config.captureContent) {
-          setCapturedContent(span, "output", messageText, ["openclaw.message"]);
-        }
-
-        counters.messagesSent.add(1, {
-          "openclaw.message.channel": channel,
+        emitOutboundSpan(runtimeSessionKey, channel, parentContext, messageText, {
+          sessionId,
+          signal: "typed_hook.message_sent",
+          outcome: "ok",
         });
-        span.setStatus({ code: SpanStatusCode.OK });
-        captureSpanToCache(span, "openclaw.message.sent", "message", runtimeSessionKey, sessionId);
-        span.end();
+
+        if (sessionCtx) {
+          sessionCtx.messageSentAt = Date.now();
+          if (sessionCtx.pendingRootRuntimeSessionIdentities) {
+            finalizeRootSpan(
+              sessionCtx,
+              sessionCtx.pendingRootRuntimeSessionIdentities,
+              runtimeSessionKey,
+              "message_sent"
+            );
+          } else {
+            logger.info(
+              `[otel] message_sent observed with no pending request root to close: ` +
+              `runtimeSession=${runtimeSessionKey}, ${formatSessionTraceState(sessionCtx)}`
+            );
+          }
+        } else {
+          logger.warn?.(
+            `[otel] message_sent observed without active trace context: ` +
+            `runtimeSession=${runtimeSessionKey}, channel=${channel}`
+          );
+        }
       } catch (error) {
         logger.debug(`[otel] message_sent hook failed: ${String(error)}`);
       }
@@ -1036,6 +1313,20 @@ export function registerHooks(
         const model = event?.model || "unknown";
 
         let sessionCtx = getSessionTraceContext(event, ctx);
+        if (sessionCtx?.pendingRootRuntimeSessionIdentities && !sessionCtx.agentSpan) {
+          logger.warn?.(
+            `[otel] Closing previous request span before agent restart: runtimeSession=${sessionCtx.runtimeSessionKey}, ` +
+            `incomingAgent=${agentId}`
+          );
+          finalizeRootSpan(
+            sessionCtx,
+            sessionCtx.pendingRootRuntimeSessionIdentities,
+            sessionCtx.runtimeSessionKey,
+            "superseded_by_new_agent_turn"
+          );
+          sessionCtx = undefined;
+        }
+
         const pendingSpawnHandoff = consumePendingSpawnHandoff(agentId);
         if (!sessionCtx) {
           const rootSeed: RootSpanSeed | undefined = pendingSpawnHandoff
@@ -1078,6 +1369,8 @@ export function registerHooks(
             rootSeed
           );
         }
+
+        markLifecycleEvent(sessionCtx, "before_agent_start");
 
         if (sessionCtx?.agentSpan) {
           const activeAgentId = sessionCtx.agentId || "unknown";
@@ -1174,6 +1467,7 @@ export function registerHooks(
         } else if (runtimeSessionKey !== "unknown") {
           setSessionTraceContext({
             runtimeSessionKey,
+            messageChannel: event?.channel || ctx?.channelId || event?.metadata?.channelId || "unknown",
             rootSpan: agentSpan,
             rootContext: agentContext,
             agentSpan,
@@ -1879,6 +2173,24 @@ export function registerHooks(
         continue;
       }
       seen.add(ctx);
+
+      if (
+        ctx.pendingRootRuntimeSessionIdentities &&
+        ctx.rootCompletionDeadlineAt != null &&
+        now >= ctx.rootCompletionDeadlineAt
+      ) {
+        logger.warn?.(
+          `[otel] Request span timed out waiting for outbound completion: runtimeSession=${ctx.runtimeSessionKey}, ` +
+          `graceMs=${ROOT_COMPLETION_GRACE_MS}, ${formatSessionTraceState(ctx)}`
+        );
+        finalizeRootSpan(
+          ctx,
+          ctx.pendingRootRuntimeSessionIdentities,
+          ctx.runtimeSessionKey,
+          "timeout_waiting_for_outbound_completion"
+        );
+        continue;
+      }
 
       if (now - ctx.startTime > maxAge) {
         try {

@@ -45,12 +45,12 @@ openclaw.request (root span)
 **Agent Payload Visibility:**
 - Optional agent input/output payload capture on `openclaw.agent.turn`
 - Request input captured on the root request span
-- Outbound message payload captured on `openclaw.message.sent`
+- Outbound message payload captured on `openclaw.message.sent` when the typed hook is available
 
 **Request Lifecycle:**
 - Full message → response tracing
 - Session context propagation
-- Outbound `message_sent` tracing for delivery visibility
+- Outbound delivery visibility via `message_sent`, diagnostic `message.processed`, or webchat `agent_end` inference when no outbound signal exists
 - Agent turn duration with token breakdown
 - Fallback `openclaw.request` root span creation during `before_agent_start` when inbound hooks only expose conversation metadata
 

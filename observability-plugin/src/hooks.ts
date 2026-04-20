@@ -502,12 +502,12 @@ export function parseContext(event: any, histograms: any, sessionKey: any, agent
   const systemPrompt = event?.systemPrompt;
   const prompt = event?.prompt;
   const historyMessages = event?.historyMessages;
-  const system_data = typeof systemPrompt === 'string' ? new TextEncoder().encode(systemPrompt).length : 0;
+  const systemData = typeof systemPrompt === 'string' ? new TextEncoder().encode(systemPrompt).length : 0;
   //let tool_desc = 0; not available at the moment
-  let history_tool = 0;
-  let history_user = 0;
-  let history_others = 0;
-  let history_memory = 0;
+  let historyTool = 0;
+  let historyUser = 0;
+  let historyOthers = 0;
+  let historyMemory = 0;
   //let others = 0; // not available at the moment
 
   try {
@@ -516,25 +516,25 @@ export function parseContext(event: any, histograms: any, sessionKey: any, agent
       const role = elem.role;
       if (role === 'toolResult') {
         const toolName = elem.toolName;
-        let is_memory_tool = false;
+        let isMemoryTool = false;
         if (toolName === 'memory_get') {
-          is_memory_tool = true;
+          isMemoryTool = true;
         } else if (
           toolName === 'read' &&
           elem.arguments &&
           typeof elem.arguments.path === 'string' &&
           elem.arguments.path.includes('memory')
         ) {
-          is_memory_tool = true;
+          isMemoryTool = true;
         }
-        if (is_memory_tool) {
-          history_memory += new TextEncoder().encode(elem.content ?? '').length;
+        if (isMemoryTool) {
+          historyMemory += new TextEncoder().encode(elem.content ?? '').length;
         }
-        history_tool += new TextEncoder().encode(elem.content ?? '').length;
+        historyTool += new TextEncoder().encode(elem.content ?? '').length;
       } else if (role === 'user') {
-        history_user += new TextEncoder().encode(elem.content ?? '').length;
+        historyUser += new TextEncoder().encode(elem.content ?? '').length;
       } else {
-        history_others += new TextEncoder().encode(elem.content ?? '').length;
+        historyOthers += new TextEncoder().encode(elem.content ?? '').length;
       }
     }
   } catch (e) {
@@ -542,9 +542,9 @@ export function parseContext(event: any, histograms: any, sessionKey: any, agent
     return;
   }
 
-  history_tool -= history_memory;
+  historyTool -= historyMemory;
 
-  histograms.contextSystemSize.record(system_data, { 
+  histograms.contextSystemSize.record(systemData, { 
     "openclaw.agent.id": agentId,
     "openclaw.session.key": sessionKey,
   });
@@ -554,20 +554,20 @@ export function parseContext(event: any, histograms: any, sessionKey: any, agent
   //   "openclaw.agent.id": agentId,
   //   "openclaw.session.key": sessionKey,
   // });
-  histograms.contextHistoryMemorySize.record(history_memory, { 
+  histograms.contextHistoryMemorySize.record(historyMemory, { 
     "openclaw.agent.id": agentId,
     "openclaw.session.key": sessionKey,
   });
-  histograms.contextHistoryToolSize.record(history_tool, { 
+  histograms.contextHistoryToolSize.record(historyTool, { 
     "openclaw.agent.id": agentId,
     "openclaw.session.key": sessionKey,
   });
-  histograms.contextHistoryUserSize.record(history_user, { 
+  histograms.contextHistoryUserSize.record(historyUser, { 
     "openclaw.agent.id": agentId,
     "openclaw.session.key": sessionKey,
   });
 
-  histograms.contextHistoryOtherSize.record(history_others, { 
+  histograms.contextHistoryOtherSize.record(historyOthers, { 
     "openclaw.agent.id": agentId,
     "openclaw.session.key": sessionKey,
   });

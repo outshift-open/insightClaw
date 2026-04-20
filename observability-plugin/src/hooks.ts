@@ -493,6 +493,97 @@ function process_memory_tool(toolName: string, toolInput: string, counters: any,
   }
 }
 
+/**
+ * Summarizes the content lengths of an LLM input context, similar to parse_llm_input_context in debug.py.
+ * @param context The LLM input context object (parsed from JSON)
+ */
+export function parseContext(event: any, histograms: any, sessionKey: any, agentId: any): void {
+  // systemPrompt is a string
+  const systemPrompt = event?.systemPrompt;
+  const prompt = event?.prompt;
+  const historyMessages = event?.historyMessages;
+  const systemData = typeof systemPrompt === 'string' ? new TextEncoder().encode(systemPrompt).length : 0;
+  //let tool_desc = 0; not available at the moment
+  let historyTool = 0;
+  let historyUser = 0;
+  let historyOthers = 0;
+  let historyMemory = 0;
+  //let others = 0; // not available at the moment
+
+  try {
+    const data = historyMessages || [];
+    for (const elem of data) {
+      const role = elem.role;
+      if (role === 'toolResult') {
+        const toolName = elem.toolName;
+        let isMemoryTool = false;
+        if (toolName === 'memory_get') {
+          isMemoryTool = true;
+        } else if (
+          toolName === 'read' &&
+          elem.arguments &&
+          typeof elem.arguments.path === 'string' &&
+          elem.arguments.path.includes('memory')
+        ) {
+          isMemoryTool = true;
+        }
+        if (isMemoryTool) {
+          historyMemory += new TextEncoder().encode(elem.content ?? '').length;
+        }
+        historyTool += new TextEncoder().encode(elem.content ?? '').length;
+      } else if (role === 'user') {
+        historyUser += new TextEncoder().encode(elem.content ?? '').length;
+      } else {
+        historyOthers += new TextEncoder().encode(elem.content ?? '').length;
+      }
+    }
+  } catch (e) {
+    console.error('Error decoding historyMessages content, skipping context parsing.', e);
+    return;
+  }
+
+  historyTool -= historyMemory;
+
+  histograms.contextSystemSize.record(systemData, { 
+    "openclaw.agent.id": agentId,
+    "openclaw.session.key": sessionKey,
+  });
+  
+  // not available at the moment
+  // histograms.contextToolDescSize.record(tool_desc, { 
+  //   "openclaw.agent.id": agentId,
+  //   "openclaw.session.key": sessionKey,
+  // });
+  histograms.contextHistoryMemorySize.record(historyMemory, { 
+    "openclaw.agent.id": agentId,
+    "openclaw.session.key": sessionKey,
+  });
+  histograms.contextHistoryToolSize.record(historyTool, { 
+    "openclaw.agent.id": agentId,
+    "openclaw.session.key": sessionKey,
+  });
+  histograms.contextHistoryUserSize.record(historyUser, { 
+    "openclaw.agent.id": agentId,
+    "openclaw.session.key": sessionKey,
+  });
+
+  histograms.contextHistoryOtherSize.record(historyOthers, { 
+    "openclaw.agent.id": agentId,
+    "openclaw.session.key": sessionKey,
+  });
+  
+  histograms.contextPromptSize.record(prompt ? new TextEncoder().encode(prompt).length : 0, {
+    "openclaw.agent.id": agentId,
+    "openclaw.session.key": sessionKey,
+  });
+
+  // not available at the moment
+  // histograms.contextOtherSize.record(others, { 
+  //   "openclaw.agent.id": agentId,
+  //   "openclaw.session.key": sessionKey,
+  // });
+}
+
 function isLongTermMemoryAccess(toolInput: any): boolean {
   //Heuristics to determine if a tool call is accessing long-term memory:
   // Check if toolInput has a "path" field that includes "memory" and ends with ".md"
@@ -960,6 +1051,7 @@ export function registerHooks(
         }
         pendingLlmSpans.set(callId, span);
         logger.info?.(`[otel] LLM span started: model=${model}, callId=${callId}, runtimeSession=${runtimeSessionKey}`);
+        parseContext(event, histograms, runtimeSessionKey, agentId);
       } catch {
         // Never let telemetry errors break the main flow
       }
@@ -1167,7 +1259,8 @@ export function registerHooks(
 
         const agentSequence = getHandoffSequence(runtimeSessionKey);
         // Inspect the message for result metadata
-        const message = event?.message;
+        const message = event?.message ?? event?.result;
+
         if (message) {
           if (toolName === "sessions_spawn") {
             const targetAgentIds = extractSpawnTargetAgentIds(toolInput, message);

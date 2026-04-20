@@ -108,7 +108,7 @@ test("registerHooks wires lifecycle hooks that create and complete request spans
     ]);
     assert.equal(eventHooks.length, 2);
 
-    const sessionKey = "agent:planner:main";
+    const sessionKey = "agent:planner:lifecycle-complete";
     const hookCtx = { conversationId: sessionKey, channelId: "chat", agentId: "planner" };
 
     await typedHooks.get("message_received")?.(
@@ -172,6 +172,14 @@ test("registerHooks wires lifecycle hooks that create and complete request spans
       hookCtx
     );
 
+    typedHooks.get("llm_output")?.(
+      {
+        response: { content: [{ type: "text", text: "I found sensitive data." }] },
+        conversationId: sessionKey,
+      },
+      hookCtx
+    );
+
     await typedHooks.get("message_sent")?.(
       {
         content: [{ type: "text", text: "I found sensitive data." }],
@@ -199,10 +207,14 @@ test("registerHooks wires lifecycle hooks that create and complete request spans
       ["openclaw.request", "openclaw.llm.call", "openclaw.agent.turn", "tool.Read", "openclaw.message.sent"]
     );
 
-    const root = spans[0]?.span;
-    const agent = spans[2]?.span;
-    const tool = spans[3]?.span;
-    const outbound = spans[4]?.span;
+    const root = spans.find((entry) => entry.name === "openclaw.request")?.span;
+    const agent = spans.find((entry) => entry.name === "openclaw.agent.turn")?.span;
+    const tool = spans.find((entry) => entry.name === "tool.Read")?.span;
+    const outbound = spans.find((entry) => entry.name === "openclaw.message.sent")?.span;
+    assert.ok(root);
+    assert.ok(agent);
+    assert.ok(tool);
+    assert.ok(outbound);
     const sessionId = root.attributes.get("session.id");
 
     assert.equal(typeof sessionId, "string");
@@ -265,7 +277,7 @@ test("registerHooks completes a pending request root when message_sent arrives a
       resourceAttributes: {},
     });
 
-    const sessionKey = "agent:planner:main";
+    const sessionKey = "agent:planner:message-sent-after-agent-end";
     const hookCtx = { conversationId: sessionKey, channelId: "chat", agentId: "planner" };
 
     await typedHooks.get("message_received")?.(
@@ -309,7 +321,7 @@ test("registerHooks completes a pending request root when message_sent arrives a
       hookCtx
     );
 
-    const outbound = telemetry.tracer.spans.find((entry) => entry.name === "openclaw.message.sent")?.span;
+    const outbound = telemetry.tracer.spans.filter((entry) => entry.name === "openclaw.message.sent").at(-1)?.span;
 
     assert.equal(outbound?.ended, true);
     assert.equal(root?.ended, true);
@@ -343,7 +355,7 @@ test("registerHooks infers outbound completion from agent_end for webchat when n
       resourceAttributes: {},
     });
 
-    const sessionKey = "agent:planner:main";
+    const sessionKey = "agent:planner:webchat-inferred-outbound";
     const hookCtx = { conversationId: sessionKey, channelId: "webchat", agentId: "planner" };
 
     await typedHooks.get("message_received")?.(
@@ -492,7 +504,7 @@ test("registerHooks recovers Vertex usage fields from agent_end fallback payload
       resourceAttributes: {},
     });
 
-    const sessionKey = "agent:planner:main";
+    const sessionKey = "agent:planner:vertex-usage-fallback";
     const hookCtx = { conversationId: sessionKey, channelId: "chat", agentId: "planner" };
 
     await typedHooks.get("message_received")?.(

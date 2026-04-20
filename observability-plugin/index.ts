@@ -22,7 +22,8 @@
  *             "traces": true,
  *             "metrics": true,
  *             "captureContent": false,
- *             "spanCache": false
+ *             "spanCache": false,
+ *             "spanCacheVerboseLogs": false
  *           }
  *         }
  *       }
@@ -81,6 +82,7 @@ const otelObservabilityPlugin = {
             logs: config.logs,
             captureContent: config.captureContent,
             spanCache: config.spanCache,
+            spanCacheVerboseLogs: config.spanCacheVerboseLogs,
           },
         });
       }
@@ -104,6 +106,7 @@ const otelObservabilityPlugin = {
             console.log(`  Logs:            ${config.logs ? "✅" : "❌"}`);
             console.log(`  Capture content: ${config.captureContent ? "✅" : "❌"}`);
             console.log(`  Span cache:      ${config.spanCache ? "✅" : "❌"}`);
+            console.log(`  Cache verbose logs: ${config.spanCacheVerboseLogs ? "✅" : "❌"}`);
             console.log(`  Initialized:     ${telemetry ? "✅" : "❌"}`);
             console.log(`  Cost tracking:   ${hasDiagnosticsSupport() ? "✅ (via diagnostics API)" : "❌"}`);
             console.log(`  Agent handoff:   ✅ (span links)`);
@@ -147,6 +150,7 @@ const otelObservabilityPlugin = {
         // Start session lifecycle watcher (session.start + idle-based session.end detection)
         startSessionWatcher(telemetry!.tracer, logger, undefined, {
           enableSpanCache: config.spanCache,
+          spanCacheVerboseLogs: config.spanCacheVerboseLogs,
         });
 
         // Subscribe to OpenClaw diagnostic events (model.usage, etc.)
@@ -202,6 +206,7 @@ const otelObservabilityPlugin = {
             logs: config.logs,
             captureContent: config.captureContent,
             spanCache: config.spanCache,
+            spanCacheVerboseLogs: config.spanCacheVerboseLogs,
           };
           return {
             content: [

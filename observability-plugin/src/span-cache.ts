@@ -53,6 +53,7 @@ let maxAgeMs = DEFAULT_MAX_AGE_MS;
 let maxRecordsPerSession = DEFAULT_MAX_RECORDS_PER_SESSION;
 let loggerRef: any = null;
 let cacheEnabled = false;
+let verboseLogsEnabled = false;
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
@@ -61,17 +62,92 @@ function appendCapped(
   key: string,
   record: SpanRecord,
   cap: number
-): void {
+): number {
   const list = map.get(key);
   if (!list) {
     map.set(key, [record]);
-    return;
+    return 0;
   }
+
   list.push(record);
+  let evicted = 0;
   if (list.length > cap) {
     // Evict oldest entries from the front
-    list.splice(0, list.length - cap);
+    evicted = list.length - cap;
+    list.splice(0, evicted);
   }
+
+  return evicted;
+}
+
+function formatRecord(record: SpanRecord): string {
+  return `${record.spanKind}:${record.spanName}#${record.spanId.slice(0, 8)}`;
+}
+
+function formatRecordList(records: SpanRecord[]): string {
+  if (records.length === 0) {
+    return "empty";
+  }
+
+  return records.map((record) => formatRecord(record)).join(", ");
+}
+
+function formatLookupMap(map: Map<string, SpanRecord[]>): string {
+  if (map.size === 0) {
+    return "empty";
+  }
+
+  return [...map.entries()]
+    .map(([key, records]) => `${key}:${records.length}[${formatRecordList(records)}]`)
+    .join(" | ");
+}
+
+function countRecords(map: Map<string, SpanRecord[]>): number {
+  let total = 0;
+  for (const records of map.values()) {
+    total += records.length;
+  }
+  return total;
+}
+
+function logCache(message: string): void {
+  if (verboseLogsEnabled) {
+    loggerRef?.info?.(message);
+    return;
+  }
+
+  loggerRef?.debug?.(message);
+}
+
+function logCacheSnapshot(reason: string): void {
+  logCache(
+    `[otel:span-cache] Snapshot (${reason}) ` +
+    `stats={sessionKeys:${bySessionKey.size}, sessions:${bySession.size}, traces:${byTrace.size}, ` +
+    `sessionKeyRecords:${countRecords(bySessionKey)}, sessionRecords:${countRecords(bySession)}, traceRecords:${countRecords(byTrace)}} ` +
+    `sessionKeys=[${formatLookupMap(bySessionKey)}] ` +
+    `sessions=[${formatLookupMap(bySession)}] ` +
+    `traces=[${formatLookupMap(byTrace)}]`
+  );
+}
+
+function logRecordInsert(record: SpanRecord, evicted: { sessionKey: number; session: number; trace: number }): void {
+  const sessionKeyRecords = bySessionKey.get(record.sessionKey) ?? [];
+  const sessionRecords = record.sessionId ? (bySession.get(record.sessionId) ?? []) : [];
+  const traceRecords = byTrace.get(record.traceId) ?? [];
+
+  logCache(
+    `[otel:span-cache] Inserted ${formatRecord(record)} ` +
+    `sessionKey=${record.sessionKey} sessionId=${record.sessionId ?? "none"} traceId=${record.traceId} ` +
+    `lengths={sessionKey:${sessionKeyRecords.length}, session:${sessionRecords.length}, trace:${traceRecords.length}} ` +
+    `evicted={sessionKey:${evicted.sessionKey}, session:${evicted.session}, trace:${evicted.trace}}`
+  );
+
+  logCache(
+    `[otel:span-cache] Lookup contents after insert ` +
+    `sessionKey[${record.sessionKey}]=[${formatRecordList(sessionKeyRecords)}] ` +
+    `session[${record.sessionId ?? "none"}]=[${formatRecordList(sessionRecords)}] ` +
+    `trace[${record.traceId}]=[${formatRecordList(traceRecords)}]`
+  );
 }
 
 // ── Public API ───────────────────────────────────────────────────────
@@ -82,6 +158,7 @@ function appendCapped(
 export function startSpanCache(options?: {
   enabled?: boolean;
   logger?: any;
+  verboseLogs?: boolean;
   maxAgeMs?: number;
   maxRecordsPerSession?: number;
   flushIntervalMs?: number;
@@ -91,10 +168,11 @@ export function startSpanCache(options?: {
   if (options?.maxRecordsPerSession) maxRecordsPerSession = options.maxRecordsPerSession;
 
   cacheEnabled = options?.enabled === true;
+  verboseLogsEnabled = options?.verboseLogs === true;
 
   if (!cacheEnabled) {
     stopSpanCache();
-    loggerRef?.debug?.("[otel:span-cache] Disabled by config");
+    logCache("[otel:span-cache] Disabled by config");
     return;
   }
 
@@ -103,15 +181,20 @@ export function startSpanCache(options?: {
   const intervalMs = options?.flushIntervalMs ?? DEFAULT_FLUSH_INTERVAL_MS;
   flushTimer = setInterval(() => sweepStale(), intervalMs);
 
-  loggerRef?.debug?.(
+  logCache(
     `[otel:span-cache] Started (maxAge=${maxAgeMs}ms, cap=${maxRecordsPerSession}, interval=${intervalMs}ms)`
   );
+  logCacheSnapshot("start");
 }
 
 /**
  * Stop the background eviction timer and clear all cached records.
  */
 export function stopSpanCache(): void {
+  if (cacheEnabled || bySessionKey.size > 0 || bySession.size > 0 || byTrace.size > 0) {
+    logCacheSnapshot("stop.before_clear");
+  }
+
   if (flushTimer) {
     clearInterval(flushTimer);
     flushTimer = null;
@@ -120,7 +203,8 @@ export function stopSpanCache(): void {
   bySession.clear();
   byTrace.clear();
   bySessionKey.clear();
-  loggerRef?.debug?.("[otel:span-cache] Stopped and cleared");
+  logCache("[otel:span-cache] Stopped and cleared");
+  verboseLogsEnabled = false;
 }
 
 /**
@@ -129,18 +213,28 @@ export function stopSpanCache(): void {
  */
 export function recordSpan(record: SpanRecord): void {
   if (!cacheEnabled) {
+    logCache(
+      `[otel:span-cache] Insert skipped for ${formatRecord(record)} because cache is disabled`
+    );
     return;
   }
 
   const { traceId, sessionKey, sessionId } = record;
 
-  appendCapped(bySessionKey, sessionKey, record, maxRecordsPerSession);
+  const sessionKeyEvicted = appendCapped(bySessionKey, sessionKey, record, maxRecordsPerSession);
 
+  let sessionEvicted = 0;
   if (sessionId) {
-    appendCapped(bySession, sessionId, record, maxRecordsPerSession);
+    sessionEvicted = appendCapped(bySession, sessionId, record, maxRecordsPerSession);
   }
 
-  appendCapped(byTrace, traceId, record, maxRecordsPerSession);
+  const traceEvicted = appendCapped(byTrace, traceId, record, maxRecordsPerSession);
+
+  logRecordInsert(record, {
+    sessionKey: sessionKeyEvicted,
+    session: sessionEvicted,
+    trace: traceEvicted,
+  });
 }
 
 // ── Lookup API ───────────────────────────────────────────────────────
@@ -188,11 +282,19 @@ export function getCacheStats(): { sessions: number; traces: number; sessionKeys
  */
 export function flushBySessionKey(sessionKey: string): void {
   if (!cacheEnabled) {
+    logCache(
+      `[otel:span-cache] Flush skipped for session ${sessionKey}: cache is disabled`
+    );
     return;
   }
 
   const records = bySessionKey.get(sessionKey);
-  if (!records) return;
+  if (!records) {
+    logCache(
+      `[otel:span-cache] Flush skipped for session ${sessionKey}: no cached entries`
+    );
+    return;
+  }
 
   // Collect trace IDs and session UUIDs touched by this session so we
   // can prune those indices too.
@@ -224,10 +326,11 @@ export function flushBySessionKey(sessionKey: string): void {
     }
   }
 
-  loggerRef?.debug?.(
+  logCache(
     `[otel:span-cache] Flushed session ${sessionKey}: ` +
     `removed ${records.length} record(s), ${traceIds.size} trace(s), ${sessionIds.size} session UUID(s)`
   );
+  logCacheSnapshot(`flush:${sessionKey}`);
 }
 
 // ── Internal ──────────────────────────────────────────────────────────
@@ -274,8 +377,12 @@ function sweepStale(): void {
   }
 
   if (removedRecords > 0 || removedKeys > 0) {
-    loggerRef?.debug?.(
+    logCache(
       `[otel:span-cache] Stale sweep: removed ${removedRecords} record(s) from ${removedKeys} session key(s)`
     );
+  } else {
+    logCache("[otel:span-cache] Stale sweep: no entries flushed");
   }
+
+  logCacheSnapshot("maintenance.1m");
 }

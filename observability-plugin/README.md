@@ -40,6 +40,7 @@ openclaw.request (root span)
 - A session ends after 5 minutes of inactivity by default
 - OpenClaw `sessionKey` and `conversationId` are treated as runtime-session correlation identifiers and exported as `openclaw.runtime.session.*`
 - Optional `spanCache` retains a rolling in-process window of span attributes for trace/session lookups and derived metrics
+- Optional `spanCacheVerboseLogs` promotes span-cache insert/lookup/flush logs to the normal OpenClaw info log stream
 
 **Agent Payload Visibility:**
 - Optional agent input/output payload capture on `openclaw.agent.turn`
@@ -83,7 +84,8 @@ openclaw.request (root span)
               "traces": true,
               "metrics": true,
               "captureContent": true,
-              "spanCache": false
+              "spanCache": false,
+              "spanCacheVerboseLogs": false
            }
          }
        }

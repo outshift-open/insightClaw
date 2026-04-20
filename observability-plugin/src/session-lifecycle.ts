@@ -13,7 +13,7 @@ import {
   ATTR_OBSERVE_SPAN_KIND,
   ObserveSpanKind,
 } from "./observe-attributes.js";
-import { flushBySessionKey, startSpanCache } from "./span-cache.js";
+import { flushBySessionKey, startSpanCache, stopSpanCache } from "./span-cache.js";
 
 // ── Configuration ──────────────────────────────────────────────────
 
@@ -51,7 +51,7 @@ export function startSessionWatcher(
   tracer: Tracer,
   logger: any,
   idleTimeout?: number,
-  options?: { enableSpanCache?: boolean }
+  options?: { enableSpanCache?: boolean; spanCacheVerboseLogs?: boolean }
 ): void {
   tracerRef = tracer;
   loggerRef = logger;
@@ -74,7 +74,11 @@ export function startSessionWatcher(
   process.on("SIGINT", emitAllSessionEnds);
 
   // Start the span cache background sweep only when explicitly enabled.
-  startSpanCache({ logger, enabled: options?.enableSpanCache === true });
+  startSpanCache({
+    logger,
+    enabled: options?.enableSpanCache === true,
+    verboseLogs: options?.spanCacheVerboseLogs === true,
+  });
 
   logger.info?.(
     `[otel:session] Session lifecycle watcher started (idleTimeout=${idleTimeoutMs}ms, checkInterval=${WATCHER_INTERVAL_MS}ms)`
@@ -90,6 +94,7 @@ export function stopSessionWatcher(): void {
     watcherTimer = null;
     loggerRef?.debug?.("[otel:session] Session watcher stopped");
   }
+  stopSpanCache();
   process.removeListener("beforeExit", emitAllSessionEnds);
   process.removeListener("SIGTERM", emitAllSessionEnds);
   process.removeListener("SIGINT", emitAllSessionEnds);

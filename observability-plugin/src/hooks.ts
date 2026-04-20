@@ -101,6 +101,31 @@ interface PendingToolSpan {
   startedAt: number;
 }
 
+interface PendingLlmSpan {
+  span: Span;
+  runtimeSessionKey: string;
+  agentId: string;
+}
+
+interface DeferredAgentCompletion {
+  runtimeSessionIdentities: string[];
+  runtimeSessionKey: string;
+  agentId: string;
+  durationMs?: number;
+  success: boolean;
+  errorMsg?: unknown;
+  messages: any[];
+  diagUsage?: any;
+  totalInputTokens: number;
+  totalOutputTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+  totalTokens: number;
+  model: string;
+  costUsd?: number;
+  sessionCtx?: SessionTraceContext;
+}
+
 /** Map of runtime session key -> active trace context. Cleaned up on agent_end. */
 const sessionContextMap = new Map<string, SessionTraceContext>();
 const pendingSpawnHandoffs = new Map<string, PendingSpawnHandoff[]>();
@@ -673,7 +698,151 @@ export function registerHooks(
   const pendingToolSpans = new Map<string, PendingToolSpan>();
 
   // Spans created in llm_input, completed in llm_output
-  const pendingLlmSpans = new Map<string, Span>();
+  const pendingLlmSpans = new Map<string, PendingLlmSpan>();
+  const deferredAgentCompletions = new Map<string, DeferredAgentCompletion>();
+
+  function countPendingLlmSpansForSession(runtimeSessionKey: string): number {
+    let count = 0;
+    for (const pending of pendingLlmSpans.values()) {
+      if (pending.runtimeSessionKey === runtimeSessionKey) {
+        count += 1;
+      }
+    }
+    return count;
+  }
+
+  function finalizeAgentCompletion(completion: DeferredAgentCompletion): void {
+    const {
+      runtimeSessionIdentities,
+      runtimeSessionKey,
+      agentId,
+      durationMs,
+      success,
+      errorMsg,
+      messages,
+      diagUsage,
+      totalInputTokens,
+      totalOutputTokens,
+      cacheReadTokens,
+      cacheWriteTokens,
+      totalTokens,
+      model,
+      costUsd,
+      sessionCtx,
+    } = completion;
+
+    if (sessionCtx?.agentSpan) {
+      const agentSpan = sessionCtx.agentSpan;
+
+      if (config.captureContent) {
+        setCapturedContent(
+          agentSpan,
+          "output",
+          extractLatestAssistantOutput(messages),
+          ["openclaw.agent"]
+        );
+      }
+
+      if (typeof durationMs === "number") {
+        agentSpan.setAttribute("openclaw.agent.duration_ms", durationMs);
+      }
+
+      agentSpan.setAttribute("gen_ai.usage.input_tokens", totalInputTokens);
+      agentSpan.setAttribute("gen_ai.usage.output_tokens", totalOutputTokens);
+      agentSpan.setAttribute("gen_ai.usage.total_tokens", totalTokens);
+      agentSpan.setAttribute("gen_ai.response.model", model);
+      agentSpan.setAttribute("openclaw.agent.success", success);
+      if (model !== "unknown") {
+        agentSpan.setAttribute("openclaw.agent.model", model);
+      }
+
+      if (cacheReadTokens > 0) {
+        agentSpan.setAttribute("gen_ai.usage.cache_read_tokens", cacheReadTokens);
+      }
+      if (cacheWriteTokens > 0) {
+        agentSpan.setAttribute("gen_ai.usage.cache_write_tokens", cacheWriteTokens);
+      }
+
+      if (typeof costUsd === "number") {
+        agentSpan.setAttribute("openclaw.llm.cost_usd", costUsd);
+      }
+
+      if (diagUsage?.provider) {
+        agentSpan.setAttribute("gen_ai.system", diagUsage.provider);
+      }
+
+      if (diagUsage?.context?.limit) {
+        agentSpan.setAttribute("openclaw.context.limit", diagUsage.context.limit);
+      }
+      if (diagUsage?.context?.used) {
+        agentSpan.setAttribute("openclaw.context.used", diagUsage.context.used);
+      }
+
+      if (!diagUsage && (totalInputTokens > 0 || totalOutputTokens > 0)) {
+        const metricAttrs = {
+          "gen_ai.response.model": model,
+          "openclaw.agent.id": agentId,
+        };
+        counters.tokensPrompt.add(totalInputTokens + cacheReadTokens + cacheWriteTokens, metricAttrs);
+        counters.tokensCompletion.add(totalOutputTokens, metricAttrs);
+        counters.tokensTotal.add(totalTokens, metricAttrs);
+        counters.llmRequests.add(1, metricAttrs);
+      }
+
+      if (typeof durationMs === "number") {
+        histograms.agentTurnDuration.record(durationMs, {
+          "gen_ai.response.model": model,
+          "openclaw.agent.id": agentId,
+        });
+      }
+
+      const forkResult = finalizeAgentTurn(runtimeSessionKey);
+      if (forkResult) {
+        agentSpan.setAttribute("ioa_observe.fork.id", forkResult.forkId);
+        agentSpan.setAttribute("ioa_observe.fork.branch_count", forkResult.branchCount);
+        agentSpan.addEvent("agent.fork_completed", {
+          "ioa_observe.fork.id": forkResult.forkId,
+          "ioa_observe.fork.branch_count": forkResult.branchCount,
+        });
+        logger.info(
+          `[otel] Fork completed: agent=${agentId}, forkId=${forkResult.forkId}, branches=${forkResult.branchCount}`
+        );
+      }
+
+      onAgentEnd(runtimeSessionKey, agentId, agentSpan);
+      logger.info(
+        `[otel] Agent turn ended: agent=${agentId}, runtimeSession=${runtimeSessionKey}, ` +
+        `success=${success}, duration=${durationMs ?? "?"}ms, ` +
+        `tokens=${totalTokens}, cost=$${costUsd?.toFixed(4) ?? "?"}`
+      );
+
+      if (errorMsg) {
+        agentSpan.setAttribute("openclaw.agent.error", String(errorMsg).slice(0, 500));
+        agentSpan.setStatus({ code: SpanStatusCode.ERROR, message: String(errorMsg).slice(0, 200) });
+      } else {
+        agentSpan.setStatus({ code: SpanStatusCode.OK });
+      }
+
+      captureSpanToCache(agentSpan, "openclaw.agent.turn", "agent", runtimeSessionKey, getSessionId(runtimeSessionKey));
+      agentSpan.end();
+    }
+
+    if (sessionCtx?.rootSpan && sessionCtx.rootSpan !== sessionCtx.agentSpan) {
+      const totalMs = Date.now() - sessionCtx.startTime;
+      sessionCtx.rootSpan.setAttribute("openclaw.request.duration_ms", totalMs);
+      sessionCtx.rootSpan.setStatus({ code: SpanStatusCode.OK });
+      captureSpanToCache(sessionCtx.rootSpan, "openclaw.request", "request", runtimeSessionKey, getSessionId(runtimeSessionKey));
+      sessionCtx.rootSpan.end();
+    }
+
+    deleteSessionTraceContext(sessionCtx);
+    unregisterActiveAgentSpan(runtimeSessionIdentities);
+    cleanupHandoff(runtimeSessionKey);
+    cleanupForkJoin(runtimeSessionKey);
+    (globalThis as any).__OPENCLAW_ACTIVE_AGENT_CONTEXT = undefined;
+
+    logger.info(`[otel] Trace completed for runtimeSession=${runtimeSessionKey}`);
+  }
 
   api.on(
     "message_received",
@@ -986,7 +1155,11 @@ export function registerHooks(
         if (config.captureContent && messages != null) {
           setCapturedContent(span, "input", messages, ["openclaw.llm"]);
         }
-        pendingLlmSpans.set(callId, span);
+        pendingLlmSpans.set(callId, {
+          span,
+          runtimeSessionKey,
+          agentId,
+        });
         logger.info?.(`[otel] LLM span started: model=${model}, callId=${callId}, runtimeSession=${runtimeSessionKey}`);
       } catch {
         // Never let telemetry errors break the main flow
@@ -1010,12 +1183,13 @@ export function registerHooks(
         const agentId = ctx?.agentId || event?.agentId || "unknown";
         const callId = event?.callId || event?.requestId || runtimeSessionKey;
 
-        const span = pendingLlmSpans.get(callId);
-        if (!span) {
+        const pendingLlm = pendingLlmSpans.get(callId);
+        if (!pendingLlm) {
           logger.warn?.(`[otel] No pending LLM span for callId=${callId} — skipping output capture`);
           return undefined;
         }
         pendingLlmSpans.delete(callId);
+        const { span, runtimeSessionKey: pendingRuntimeSessionKey } = pendingLlm;
 
         // Token usage
         const usage = event?.usage;
@@ -1051,9 +1225,24 @@ export function registerHooks(
           span.setStatus({ code: SpanStatusCode.OK });
         }
 
-        captureSpanToCache(span, "openclaw.llm.call", "llm", runtimeSessionKey, getSessionId(runtimeSessionKey));
+        captureSpanToCache(
+          span,
+          "openclaw.llm.call",
+          "llm",
+          pendingRuntimeSessionKey,
+          getSessionId(pendingRuntimeSessionKey)
+        );
         span.end();
-        logger.info?.(`[otel] LLM span ended: callId=${callId}, agent=${agentId}, runtimeSession=${runtimeSessionKey}`);
+        logger.info?.(`[otel] LLM span ended: callId=${callId}, agent=${agentId}, runtimeSession=${pendingRuntimeSessionKey}`);
+
+        const deferredCompletion = deferredAgentCompletions.get(pendingRuntimeSessionKey);
+        if (deferredCompletion && countPendingLlmSpansForSession(pendingRuntimeSessionKey) === 0) {
+          deferredAgentCompletions.delete(pendingRuntimeSessionKey);
+          logger.info(
+            `[otel] Completing deferred trace finalization for runtimeSession=${pendingRuntimeSessionKey} after final llm_output`
+          );
+          finalizeAgentCompletion(deferredCompletion);
+        }
       } catch {
         // Never let telemetry errors break the main flow
       }
@@ -1450,131 +1639,35 @@ export function registerHooks(
         logger.debug(`[otel] agent_end tokens: input=${totalInputTokens}, output=${totalOutputTokens}, cache_read=${cacheReadTokens}, cache_write=${cacheWriteTokens}, model=${model}`);
 
         const sessionCtx = getSessionTraceContext(event, ctx);
+        const pendingLlmCount = countPendingLlmSpansForSession(runtimeSessionKey);
+        const completion: DeferredAgentCompletion = {
+          runtimeSessionIdentities,
+          runtimeSessionKey,
+          agentId,
+          durationMs,
+          success,
+          errorMsg,
+          messages,
+          diagUsage,
+          totalInputTokens,
+          totalOutputTokens,
+          cacheReadTokens,
+          cacheWriteTokens,
+          totalTokens,
+          model,
+          costUsd,
+          sessionCtx,
+        };
 
-        // End the agent turn span
-        if (sessionCtx?.agentSpan) {
-          const agentSpan = sessionCtx.agentSpan;
-
-          if (config.captureContent) {
-            setCapturedContent(
-              agentSpan,
-              "output",
-              extractLatestAssistantOutput(messages),
-              ["openclaw.agent"]
-            );
-          }
-
-          if (typeof durationMs === "number") {
-            agentSpan.setAttribute("openclaw.agent.duration_ms", durationMs);
-          }
-
-          // Token usage - GenAI semantic convention attributes
-          agentSpan.setAttribute("gen_ai.usage.input_tokens", totalInputTokens);
-          agentSpan.setAttribute("gen_ai.usage.output_tokens", totalOutputTokens);
-          agentSpan.setAttribute("gen_ai.usage.total_tokens", totalTokens);
-          agentSpan.setAttribute("gen_ai.response.model", model);
-          agentSpan.setAttribute("openclaw.agent.success", success);
-          if (model !== "unknown") {
-            agentSpan.setAttribute("openclaw.agent.model", model);
-          }
-
-          // Cache tokens (custom attributes)
-          if (cacheReadTokens > 0) {
-            agentSpan.setAttribute("gen_ai.usage.cache_read_tokens", cacheReadTokens);
-          }
-          if (cacheWriteTokens > 0) {
-            agentSpan.setAttribute("gen_ai.usage.cache_write_tokens", cacheWriteTokens);
-          }
-
-          // Cost (from diagnostic events) - this is the key addition!
-          if (typeof costUsd === "number") {
-            agentSpan.setAttribute("openclaw.llm.cost_usd", costUsd);
-          }
-
-          if (diagUsage?.provider) {
-            agentSpan.setAttribute("gen_ai.system", diagUsage.provider);
-          }
-
-          // Context window (from diagnostic events)
-          if (diagUsage?.context?.limit) {
-            agentSpan.setAttribute("openclaw.context.limit", diagUsage.context.limit);
-          }
-          if (diagUsage?.context?.used) {
-            agentSpan.setAttribute("openclaw.context.used", diagUsage.context.used);
-          }
-
-          // Record metrics only if we didn't get them from diagnostics
-          // (diagnostics module already records metrics on model.usage event)
-          if (!diagUsage && (totalInputTokens > 0 || totalOutputTokens > 0)) {
-            const metricAttrs = {
-              "gen_ai.response.model": model,
-              "openclaw.agent.id": agentId,
-            };
-            counters.tokensPrompt.add(totalInputTokens + cacheReadTokens + cacheWriteTokens, metricAttrs);
-            counters.tokensCompletion.add(totalOutputTokens, metricAttrs);
-            counters.tokensTotal.add(totalTokens, metricAttrs);
-            counters.llmRequests.add(1, metricAttrs);
-          }
-
-          // Record duration histogram
-          if (typeof durationMs === "number") {
-            histograms.agentTurnDuration.record(durationMs, {
-              "gen_ai.response.model": model,
-              "openclaw.agent.id": agentId,
-            });
-          }
-
-          // Finalize fork/join detection for this agent turn
-          const forkResult = finalizeAgentTurn(runtimeSessionKey);
-          if (forkResult) {
-            agentSpan.setAttribute("ioa_observe.fork.id", forkResult.forkId);
-            agentSpan.setAttribute("ioa_observe.fork.branch_count", forkResult.branchCount);
-            agentSpan.addEvent("agent.fork_completed", {
-              "ioa_observe.fork.id": forkResult.forkId,
-              "ioa_observe.fork.branch_count": forkResult.branchCount,
-            });
-            logger.info(
-              `[otel] Fork completed: agent=${agentId}, forkId=${forkResult.forkId}, branches=${forkResult.branchCount}`
-            );
-          }
-
-          // Update handoff state so next agent can link back
-          onAgentEnd(runtimeSessionKey, agentId, agentSpan);
+        if (pendingLlmCount > 0) {
+          deferredAgentCompletions.set(runtimeSessionKey, completion);
           logger.info(
-            `[otel] Agent turn ended: agent=${agentId}, runtimeSession=${runtimeSessionKey}, ` +
-            `success=${success}, duration=${durationMs ?? "?"}ms, ` +
-            `tokens=${totalTokens}, cost=$${costUsd?.toFixed(4) ?? "?"}`
+            `[otel] Deferring trace completion for runtimeSession=${runtimeSessionKey} until ${pendingLlmCount} pending llm span(s) close`
           );
-
-          if (errorMsg) {
-            agentSpan.setAttribute("openclaw.agent.error", String(errorMsg).slice(0, 500));
-            agentSpan.setStatus({ code: SpanStatusCode.ERROR, message: String(errorMsg).slice(0, 200) });
-          } else {
-            agentSpan.setStatus({ code: SpanStatusCode.OK });
-          }
-
-          captureSpanToCache(agentSpan, "openclaw.agent.turn", "agent", runtimeSessionKey, getSessionId(runtimeSessionKey));
-          agentSpan.end();
+          return undefined;
         }
 
-        // End the root request span
-        if (sessionCtx?.rootSpan && sessionCtx.rootSpan !== sessionCtx.agentSpan) {
-          const totalMs = Date.now() - sessionCtx.startTime;
-          sessionCtx.rootSpan.setAttribute("openclaw.request.duration_ms", totalMs);
-          sessionCtx.rootSpan.setStatus({ code: SpanStatusCode.OK });
-          captureSpanToCache(sessionCtx.rootSpan, "openclaw.request", "request", runtimeSessionKey, getSessionId(runtimeSessionKey));
-          sessionCtx.rootSpan.end();
-        }
-
-        // Clean up all per-session state
-        deleteSessionTraceContext(sessionCtx);
-        unregisterActiveAgentSpan(runtimeSessionIdentities);
-        cleanupHandoff(runtimeSessionKey);
-        cleanupForkJoin(runtimeSessionKey);
-        // Clear the global agent context fallback set in before_agent_start
-        (globalThis as any).__OPENCLAW_ACTIVE_AGENT_CONTEXT = undefined;
-
-        logger.info(`[otel] Trace completed for runtimeSession=${runtimeSessionKey}`);
+        finalizeAgentCompletion(completion);
       } catch (error) {
         logger.debug(`[otel] agent_end hook failed: ${String(error)}`);
         // Silently ignore
@@ -1683,6 +1776,22 @@ export function registerHooks(
 
       if (now - ctx.startTime > maxAge) {
         try {
+          for (const [callId, pendingLlm] of pendingLlmSpans) {
+            if (pendingLlm.runtimeSessionKey !== ctx.runtimeSessionKey) {
+              continue;
+            }
+            pendingLlmSpans.delete(callId);
+            pendingLlm.span.setStatus({ code: SpanStatusCode.ERROR, message: "LLM span timed out during stale cleanup" });
+            captureSpanToCache(
+              pendingLlm.span,
+              "openclaw.llm.call",
+              "llm",
+              pendingLlm.runtimeSessionKey,
+              getSessionId(pendingLlm.runtimeSessionKey)
+            );
+            pendingLlm.span.end();
+          }
+          deferredAgentCompletions.delete(ctx.runtimeSessionKey);
           ctx.agentSpan?.end();
           if (ctx.rootSpan !== ctx.agentSpan) ctx.rootSpan?.end();
         } catch { /* ignore */ }

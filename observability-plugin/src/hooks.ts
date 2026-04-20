@@ -173,12 +173,45 @@ interface DeferredAgentCompletion {
   sessionCtx?: SessionTraceContext;
 }
 
+interface HookConfiguration {
+  otel_config: OtelObservabilityConfig;
+  tracer: TelemetryRuntime["tracer"];
+  counters: TelemetryRuntime["counters"];
+  histograms: TelemetryRuntime["histograms"];
+  pendingToolSpans: Map<string, PendingToolSpan>;
+  pendingLlmSpans: Map<string, PendingLlmSpan>;
+
+  logger: any;
+}
+
+interface ToolStatus {
+  status: string;
+  exitCode: number;
+}
+
 /** Map of runtime session key -> active trace context. Cleaned up when the request span closes. */
 const sessionContextMap = new Map<string, SessionTraceContext>();
 const pendingSpawnHandoffs = new Map<string, PendingSpawnHandoff[]>();
 const PENDING_SPAWN_TTL_MS = 60_000;
 const ROOT_COMPLETION_GRACE_MS = 30_000;
 const MAX_CAPTURE_CONTENT_CHARS = 4_096;
+
+function initHookConfig(
+  otel_config: OtelObservabilityConfig,
+  getTelemetry: () => TelemetryRuntime,
+  logger: any
+): HookConfiguration {
+  const telemetry = getTelemetry();
+  return {
+    otel_config,
+    tracer: telemetry?.tracer,
+    counters: telemetry?.counters,
+    histograms: telemetry?.histograms,
+    pendingToolSpans: new Map<string, PendingToolSpan>(),
+    pendingLlmSpans: new Map<string, PendingLlmSpan>(),
+    logger,
+  };
+}
 
 function pushCandidate(target: string[], value: unknown): void {
   if (typeof value !== "string") return;
@@ -494,8 +527,164 @@ function extractLatestAssistantOutput(messages: any[]): unknown {
   return undefined;
 }
 
+function getToolStatus(result: any): ToolStatus | undefined {
+  const details = result?.details;
+  if (details != null) {
+    const status = details.status;
+    const exitCode = details.exitCode;
+    if (status != null && exitCode != null) {
+      return { status, exitCode };
+    } else if (status != null) {
+      return { status, exitCode: -1 };
+    } else if (exitCode != null) {
+      return { status: "unknown", exitCode };
+    }
+    return undefined;
+  }
+}
+
+function handleToolOutput(
+    event: any,
+    ctx: any,
+    config: HookConfiguration,
+  ): void {
+  const toolName = event?.toolName || "unknown";
+  const toolCallId = event?.toolCallId || "";
+  const runtimeSessionKey = resolveRuntimeSessionKey(event, ctx);
+  const agentId = ctx?.agentId || "unknown";
+
+  // Retrieve the span opened in before_tool_call
+  const pendingTool = toolCallId ? config.pendingToolSpans.get(toolCallId) : undefined;
+  if (!pendingTool) {
+    config.logger.warn?.(`[otel] No pending span for toolCallId=${toolCallId}, tool=${toolName} — skipping output capture`);
+    return undefined;
+  }
+  config.pendingToolSpans.delete(toolCallId);
+
+  const { span, startedAt } = pendingTool;
+  const durationMs = Math.max(0, Date.now() - startedAt);
+  span.setAttribute("openclaw.tool.duration_ms", durationMs);
+  config.histograms.toolDuration.record(durationMs, {
+    "tool.name": toolName,
+    "gen_ai.agent.id": agentId,
+  });
+
+  // Prefer toolInput captured on the span in before_tool_call; fall back to event fields.
+  const toolInput =
+    (span as any).attributes?.["openclaw.tool.input"] ??
+    (span as any).attributes?.[ATTR_OBSERVE_ENTITY_INPUT] ??
+    event?.input ?? event?.params ?? event?.toolInput ?? event?.args;
+
+  const sessionCtx = getSessionTraceContext(event, ctx);
+  const parentContext = sessionCtx?.agentContext || sessionCtx?.rootContext || context.active();
+
+  const agentSequence = getHandoffSequence(runtimeSessionKey);
+
+  if (toolName === "sessions_spawn") {
+    handleSessionSpawnCall(event, span, parentContext, runtimeSessionKey, agentId, agentSequence, toolInput, config.logger);
+  }
+  const result = event?.result ?? event?.message;
+  let memoryOperation: "read" | "write" | "edit" | "search" | undefined;
+
+  if (result) {
+
+    recordMemoryToolMetrics({
+      toolName,
+      toolInput,
+      counters: config.counters,
+      histograms: config.histograms,
+      runtimeSessionKey,
+      message: result,
+      durationMs,
+    });
+    memoryOperation = annotateMemoryToolSpan(span, toolName, toolInput);
+
+    const contentArray = result?.content;
+    if (contentArray && Array.isArray(contentArray)) {
+      const textParts = contentArray
+        .filter((c: any) => c.type === "text")
+        .map((c: any) => String(c.text || ""));
+      const totalChars = textParts.reduce((sum: number, t: string) => sum + t.length, 0);
+      span.setAttribute("openclaw.tool.result_chars", totalChars);
+      span.setAttribute("openclaw.tool.result_parts", contentArray.length);
+    }
+
+    if (config.otel_config.captureContent) {
+      setCapturedContent(
+        span,
+        "output",
+        extractToolOutputPayload(event, result),
+        ["openclaw.tool"]
+      );
+    }
+
+    const toolStatus = getToolStatus(result);
+    console.log("TOOL STATUS");
+    console.log(toolStatus);
+    // if (toolStatus) {
+    // }
+    if (result?.is_error === true || result?.isError === true) {
+      config.counters.toolErrors.add(1, { "tool.name": toolName });
+      span.setStatus({ code: SpanStatusCode.ERROR, message: "Tool execution error" });
+    } else {
+      span.setStatus({ code: SpanStatusCode.OK });
+    }
+  } else {
+    span.setStatus({ code: SpanStatusCode.OK });
+  }
+  captureSpanToCache(span, `tool.${toolName}`, "tool", runtimeSessionKey, getSessionId(runtimeSessionKey));
+  if (memoryOperation) {
+    recordMemoryFailureRateFromCache({
+      histograms: config.histograms,
+      runtimeSessionKey,
+      logger: config.logger,
+      latestOperation: memoryOperation,
+    });
+  }
+
+  span.end();
+  config.logger.info?.(`[otel] after_tool Tool span ended: tool=${toolName}, callId=${toolCallId}, runtimeSession=${runtimeSessionKey}`);
+
+}
+
+function handleSessionSpawnCall(event: any,
+    span: any,
+    parentContext: any,
+    runtimeSessionKey: string,
+    agentId: string,
+    agentSequence: number,
+    toolInput: any,
+    logger: any,
+  ): void {
+  const targetAgentIds = extractSpawnTargetAgentIds(toolInput, event);
+  const sourceAgentSpanContext = getSessionTraceContext(event)?.agentSpan?.spanContext();
+  for (const targetAgentId of targetAgentIds) {
+    queuePendingSpawnHandoff({
+      targetAgentId,
+      sourceRuntimeSessionKey: runtimeSessionKey,
+      sourceAgentId: agentId,
+      sourceAgentSequence: agentSequence,
+      sourceAgentSpanContext,
+      spawnToolSpanContext: span.spanContext(),
+      parentContext: trace.setSpan(parentContext, span),
+      createdAt: Date.now(),
+    });
+    if (targetAgentIds.length > 0) {
+      logger.info(
+        `[otel] Prepared subagent handoff from agent=${agentId} to ` +
+        `[${targetAgentIds.join(", ")}], runtimeSession=${runtimeSessionKey}`
+      );
+    } else {
+      logger.debug(
+        `[otel] sessions_spawn result captured but target agent could not be resolved, runtimeSession=${runtimeSessionKey}`
+      );
+    }
+  }
+}
+
 function extractToolOutputPayload(event: any, message: any): unknown {
   const textParts = extractMessageTextParts(message);
+  console.info(`[otel] toolOutput extract ${message}`);
   if (textParts.length > 0) {
     return textParts.join("");
   }
@@ -727,25 +916,36 @@ export function registerHooks(
   getTelemetry: () => TelemetryRuntime,
   config: OtelObservabilityConfig
 ): void {
-  // Lazily resolved on first hook invocation (after service.start()).
-  // registerHooks() is called during plugin register() before telemetry
-  // is initialized, so we must not destructure eagerly.
-  let tracer!: TelemetryRuntime["tracer"];
-  let counters!: TelemetryRuntime["counters"];
-  let histograms!: TelemetryRuntime["histograms"];
+
+  // Interface to hold references to telemetry components and shared state for hooks
+  const hookConfig = initHookConfig(config, getTelemetry, api.logger);
+
+  let tracer = hookConfig.tracer;
+  let counters = hookConfig.counters;
+  let histograms = hookConfig.histograms;
+
+  const logger = hookConfig.logger;
+  // Initialize loggers for sub-modules
+  setHandoffLogger(logger);
+  setForkJoinLogger(logger);
 
   function ensureRuntime() {
     if (tracer) return;
     const rt = getTelemetry();
+    hookConfig.tracer = rt.tracer;
+    hookConfig.counters = rt.counters;
+    hookConfig.histograms = rt.histograms;
     tracer = rt.tracer;
     counters = rt.counters;
     histograms = rt.histograms;
   }
 
-  const logger = api.logger;
-  // Initialize loggers for sub-modules
-  setHandoffLogger(logger);
-  setForkJoinLogger(logger);
+  // Spans created in before_tool_call, completed in tool_result_persist
+  const pendingToolSpans = hookConfig.pendingToolSpans;
+
+  // Spans created in llm_input, completed in llm_output
+  const pendingLlmSpans = hookConfig.pendingLlmSpans;
+
   // ==================================================================
   // TYPED HOOKS - registered via api.on() into registry.typedHooks
   // ==================================================================
@@ -754,11 +954,6 @@ export function registerHooks(
   // Creates the ROOT span for the entire request lifecycle.
   // All subsequent spans (agent, tools) become children of this span.
 
-  // Spans created in before_tool_call, completed in tool_result_persist
-  const pendingToolSpans = new Map<string, PendingToolSpan>();
-
-  // Spans created in llm_input, completed in llm_output
-  const pendingLlmSpans = new Map<string, PendingLlmSpan>();
   const deferredAgentCompletions = new Map<string, DeferredAgentCompletion>();
 
   function countPendingLlmSpansForSession(runtimeSessionKey: string): number {
@@ -1662,128 +1857,11 @@ export function registerHooks(
     (event: any, ctx: any) => {
       try {
         ensureRuntime();
-        const toolName = event?.toolName || "unknown";
-        const toolCallId = event?.toolCallId || "";
-        const runtimeSessionKey = resolveRuntimeSessionKey(event, ctx);
-        const agentId = ctx?.agentId || "unknown";
-
-        // Retrieve the span opened in before_tool_call
-        // Retrieve the span opened in before_tool_call
-        const pendingTool = toolCallId ? pendingToolSpans.get(toolCallId) : undefined;
-        if (!pendingTool) {
-          logger.warn?.(`[otel] No pending span for toolCallId=${toolCallId}, tool=${toolName} — skipping output capture`);
-          return undefined;
-        }
-        pendingToolSpans.delete(toolCallId);
-
-        const { span, startedAt } = pendingTool;
-        const durationMs = Math.max(0, Date.now() - startedAt);
-        span.setAttribute("openclaw.tool.duration_ms", durationMs);
-        histograms.toolDuration.record(durationMs, {
-          "tool.name": toolName,
-          "gen_ai.agent.id": agentId,
-        });
-
-        // Prefer toolInput captured on the span in before_tool_call; fall back to event fields.
-        const toolInput =
-          (span as any).attributes?.["openclaw.tool.input"] ??
-          (span as any).attributes?.[ATTR_OBSERVE_ENTITY_INPUT] ??
-          event?.input ?? event?.params ?? event?.toolInput ?? event?.args;
-
-        const sessionCtx = getSessionTraceContext(event, ctx);
-        const parentContext = sessionCtx?.agentContext || sessionCtx?.rootContext || context.active();
-
-        const agentSequence = getHandoffSequence(runtimeSessionKey);
-        // Inspect the message for result metadata
-        const message = event?.message ?? event?.result;
-        let memoryOperation: "read" | "write" | "edit" | "search" | undefined;
-
-        if (message) {
-          if (toolName === "sessions_spawn") {
-            const targetAgentIds = extractSpawnTargetAgentIds(toolInput, message);
-            const sourceAgentSpanContext = sessionCtx?.agentSpan?.spanContext();
-
-            for (const targetAgentId of targetAgentIds) {
-              queuePendingSpawnHandoff({
-                targetAgentId,
-                sourceRuntimeSessionKey: runtimeSessionKey,
-                sourceSessionId: getSessionId(runtimeSessionKey),
-                sourceAgentId: agentId,
-                sourceAgentSequence: agentSequence,
-                sourceAgentSpanContext,
-                spawnToolSpanContext: span.spanContext(),
-                parentContext: trace.setSpan(parentContext, span),
-                createdAt: Date.now(),
-              });
-            }
-
-            if (targetAgentIds.length > 0) {
-              logger.info(
-                `[otel] Prepared subagent handoff from agent=${agentId} to ` +
-                `[${targetAgentIds.join(", ")}], runtimeSession=${runtimeSessionKey}`
-              );
-            } else {
-              logger.debug(
-                `[otel] sessions_spawn result captured but target agent could not be resolved, runtimeSession=${runtimeSessionKey}`
-              );
-            }
-          }
-          recordMemoryToolMetrics({
-            toolName,
-            toolInput,
-            counters,
-            histograms,
-            runtimeSessionKey,
-            message,
-            durationMs,
-          });
-          memoryOperation = annotateMemoryToolSpan(span, toolName, toolInput);
-
-          const contentArray = message?.content;
-          if (contentArray && Array.isArray(contentArray)) {
-            const textParts = contentArray
-              .filter((c: any) => c.type === "text")
-              .map((c: any) => String(c.text || ""));
-            const totalChars = textParts.reduce((sum: number, t: string) => sum + t.length, 0);
-            span.setAttribute("openclaw.tool.result_chars", totalChars);
-            span.setAttribute("openclaw.tool.result_parts", contentArray.length);
-          }
-
-          if (config.captureContent) {
-            setCapturedContent(
-              span,
-              "output",
-              extractToolOutputPayload(event, message),
-              ["openclaw.tool"]
-            );
-          }
-
-          if (message?.is_error === true || message?.isError === true) {
-            counters.toolErrors.add(1, { "tool.name": toolName });
-            span.setAttribute("openclaw.tool.success", false);
-            span.setStatus({ code: SpanStatusCode.ERROR, message: "Tool execution error" });
-          } else {
-            span.setStatus({ code: SpanStatusCode.OK });
-          }
-        } else {
-          span.setStatus({ code: SpanStatusCode.OK });
-        }
-
-        captureSpanToCache(span, `tool.${toolName}`, "tool", runtimeSessionKey, getSessionId(runtimeSessionKey));
-        if (memoryOperation) {
-          recordMemoryFailureRateFromCache({
-            histograms,
-            runtimeSessionKey,
-            logger,
-            latestOperation: memoryOperation,
-          });
-        }
-        span.end();
-  logger.info?.(`[otel] Tool span ended: tool=${toolName}, callId=${toolCallId}, runtimeSession=${runtimeSessionKey}`);
-      } catch {
+        handleToolOutput(event, ctx, hookConfig);
+      } catch (error) {
         // Never let telemetry errors break the main flow
+        logger.error(`[otel] after_tool_call hook failed: ${String(error)}`);
       }
-
       // Return undefined to keep the tool result unchanged
       return undefined;
     },
@@ -1802,124 +1880,9 @@ export function registerHooks(
     (event: any, ctx: any) => {
       try {
         ensureRuntime();
-        const toolName = event?.toolName || "unknown";
-        const toolCallId = event?.toolCallId || "";
-        const runtimeSessionKey = resolveRuntimeSessionKey(event, ctx);
-        const agentId = ctx?.agentId || "unknown";
-
-        // Retrieve the span opened in before_tool_call
-        const pendingTool = toolCallId ? pendingToolSpans.get(toolCallId) : undefined;
-        if (!pendingTool) {
-          logger.warn?.(`[otel] No pending span for toolCallId=${toolCallId}, tool=${toolName} — skipping output capture`);
-          return undefined;
-        }
-        pendingToolSpans.delete(toolCallId);
-
-        const { span, startedAt } = pendingTool;
-        const durationMs = Math.max(0, Date.now() - startedAt);
-        span.setAttribute("openclaw.tool.duration_ms", durationMs);
-        histograms.toolDuration.record(durationMs, {
-          "tool.name": toolName,
-          "gen_ai.agent.id": agentId,
-        });
-
-        // Prefer toolInput captured on the span in before_tool_call; fall back to event fields.
-        const toolInput =
-          (span as any).attributes?.["openclaw.tool.input"] ??
-          (span as any).attributes?.[ATTR_OBSERVE_ENTITY_INPUT] ??
-          event?.input ?? event?.params ?? event?.toolInput ?? event?.args;
-
-        const sessionCtx = getSessionTraceContext(event, ctx);
-        const parentContext = sessionCtx?.agentContext || sessionCtx?.rootContext || context.active();
-
-        const agentSequence = getHandoffSequence(runtimeSessionKey);
-        // Inspect the message for result metadata
-        const message = event?.message;
-        let memoryOperation: "read" | "write" | "edit" | "search" | undefined;
-        if (message) {
-          if (toolName === "sessions_spawn") {
-            const targetAgentIds = extractSpawnTargetAgentIds(toolInput, message);
-            const sourceAgentSpanContext = sessionCtx?.agentSpan?.spanContext();
-
-            for (const targetAgentId of targetAgentIds) {
-              queuePendingSpawnHandoff({
-                targetAgentId,
-                sourceRuntimeSessionKey: runtimeSessionKey,
-                sourceSessionId: getSessionId(runtimeSessionKey),
-                sourceAgentId: agentId,
-                sourceAgentSequence: agentSequence,
-                sourceAgentSpanContext,
-                spawnToolSpanContext: span.spanContext(),
-                parentContext: trace.setSpan(parentContext, span),
-                createdAt: Date.now(),
-              });
-            }
-
-            if (targetAgentIds.length > 0) {
-              logger.info(
-                `[otel] Prepared subagent handoff from agent=${agentId} to ` +
-                `[${targetAgentIds.join(", ")}], runtimeSession=${runtimeSessionKey}`
-              );
-            } else {
-              logger.debug(
-                `[otel] sessions_spawn result captured but target agent could not be resolved, runtimeSession=${runtimeSessionKey}`
-              );
-            }
-          }
-          recordMemoryToolMetrics({
-            toolName,
-            toolInput,
-            counters,
-            histograms,
-            runtimeSessionKey,
-            message,
-            durationMs,
-          });
-          memoryOperation = annotateMemoryToolSpan(span, toolName, toolInput);
-
-          const contentArray = message?.content;
-          if (contentArray && Array.isArray(contentArray)) {
-            const textParts = contentArray
-              .filter((c: any) => c.type === "text")
-              .map((c: any) => String(c.text || ""));
-            const totalChars = textParts.reduce((sum: number, t: string) => sum + t.length, 0);
-            span.setAttribute("openclaw.tool.result_chars", totalChars);
-            span.setAttribute("openclaw.tool.result_parts", contentArray.length);
-          }
-
-          if (config.captureContent) {
-            setCapturedContent(
-              span,
-              "output",
-              extractToolOutputPayload(event, message),
-              ["openclaw.tool"]
-            );
-          }
-
-          if (message?.is_error === true || message?.isError === true) {
-            counters.toolErrors.add(1, { "tool.name": toolName });
-            span.setAttribute("openclaw.tool.success", false);
-            span.setStatus({ code: SpanStatusCode.ERROR, message: "Tool execution error" });
-          } else {
-            span.setStatus({ code: SpanStatusCode.OK });
-          }
-        } else {
-          span.setStatus({ code: SpanStatusCode.OK });
-        }
-
-        captureSpanToCache(span, `tool.${toolName}`, "tool", runtimeSessionKey, getSessionId(runtimeSessionKey));
-        if (memoryOperation) {
-          recordMemoryFailureRateFromCache({
-            histograms,
-            runtimeSessionKey,
-            logger,
-            latestOperation: memoryOperation,
-          });
-        }
-        span.end();
-  logger.info?.(`[otel] Tool span ended: tool=${toolName}, callId=${toolCallId}, runtimeSession=${runtimeSessionKey}`);
-      } catch {
-        // Never let telemetry errors break the main flow
+        handleToolOutput(event, ctx, hookConfig);
+      } catch (error) {
+        logger.error(`[otel] tool_result_persist hook failed: ${String(error)}`);
       }
 
       // Return undefined to keep the tool result unchanged

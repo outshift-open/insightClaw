@@ -75,6 +75,7 @@ interface SessionTraceContext {
   rootContext: Context;
   agentSpan?: Span;
   agentContext?: Context;
+  agentId?: string;
   latestInput?: string;
   startTime: number;
 }
@@ -1077,6 +1078,16 @@ export function registerHooks(
             rootSeed
           );
         }
+
+        if (sessionCtx?.agentSpan) {
+          const activeAgentId = sessionCtx.agentId || "unknown";
+          logger.warn?.(
+            `[otel] Duplicate before_agent_start ignored: runtimeSession=${runtimeSessionKey}, ` +
+            `activeAgent=${activeAgentId}, incomingAgent=${agentId}`
+          );
+          return undefined;
+        }
+
         const parentContext = sessionCtx?.rootContext || context.active();
         const sessionId = runtimeSessionKey !== "unknown"
           ? touchSession(runtimeSessionKey, parentContext)
@@ -1159,6 +1170,7 @@ export function registerHooks(
           setSessionTraceContext(sessionCtx, event, ctx);
           sessionCtx.agentSpan = agentSpan;
           sessionCtx.agentContext = agentContext;
+          sessionCtx.agentId = agentId;
         } else if (runtimeSessionKey !== "unknown") {
           setSessionTraceContext({
             runtimeSessionKey,
@@ -1166,6 +1178,7 @@ export function registerHooks(
             rootContext: agentContext,
             agentSpan,
             agentContext,
+            agentId,
             startTime: Date.now(),
           }, event, ctx);
         }

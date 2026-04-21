@@ -16,6 +16,12 @@ const TOKENS = [
   "all", "any", "some", "each", "more", "most", "other", "such", "just", "very", "also", "only", "even"
 ]; // common stop words to ignore
 
+
+// novelty: subagent output vs main agent context (ground)
+// coverage: subagent prompt vs main agent prompt + history (no system priompt, as it is not passed to sub-agents)
+// groundness: subagent prompt vs main agent context + history (no system priompt, as it is not passed to sub-agents) -- NOT RELEVAT
+
+
 // calculates how much of the content of largeStr is present in smallStr, using n-grams (default 3-grams)
 // Example: how much of the main agent context is passed to the sub-agent context (coverage)
 export function calculateCoverage(smallStr: string, largeStr: string, n: number = 3): number {
@@ -82,4 +88,18 @@ export function getJaccardSimilarity(str1: string, str2: string): number {
     const union = new Set([...set1, ...set2]);
     
     return intersection.size / union.size;
+}
+
+// a simple heuristic to determine if an answer is novel compared to the ground, based on coverage and presence of certain keywords (yes/no/true/false) and length of the answer.
+// This is a very basic implementation and can be improved with more sophisticated NLP techniques.
+// Example: if the sub-agent answer is just a rephrasing of the main agent prompt with no new information, it should have a low novelty score. On the other hand, if the sub-agent answer contains new information that is not present in the main agent context, it should have a higher novelty score.
+export function getNoveltyScore(answer: string, ground: string): number {
+    // if anwer is moslty (1 match out of 5 words) yes/no/true/false, we can consider it as novel
+    const SHORT_ANSWER_TOKENS = 3;
+    const yesNo = ["yes", "no", "true", "false","correct", "incorrect", "right", "wrong"];
+    if (yesNo.includes(answer.toLowerCase()) && answer.toLowerCase().split(/\s+/).filter(token => !TOKENS.includes(token)).length <= SHORT_ANSWER_TOKENS) {
+        return 1;
+    }
+    const coverage = calculateCoverage(ground, answer,2);
+    return 1.0 - coverage
 }

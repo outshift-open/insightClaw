@@ -4,7 +4,8 @@ import assert from "node:assert/strict";
 import {
   calculateCoverage,
   calculateGroundness,
-  getJaccardSimilarity
+  getJaccardSimilarity,
+  getNoveltyScore
 } from "../src/context-analysis.js";
 
 test("calculateCoverage - identical strings should have 100% coverage", () => {
@@ -276,4 +277,85 @@ test("real-world scenario - incident context propagation", () => {
   // multi-line strings with different structures
   const coverage = calculateCoverage(subagentContext, mainAgentContext, 2);
   assert.ok(coverage < 0.2, `Expected low coverage, got ${coverage}`);
+});
+
+// getNoveltyScore tests
+test("getNoveltyScore - short yes answer should have 100% novelty", () => {
+  const ground = "This is a critical incident with p99 latency at 4200ms and error rate of 0.12";
+  const answer = "yes";
+  const novelty = getNoveltyScore(answer, ground);
+  assert.equal(novelty, 1.0);
+});
+
+test("getNoveltyScore - short no answer should have 100% novelty", () => {
+  const ground = "Is the database healthy?";
+  const answer = "no";
+  const novelty = getNoveltyScore(answer, ground);
+  assert.equal(novelty, 1.0);
+});
+
+test("getNoveltyScore - short true answer should have 100% novelty", () => {
+  const ground = "Check if the service is running";
+  const answer = "true";
+  const novelty = getNoveltyScore(answer, ground);
+  assert.equal(novelty, 1.0);
+});
+
+test("getNoveltyScore - short false answer should have 100% novelty", () => {
+  const ground = "Verify the configuration";
+  const answer = "false";
+  const novelty = getNoveltyScore(answer, ground);
+  assert.equal(novelty, 1.0);
+});
+
+test("getNoveltyScore - completely novel answer should have high novelty", () => {
+  const ground = "The database shows connection pool saturation with 95 active connections";
+  const answer = "Application cache invalidation strategy needs review and optimization";
+  const novelty = getNoveltyScore(answer, ground);
+  assert.ok(novelty > 0.9, `Expected novelty > 0.9, got ${novelty}`);
+});
+
+test("getNoveltyScore - answer that repeats ground should have low novelty", () => {
+  const ground = "The payment service is experiencing high latency and error rates";
+  const answer = "The payment service is experiencing high latency and error rates";
+  const novelty = getNoveltyScore(answer, ground);
+  assert.ok(novelty < 0.2, `Expected novelty < 0.2, got ${novelty}`);
+});
+
+test("getNoveltyScore - partially novel answer should have medium novelty", () => {
+  const ground = "Critical incident with p99 latency at 4200ms affecting checkout flow";
+  const answer = "P99 latency is 4200ms and root cause is misconfigured async queue";
+  const novelty = getNoveltyScore(answer, ground);
+  assert.ok(novelty > 0.3 && novelty < 0.7, `Expected novelty between 0.3 and 0.7, got ${novelty}`);
+});
+
+test("getNoveltyScore - empty answer should return 1 (fully novel)", () => {
+  const ground = "Some context here";
+  const answer = "";
+  const novelty = getNoveltyScore(answer, ground);
+  assert.equal(novelty, 1.0);
+});
+
+test("getNoveltyScore - answer with only stop words should have high novelty", () => {
+  const ground = "The quick brown fox jumps over the lazy dog";
+  const answer = "the and is at";
+  const novelty = getNoveltyScore(answer, ground);
+  // Since stop words are filtered out, this should be treated as mostly novel
+  assert.ok(novelty > 0.8, `Expected novelty > 0.8, got ${novelty}`);
+});
+
+test("getNoveltyScore - real-world scenario: agent adds new insight", () => {
+  const ground = "Payment service incident: p99 latency 4200ms, error rate 0.12, checkout impacted";
+  const answer = "Database healthy with 22% connection utilization. Issue likely in async task queue causing timeout cascade";
+  const novelty = getNoveltyScore(answer, ground);
+  // Should have moderate to high novelty as it adds new technical diagnosis
+  assert.ok(novelty > 0.5, `Expected novelty > 0.5, got ${novelty}`);
+});
+
+test("getNoveltyScore - real-world scenario: agent just confirms data", () => {
+  const ground = "P99 latency is 4200ms and error rate is 0.12";
+  const answer = "Confirmed: latency 4200ms and error rate 0.12";
+  const novelty = getNoveltyScore(answer, ground);
+  // Should have low novelty as it mostly repeats the ground
+  assert.ok(novelty < 0.4, `Expected novelty < 0.4, got ${novelty}`);
 });

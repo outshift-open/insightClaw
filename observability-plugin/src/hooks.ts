@@ -53,6 +53,7 @@ import {
 } from "./memory-metrics.js";
 import { touchSession, endSession, getSessionId } from "./session-lifecycle.js";
 import { recordSpan, type SpanAttributeValue, type SpanRecord } from "./span-cache.js";
+import { getNoveltyScore} from "./context-analysis.js";
 
 /** Snapshot span attributes and identifiers into the span cache just before span.end(). */
 function snapshotSpanAttributes(span: Span): Record<string, SpanAttributeValue> {
@@ -193,6 +194,8 @@ interface ToolStatus {
 const sessionContextMap = new Map<string, SessionTraceContext>();
 const pendingSpawnHandoffs = new Map<string, PendingSpawnHandoff[]>();
 const turnTimers = new Map<string, number>();
+const pendingAgentContextsMap = new Map<string, any>();
+const targetAgentsMap = new Map<string, string>();
 const PENDING_SPAWN_TTL_MS = 60_000;
 const ROOT_COMPLETION_GRACE_MS = 30_000;
 const MAX_CAPTURE_CONTENT_CHARS = 4_096;
@@ -1694,6 +1697,8 @@ export function registerHooks(
         });
         logger.info?.(`[otel] LLM span started: model=${model}, callId=${callId}, runtimeSession=${runtimeSessionKey}`);
         parseContext(event, histograms, runtimeSessionKey, agentId);
+        pendingAgentContextsMap.set(agentId+"-"+runtimeSessionKey, event);
+
       } catch {
         // Never let telemetry errors break the main flow
       }

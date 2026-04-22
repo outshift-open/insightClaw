@@ -2021,6 +2021,7 @@ export function registerHooks(
 
         if (pendingLlmCount > 0) {
           deferredAgentCompletions.set(runtimeSessionKey, completion);
+
           logger.info(
             `[otel] Deferring trace completion for runtimeSession=${runtimeSessionKey} until ${pendingLlmCount} pending llm span(s) close`
           );

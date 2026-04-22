@@ -757,6 +757,7 @@ export function parseContext(event: any, histograms: any, sessionKey: any, agent
   let historyMemory = 0;
   //let others = 0; // not available at the moment
 
+  console.log("DEBUGTEST agentID:", agentId, ":prompt:", prompt , ":systemPrompt:", systemPrompt, ":history:", historyMessages);
   try {
     const data = historyMessages || [];
     for (const elem of data) {
@@ -764,7 +765,7 @@ export function parseContext(event: any, histograms: any, sessionKey: any, agent
       if (role === 'toolResult') {
         const toolName = elem.toolName;
         let isMemoryTool = false;
-        if (toolName === 'memory_get') {
+        if (toolName === 'memory_get' || toolName === 'compactionSummary') {
           isMemoryTool = true;
         } else if (
           toolName === 'read' &&

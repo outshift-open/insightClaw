@@ -53,7 +53,7 @@ import {
 } from "./memory-metrics.js";
 import { touchSession, endSession, getSessionId } from "./session-lifecycle.js";
 import { recordSpan, type SpanAttributeValue, type SpanRecord } from "./span-cache.js";
-import { getNoveltyScore} from "./context-analysis.js";
+import { calculateCoverage, getNoveltyScore} from "./context-analysis.js";
 
 /** Snapshot span attributes and identifiers into the span cache just before span.end(). */
 function snapshotSpanAttributes(span: Span): Record<string, SpanAttributeValue> {
@@ -1699,6 +1699,19 @@ export function registerHooks(
         parseContext(event, histograms, runtimeSessionKey, agentId);
         pendingAgentContextsMap.set(agentId+"-"+runtimeSessionKey, event);
 
+        const parentCaller = targetAgentsMap.get(agentId);
+        if (parentCaller) {
+          const parentContext = pendingAgentContextsMap.get(parentCaller);
+          if (parentContext) {
+            const noveltyScore = calculateCoverage(event.prompt, parentContext?.systemPrompt + parentContext?.prompt + parentContext?.historyMessages);
+            histograms.downstreamContextSharing.record(noveltyScore, {
+              "openclaw.agent.id": agentId,
+              "openclaw.session.key": runtimeSessionKey,
+            });
+          } else {
+            logger.warn(`[otel] Unable to compute downstreamContextSharing for agent=${agentId} because parent context is missing for parentCaller=${parentCaller}`);
+          }
+        }
       } catch {
         // Never let telemetry errors break the main flow
       }

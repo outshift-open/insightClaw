@@ -192,6 +192,7 @@ interface ToolStatus {
 /** Map of runtime session key -> active trace context. Cleaned up when the request span closes. */
 const sessionContextMap = new Map<string, SessionTraceContext>();
 const pendingSpawnHandoffs = new Map<string, PendingSpawnHandoff[]>();
+const turnTimers = new Map<string, number>();
 const PENDING_SPAWN_TTL_MS = 60_000;
 const ROOT_COMPLETION_GRACE_MS = 30_000;
 const MAX_CAPTURE_CONTENT_CHARS = 4_096;
@@ -757,7 +758,6 @@ export function parseContext(event: any, histograms: any, sessionKey: any, agent
   let historyMemory = 0;
   //let others = 0; // not available at the moment
 
-  console.log("DEBUGTEST agentID:", agentId, ":prompt:", prompt , ":systemPrompt:", systemPrompt, ":history:", historyMessages);
   try {
     const data = historyMessages || [];
     for (const elem of data) {
@@ -1432,6 +1432,8 @@ export function registerHooks(
         const agentId = event?.agentId || ctx?.agentId || "unknown";
         const model = event?.model || "unknown";
 
+        turnTimers.set(agentId, Date.now()); // Would it be possible to have parallel instances of the same agent and same id?
+
         let sessionCtx = getSessionTraceContext(event, ctx);
         if (sessionCtx?.pendingRootRuntimeSessionIdentities && !sessionCtx.agentSpan) {
           logger.warn?.(
@@ -1653,6 +1655,17 @@ export function registerHooks(
           ? touchSession(runtimeSessionKey, parentContext)
           : undefined;
 
+        const startTime = turnTimers.get(agentId);
+        if (startTime) {
+          const tpc = Date.now() - startTime;
+          turnTimers.delete(agentId); // Cleanup
+          histograms.contextPreparationDuration.record(tpc, {
+            "openclaw.agent.id": agentId,
+            "openclaw.session.key": runtimeSessionKey,
+          });
+        } else {
+          logger.warn?.(`[otel] No start time found for agent=${agentId} in llm_input hook — cannot record context preparation time`);
+        }
         const span = tracer.startSpan(
           "openclaw.llm.call",
           {

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 
 import { registerHooks } from "../src/hooks.ts";
 import { activeAgentSpans } from "../src/diagnostics.ts";
+import { startSpanCache, stopSpanCache } from "../src/span-cache.ts";
 import { MockCounter, MockHistogram, MockTracer } from "./helpers.ts";
 
 function createTelemetry() {
@@ -23,11 +24,21 @@ function createTelemetry() {
       sessionResets: counter(),
       messagesReceived: counter(),
       messagesSent: counter(),
+      memorySearchMiss: counter(),
+      memorySearchHit: counter(),
+      memoryWriteEvents: counter(),
+      memoryReadEvents: counter(),
+      memoryEditEvents: counter(),
     },
     histograms: {
       llmDuration: histogram(),
       toolDuration: histogram(),
       agentTurnDuration: histogram(),
+      memoryFailureRate: histogram(),
+      memorySearchFragmentation: histogram(),
+      memoryReadDuration: histogram(),
+      memoryWriteDuration: histogram(),
+      memoryEditDuration: histogram(),
       contextSystemSize: histogram(),
       contextHistoryMemorySize: histogram(),
       contextHistoryToolSize: histogram(),
@@ -45,11 +56,22 @@ function createTelemetry() {
 function createApi() {
   const typedHooks = new Map<string, (event: any, ctx: any) => any>();
   const eventHooks: Array<{ event: string | string[]; handler: (event: any) => any; options?: any }> = [];
+  const logs = {
+    info: [] as string[],
+    debug: [] as string[],
+    warn: [] as string[],
+  };
 
   const logger = {
-    info() {},
-    debug() {},
-    warn() {},
+    info(message?: string) {
+      if (typeof message === "string") logs.info.push(message);
+    },
+    debug(message?: string) {
+      if (typeof message === "string") logs.debug.push(message);
+    },
+    warn(message?: string) {
+      if (typeof message === "string") logs.warn.push(message);
+    },
   };
 
   return {
@@ -62,6 +84,7 @@ function createApi() {
         eventHooks.push({ event, handler, options });
       },
     },
+    logs,
     typedHooks,
     eventHooks,
   };
@@ -479,6 +502,97 @@ test("registerHooks links spawned subagent turns back to the spawning tool span"
   assert.equal(childAgent?.options.links?.[0]?.attributes?.["link.type"], "agent_handoff");
   assert.equal(childAgent?.options.attributes["ioa_observe.agent.sequence"], 2);
   assert.equal(childAgent?.options.attributes["ioa_observe.agent.previous"], "planner");
+});
+
+test("registerHooks records span-cache-backed memory failure rate and logs its inputs", () => {
+  const telemetry = createTelemetry();
+  const { api, typedHooks, logs } = createApi();
+  const originalSetInterval = globalThis.setInterval;
+
+  globalThis.setInterval = ((() => ({ unref() {} })) as unknown) as typeof setInterval;
+
+  try {
+    startSpanCache({ enabled: true, logger: api.logger });
+
+    registerHooks(api as any, () => telemetry as any, {
+      endpoint: "http://localhost:4318",
+      protocol: "http",
+      serviceName: "test-service",
+      headers: {},
+      traces: true,
+      metrics: true,
+      logs: false,
+      captureContent: false,
+      spanCache: true,
+      spanCacheVerboseLogs: false,
+      metricsIntervalMs: 30_000,
+      resourceAttributes: {},
+    });
+
+    const sessionKey = "agent:memory:failure-rate";
+    const hookCtx = { conversationId: sessionKey, channelId: "chat", agentId: "memory-agent" };
+
+    typedHooks.get("before_tool_call")?.(
+      {
+        toolName: "read",
+        toolCallId: "memory-read-1",
+        input: { path: "/memories/repo/notes.md" },
+        conversationId: sessionKey,
+      },
+      hookCtx
+    );
+
+    typedHooks.get("tool_result_persist")?.(
+      {
+        toolName: "read",
+        toolCallId: "memory-read-1",
+        input: { path: "/memories/repo/notes.md" },
+        message: {
+          content: [{ type: "text", text: "cached note" }],
+          is_error: false,
+        },
+        conversationId: sessionKey,
+      },
+      hookCtx
+    );
+
+    typedHooks.get("before_tool_call")?.(
+      {
+        toolName: "write",
+        toolCallId: "memory-write-1",
+        input: { path: "/memories/repo/notes.md" },
+        conversationId: sessionKey,
+      },
+      hookCtx
+    );
+
+    typedHooks.get("tool_result_persist")?.(
+      {
+        toolName: "write",
+        toolCallId: "memory-write-1",
+        input: { path: "/memories/repo/notes.md" },
+        message: {
+          content: [{ type: "text", text: "write failed" }],
+          is_error: true,
+        },
+        conversationId: sessionKey,
+      },
+      hookCtx
+    );
+
+    assert.deepEqual(
+      telemetry.histograms.memoryFailureRate.calls.map((call) => call.value),
+      [0, 0.5]
+    );
+
+    const metricLogs = logs.info.filter((message) => message.includes("openclaw.memory.failure_rate"));
+    assert.equal(metricLogs.length, 2);
+    assert.match(metricLogs[0] ?? "", /total=1 failed=0 rate=0\.0000 latestOperation=read/);
+    assert.match(metricLogs[1] ?? "", /total=2 failed=1 rate=0\.5000 latestOperation=write/);
+  } finally {
+    stopSpanCache();
+    globalThis.setInterval = originalSetInterval;
+  }
 });
 
 test("registerHooks recovers Vertex usage fields from agent_end fallback payloads", async () => {

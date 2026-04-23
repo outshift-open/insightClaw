@@ -46,10 +46,40 @@ import {
   ATTR_OBSERVE_ENTITY_INPUT,
   ATTR_OBSERVE_ENTITY_OUTPUT,
 } from "./observe-attributes.js";
+import {
+  annotateMemoryToolSpan,
+  isLongTermMemoryAccess,
+  recordMemoryFailureRateFromCache,
+  recordMemoryToolMetrics,
+} from "./memory-metrics.js";
 import { touchSession, endSession, getSessionId } from "./session-lifecycle.js";
-import { recordSpan, type SpanRecord } from "./span-cache.js";
+import { recordSpan, type SpanAttributeValue, type SpanRecord } from "./span-cache.js";
 
 /** Snapshot span attributes and identifiers into the span cache just before span.end(). */
+function snapshotSpanAttributes(span: Span): Record<string, SpanAttributeValue> {
+  const rawAttributes = (span as any).attributes;
+
+  if (rawAttributes instanceof Map) {
+    return Object.fromEntries(
+      [...rawAttributes.entries()].filter((entry): entry is [string, SpanAttributeValue] => {
+        const [, value] = entry;
+        return typeof value === "string" || typeof value === "number" || typeof value === "boolean";
+      })
+    );
+  }
+
+  if (rawAttributes && typeof rawAttributes === "object") {
+    return Object.fromEntries(
+      Object.entries(rawAttributes).filter((entry): entry is [string, SpanAttributeValue] => {
+        const [, value] = entry;
+        return typeof value === "string" || typeof value === "number" || typeof value === "boolean";
+      })
+    );
+  }
+
+  return {};
+}
+
 function captureSpanToCache(
   span: Span,
   spanName: string,
@@ -66,7 +96,7 @@ function captureSpanToCache(
       spanKind,
       sessionKey,
       sessionId,
-      attributes: { ...(span as any).attributes } as Record<string, string | number | boolean>,
+      attributes: snapshotSpanAttributes(span),
       recordedAt: Date.now(),
     };
     recordSpan(record);
@@ -505,99 +535,6 @@ function extractToolOutputPayload(event: any, message: any): unknown {
   return undefined;
 }
 
-function process_memory_tool(toolName: string, toolInput: string, counters: any, histograms: any, runtimeSessionKey: string, message: any, durationMs: number): void {
-  if (toolName === "read") {
-    // Heuristics: .md files, "memory" in path, or a "memoryId" field in the tool output    
-    if (isLongTermMemoryAccess(toolInput)) {
-      counters.memoryReadEvents.add(1, {
-        "tool.name": toolName,
-        "openclaw.session.key": runtimeSessionKey,
-      });
-
-      histograms.memoryReadDuration.record(durationMs, {
-        "tool.name": toolName,
-        "openclaw.session.key": runtimeSessionKey,
-      });
-    }
-  }
-  else if (toolName === "write") {
-    // Heuristics: .md files, "memory" in path, or a "memoryId" field in the tool output    
-    if (isLongTermMemoryAccess(toolInput)) {
-      counters.memoryWriteEvents.add(1, {
-        "tool.name": toolName,
-        "openclaw.session.key": runtimeSessionKey,
-      });
-      histograms.memoryWriteDuration.record(durationMs, {
-        "tool.name": toolName,
-        "openclaw.session.key": runtimeSessionKey,
-      });
-    }
-  }
-  else if (toolName === "edit") {
-    // Heuristics: .md files, "memory" in path, or a "memoryId" field in the tool output    
-    if (isLongTermMemoryAccess(toolInput)) {
-      counters.memoryEditEvents.add(1, {
-        "tool.name": toolName,
-        "openclaw.session.key": runtimeSessionKey,
-      });
-      histograms.memoryEditDuration.record(durationMs, {
-        "tool.name": toolName,
-        "openclaw.session.key": runtimeSessionKey,
-      });
-    }
-  }
-  else if (toolName === "memory_search") {
-    // Prefer message.details if present, else parse content[0].text
-    let toolOutput = message?.details;
-    if (!toolOutput && Array.isArray(message?.content) && message.content.length > 0) {
-      const text = message.content[0]?.text;
-      if (typeof text === "string") {
-        try {
-          toolOutput = JSON.parse(text);
-        } catch (err) {
-          console.error("Failed to parse tool output:", err);
-        }
-      }
-    }
-
-    const outputObj = toolOutput;
-    const results = outputObj?.results;
-
-    counters.memoryReadEvents.add(1, {
-      "tool.name": toolName,
-      "openclaw.session.key": runtimeSessionKey,
-    });
-
-    if (Array.isArray(results)) {
-      const totalChars = results.reduce((sum: number, r: any) => {
-        const snippet = r?.snippet ?? "";
-        return sum + snippet.length;
-      }, 0);
-      // Calculate memoryFragmentation
-
-      if (results.length == 0) {
-        counters.memorySearchMiss.add(1, {
-          "tool.name": toolName,
-          "openclaw.session.key": runtimeSessionKey,
-        });
-      }
-      else {
-        const uniquePaths = new Set(results.map((r: any) => r?.path)).size;
-        const memoryFragmentation = results.length > 0 ? (uniquePaths - 1) / results.length : 0;
-
-        histograms.memorySearchFragmentation.record(memoryFragmentation, {
-          "tool.name": toolName,
-          "openclaw.session.key": runtimeSessionKey,
-        });
-        counters.memorySearchHit.add(1, {
-          "tool.name": toolName,
-          "openclaw.session.key": runtimeSessionKey,
-        });
-      }
-    }
-  }
-}
-
 /**
  * Summarizes the content lengths of an LLM input context, similar to parse_llm_input_context in debug.py.
  * @param context The LLM input context object (parsed from JSON)
@@ -687,32 +624,6 @@ export function parseContext(event: any, histograms: any, sessionKey: any, agent
   //   "openclaw.agent.id": agentId,
   //   "openclaw.session.key": sessionKey,
   // });
-}
-
-function isLongTermMemoryAccess(toolInput: any): boolean {
-  //Heuristics to determine if a tool call is accessing long-term memory:
-  // Check if toolInput has a "path" field that includes "memory" and ends with ".md"
-
-  let path: string | undefined = undefined;
-  // Primary: extract path directly from toolInput
-  if (typeof toolInput?.path === "string") {
-    path = toolInput.path;
-  }
-
-  // Fallback: toolInput may be a JSON string
-  if (!path && typeof toolInput === "string") {
-    try {
-      const parsed = JSON.parse(toolInput);
-      if (typeof parsed?.path === "string") {
-        path = parsed.path;
-      }
-    } catch {
-      // Not JSON, ignore
-    }
-  }
-
-  const isMemory = typeof path === "string" && path.includes("memory") && path.endsWith(".md");
-  return isMemory;
 }
 
 function resolveMessageFrom(event?: any, ctx?: any): string {
@@ -1785,6 +1696,7 @@ export function registerHooks(
         const agentSequence = getHandoffSequence(runtimeSessionKey);
         // Inspect the message for result metadata
         const message = event?.message ?? event?.result;
+        let memoryOperation: "read" | "write" | "edit" | "search" | undefined;
 
         if (message) {
           if (toolName === "sessions_spawn") {
@@ -1815,7 +1727,16 @@ export function registerHooks(
               );
             }
           }
-          process_memory_tool(toolName, toolInput, counters, histograms, runtimeSessionKey, message, durationMs);
+          recordMemoryToolMetrics({
+            toolName,
+            toolInput,
+            counters,
+            histograms,
+            runtimeSessionKey,
+            message,
+            durationMs,
+          });
+          memoryOperation = annotateMemoryToolSpan(span, toolName, toolInput);
 
           const contentArray = message?.content;
           if (contentArray && Array.isArray(contentArray)) {
@@ -1838,15 +1759,26 @@ export function registerHooks(
 
           if (message?.is_error === true || message?.isError === true) {
             counters.toolErrors.add(1, { "tool.name": toolName });
+            span.setAttribute("openclaw.tool.success", false);
             span.setStatus({ code: SpanStatusCode.ERROR, message: "Tool execution error" });
           } else {
+            span.setAttribute("openclaw.tool.success", true);
             span.setStatus({ code: SpanStatusCode.OK });
           }
         } else {
+          span.setAttribute("openclaw.tool.success", true);
           span.setStatus({ code: SpanStatusCode.OK });
         }
 
         captureSpanToCache(span, `tool.${toolName}`, "tool", runtimeSessionKey, getSessionId(runtimeSessionKey));
+        if (memoryOperation) {
+          recordMemoryFailureRateFromCache({
+            histograms,
+            runtimeSessionKey,
+            logger,
+            latestOperation: memoryOperation,
+          });
+        }
         span.end();
   logger.info?.(`[otel] Tool span ended: tool=${toolName}, callId=${toolCallId}, runtimeSession=${runtimeSessionKey}`);
       } catch {
@@ -1904,6 +1836,7 @@ export function registerHooks(
         const agentSequence = getHandoffSequence(runtimeSessionKey);
         // Inspect the message for result metadata
         const message = event?.message;
+        let memoryOperation: "read" | "write" | "edit" | "search" | undefined;
         if (message) {
           if (toolName === "sessions_spawn") {
             const targetAgentIds = extractSpawnTargetAgentIds(toolInput, message);
@@ -1933,7 +1866,16 @@ export function registerHooks(
               );
             }
           }
-          process_memory_tool(toolName, toolInput, counters, histograms, runtimeSessionKey, message, durationMs);
+          recordMemoryToolMetrics({
+            toolName,
+            toolInput,
+            counters,
+            histograms,
+            runtimeSessionKey,
+            message,
+            durationMs,
+          });
+          memoryOperation = annotateMemoryToolSpan(span, toolName, toolInput);
 
           const contentArray = message?.content;
           if (contentArray && Array.isArray(contentArray)) {
@@ -1956,15 +1898,26 @@ export function registerHooks(
 
           if (message?.is_error === true || message?.isError === true) {
             counters.toolErrors.add(1, { "tool.name": toolName });
+            span.setAttribute("openclaw.tool.success", false);
             span.setStatus({ code: SpanStatusCode.ERROR, message: "Tool execution error" });
           } else {
+            span.setAttribute("openclaw.tool.success", true);
             span.setStatus({ code: SpanStatusCode.OK });
           }
         } else {
+          span.setAttribute("openclaw.tool.success", true);
           span.setStatus({ code: SpanStatusCode.OK });
         }
 
         captureSpanToCache(span, `tool.${toolName}`, "tool", runtimeSessionKey, getSessionId(runtimeSessionKey));
+        if (memoryOperation) {
+          recordMemoryFailureRateFromCache({
+            histograms,
+            runtimeSessionKey,
+            logger,
+            latestOperation: memoryOperation,
+          });
+        }
         span.end();
   logger.info?.(`[otel] Tool span ended: tool=${toolName}, callId=${toolCallId}, runtimeSession=${runtimeSessionKey}`);
       } catch {

@@ -17,11 +17,11 @@ import { pathToFileURL } from 'node:url';
 const require = createRequire(import.meta.url);
 const iitmHookPath = require.resolve('import-in-the-middle/hook.mjs');
 // Preload the IITM hook with an include filter for
-// openai, anthropic-ai, @goolge (for vertex) and @mariozechner/pi-ai (for bedrock).
+// openai, anthropic-ai, @goolge (for vertex).
 // Add other modules to the include filter as needed.
 register(pathToFileURL(iitmHookPath).href, {
   parentURL: import.meta.url,
-  data: { include: [/@mariozechner\/pi-ai/, /openai/, /@anthropic-ai/, /@google/] },
+  data: { include: [/openai/, /@anthropic-ai/, /@google/] },
 });
 
 // Step 2: Set up the OTel SDK with GenAI instrumentations

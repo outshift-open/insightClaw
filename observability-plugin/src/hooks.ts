@@ -1703,7 +1703,16 @@ export function registerHooks(
         if (parentCaller) {
           const parentContext = pendingAgentContextsMap.get(parentCaller);
           if (parentContext) {
-            const noveltyScore = calculateCoverage(event.prompt, parentContext?.systemPrompt + parentContext?.prompt + parentContext?.historyMessages);
+            const historyString = Array.isArray(parentContext?.historyMessages)
+                  ? parentContext.historyMessages.map(msg =>
+                      typeof msg.content === "string"
+                        ? msg.content
+                        : msg.content
+                          ? JSON.stringify(msg.content)
+                          : msg.summary || ""
+                    ).join(" ")
+                  : "";
+            const noveltyScore = calculateCoverage(event.prompt, parentContext?.systemPrompt + parentContext?.prompt + historyString);
             histograms.downstreamContextSharing.record(noveltyScore, {
               "openclaw.agent.id": agentId,
               "openclaw.session.key": runtimeSessionKey,

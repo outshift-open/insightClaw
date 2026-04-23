@@ -587,41 +587,41 @@ export function parseContext(event: any, histograms: any, sessionKey: any, agent
   historyTool -= historyMemory;
 
   histograms.contextSystemSize.record(systemData, { 
-    "openclaw.agent.id": agentId,
+    "gen_ai.agent.id": agentId,
     "openclaw.session.key": sessionKey,
   });
   
   // not available at the moment
   // histograms.contextToolDescSize.record(tool_desc, { 
-  //   "openclaw.agent.id": agentId,
+  //   "gen_ai.agent.id": agentId,
   //   "openclaw.session.key": sessionKey,
   // });
   histograms.contextHistoryMemorySize.record(historyMemory, { 
-    "openclaw.agent.id": agentId,
+    "gen_ai.agent.id": agentId,
     "openclaw.session.key": sessionKey,
   });
   histograms.contextHistoryToolSize.record(historyTool, { 
-    "openclaw.agent.id": agentId,
+    "gen_ai.agent.id": agentId,
     "openclaw.session.key": sessionKey,
   });
   histograms.contextHistoryUserSize.record(historyUser, { 
-    "openclaw.agent.id": agentId,
+    "gen_ai.agent.id": agentId,
     "openclaw.session.key": sessionKey,
   });
 
   histograms.contextHistoryOtherSize.record(historyOthers, { 
-    "openclaw.agent.id": agentId,
+    "gen_ai.agent.id": agentId,
     "openclaw.session.key": sessionKey,
   });
   
   histograms.contextPromptSize.record(prompt ? new TextEncoder().encode(prompt).length : 0, {
-    "openclaw.agent.id": agentId,
+    "gen_ai.agent.id": agentId,
     "openclaw.session.key": sessionKey,
   });
 
   // not available at the moment
   // histograms.contextOtherSize.record(others, { 
-  //   "openclaw.agent.id": agentId,
+  //   "gen_ai.agent.id": agentId,
   //   "openclaw.session.key": sessionKey,
   // });
 }
@@ -970,9 +970,6 @@ export function registerHooks(
       agentSpan.setAttribute("gen_ai.usage.total_tokens", totalTokens);
       agentSpan.setAttribute("gen_ai.response.model", model);
       agentSpan.setAttribute("openclaw.agent.success", success);
-      if (model !== "unknown") {
-        agentSpan.setAttribute("openclaw.agent.model", model);
-      }
 
       if (cacheReadTokens > 0) {
         agentSpan.setAttribute("gen_ai.usage.cache_read_tokens", cacheReadTokens);
@@ -999,7 +996,7 @@ export function registerHooks(
       if (!diagUsage && (totalInputTokens > 0 || totalOutputTokens > 0)) {
         const metricAttrs = {
           "gen_ai.response.model": model,
-          "openclaw.agent.id": agentId,
+          "gen_ai.agent.id": agentId,
         };
         counters.tokensPrompt.add(totalInputTokens + cacheReadTokens + cacheWriteTokens, metricAttrs);
         counters.tokensCompletion.add(totalOutputTokens, metricAttrs);
@@ -1010,7 +1007,7 @@ export function registerHooks(
       if (typeof durationMs === "number") {
         histograms.agentTurnDuration.record(durationMs, {
           "gen_ai.response.model": model,
-          "openclaw.agent.id": agentId,
+          "gen_ai.agent.id": agentId,
         });
       }
 
@@ -1327,10 +1324,10 @@ export function registerHooks(
             attributes: {
               [ATTR_OBSERVE_SPAN_KIND]: ObserveSpanKind.AGENT,
               [ATTR_OBSERVE_ENTITY_NAME]: agentId,
-              "openclaw.agent.id": agentId,
+              "gen_ai.agent.id": agentId,
               "openclaw.session.key": runtimeSessionKey,
               ...(sessionId ? { "session.id": sessionId } : {}),
-              "openclaw.agent.model": model,
+              "gen_ai.agent.model": model,
               ...handoff.attributes,
             },
             links: agentLinks,
@@ -1452,7 +1449,7 @@ export function registerHooks(
               [ATTR_OBSERVE_ENTITY_NAME]: "openclaw.llm.call",
               "openclaw.session.key": runtimeSessionKey,
               ...(sessionId ? { "session.id": sessionId } : {}),
-              "openclaw.agent.id": agentId,
+              "gen_ai.agent.id": agentId,
               "gen_ai.request.model": model,
             },
           },
@@ -1608,7 +1605,7 @@ export function registerHooks(
               "openclaw.tool.is_synthetic": isSynthetic,
               "openclaw.session.key": runtimeSessionKey,
               ...(sessionId ? { "session.id": sessionId } : {}),
-              "openclaw.agent.id": agentId,
+              "gen_ai.agent.id": agentId,
             },
           },
           parentContext
@@ -1681,7 +1678,7 @@ export function registerHooks(
         span.setAttribute("openclaw.tool.duration_ms", durationMs);
         histograms.toolDuration.record(durationMs, {
           "tool.name": toolName,
-          "openclaw.agent.id": agentId,
+          "gen_ai.agent.id": agentId,
         });
 
         // Prefer toolInput captured on the span in before_tool_call; fall back to event fields.
@@ -1762,11 +1759,9 @@ export function registerHooks(
             span.setAttribute("openclaw.tool.success", false);
             span.setStatus({ code: SpanStatusCode.ERROR, message: "Tool execution error" });
           } else {
-            span.setAttribute("openclaw.tool.success", true);
             span.setStatus({ code: SpanStatusCode.OK });
           }
         } else {
-          span.setAttribute("openclaw.tool.success", true);
           span.setStatus({ code: SpanStatusCode.OK });
         }
 
@@ -1821,7 +1816,7 @@ export function registerHooks(
         span.setAttribute("openclaw.tool.duration_ms", durationMs);
         histograms.toolDuration.record(durationMs, {
           "tool.name": toolName,
-          "openclaw.agent.id": agentId,
+          "gen_ai.agent.id": agentId,
         });
 
         // Prefer toolInput captured on the span in before_tool_call; fall back to event fields.
@@ -1901,11 +1896,9 @@ export function registerHooks(
             span.setAttribute("openclaw.tool.success", false);
             span.setStatus({ code: SpanStatusCode.ERROR, message: "Tool execution error" });
           } else {
-            span.setAttribute("openclaw.tool.success", true);
             span.setStatus({ code: SpanStatusCode.OK });
           }
         } else {
-          span.setAttribute("openclaw.tool.success", true);
           span.setStatus({ code: SpanStatusCode.OK });
         }
 

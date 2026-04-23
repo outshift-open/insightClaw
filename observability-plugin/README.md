@@ -120,10 +120,26 @@ This preload runs before OpenClaw imports the provider SDKs, which is required f
   ```bash
   export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
   export OTEL_SERVICE_NAME=openclaw-gateway
-  export NODE_OPTIONS="--import ./instrumentation/preload.mjs"
+  export NODE_OPTIONS="--import /absolute/path/to/repo/observability-plugin/instrumentation/preload.mjs"
 
   openclaw gateway start
   ```
+
+This can be also put inside the openclaw gateway service description, to avoid having to re-export the variables each time.
+To do so:
+
+```
+$ mkdir -p ~/.config/systemd/user/openclaw-gateway.service.d
+$ cat << EOF > ~/.config/systemd/user/openclaw-gateway.service.d/override.conf
+[Service]
+Environment=OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
+Environment=OTEL_SERVICE_NAME=openclaw-gateway
+Environment=NODE_OPTIONS="--import /path/to/instrumentation/preload.mjs"
+EOF
+$ systemctl --user daemon-reload
+```
+Make sure that the path is the absolute path to the preload.mjs file.
+
 
 ### Supported Provider SDKs
 
@@ -146,6 +162,49 @@ ESM module instances OpenClaw is already using.
 
 Using `NODE_OPTIONS=--import .../preload.mjs` fixes that by registering the ESM loader
 hook before the SDKs are imported.
+
+### Caveats
+
+#### LiteLLM provider
+
+For LLM providers that uses the `openai-completions`, the reported token usage is always 0, as stated in this [issue](https://github.com/openclaw/openclaw/issues/56670). This is due to the fact that, by default, OpenClaw disables the report of usage tokens via the stream options, because there is no guarantee that the selected model would support it.
+This can be specified per model, by adding the following attribute to the model description in the LLM provider:
+```
+"compat" : {
+  "supportsUsageInStreaming": true
+}
+```
+
+For example, when using liteLLM:
+```
+"providers": {
+  "litellm": {
+    "baseUrl": "https://llm-proxy.prod.outshift.ai",
+    "api": "openai-completions",
+    "models": [
+      {
+        "id": "MODEL_ID",
+        "name": "MODEL_NAME",
+        "api": "openai-completions",
+        "reasoning": true,
+        "input": [
+          "text",
+          "image"
+        ],
+        "contextWindow": 128000,
+        "maxTokens": 8192,
+        "compat": {
+          "supportsUsageInStreaming": true
+        }
+      },
+    ]
+  }
+}
+```
+
+#### OpenLLMetry instrumentation
+
+By default, OpenClaw is using streaming mode from LLM providers, and the token report from the provider is not taken into account by openLLMetry auto-instrumentation. A [PR](https://github.com/traceloop/openllmetry-js/pull/941) is addressing this issue. Till this PR is merged, the best we can have (without installing openllmetry from source) is to enable the current approach of openLLMetry, that is, relying on estimating the tokens usage via tiktoken. This is done by setting this env variable `TRACELOOP_ENRICH_TOKENS=true`.
 
 ---
 

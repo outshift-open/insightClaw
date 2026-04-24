@@ -6,8 +6,8 @@
  * standard OTel spans following the GenAI semantic conventions.
  */
 
-import { trace, metrics, context, SpanKind, SpanStatusCode } from "@opentelemetry/api";
-import type { Span, Tracer, Meter, Counter, Histogram, UpDownCounter } from "@opentelemetry/api";
+import { trace, metrics } from "@opentelemetry/api";
+import type { Tracer, Meter, Counter, Histogram, UpDownCounter } from "@opentelemetry/api";
 import { resourceFromAttributes } from "@opentelemetry/resources";
 import { ATTR_SERVICE_NAME, ATTR_SERVICE_VERSION } from "@opentelemetry/semantic-conventions";
 

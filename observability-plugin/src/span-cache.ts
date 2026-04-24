@@ -23,6 +23,8 @@ export interface SpanRecord {
   sessionId?: string;
   /** Full attribute snapshot at the moment span.end() was called */
   attributes: Record<string, SpanAttributeValue>;
+  /** SpanStatusCode recorded just before span.end() — 0=UNSET, 1=OK, 2=ERROR */
+  statusCode?: number;
   recordedAt: number;
 }
 

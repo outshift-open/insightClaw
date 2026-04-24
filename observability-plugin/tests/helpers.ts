@@ -34,6 +34,10 @@ export class MockSpan {
     return this;
   }
 
+  get status(): { code: number; message?: string } | undefined {
+    return this.statuses.at(-1);
+  }
+
   addEvent(name: string, attributes?: Attributes): this {
     this.events.push({ name, attributes });
     return this;

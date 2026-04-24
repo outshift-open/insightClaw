@@ -23,7 +23,6 @@
 
 import {
   context,
-  trace,
   propagation,
   type SpanContext,
 } from "@opentelemetry/api";

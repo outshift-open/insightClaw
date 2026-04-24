@@ -7,8 +7,8 @@
  */
 
 import { randomUUID } from "node:crypto";
-import { SpanKind, SpanStatusCode, trace, context } from "@opentelemetry/api";
-import type { Tracer, Span, Context } from "@opentelemetry/api";
+import { SpanKind, SpanStatusCode } from "@opentelemetry/api";
+import type { Context, Tracer } from "@opentelemetry/api";
 import {
   ATTR_OBSERVE_SPAN_KIND,
   ObserveSpanKind,

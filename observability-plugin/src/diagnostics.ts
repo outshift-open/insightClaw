@@ -33,7 +33,7 @@ async function loadSdk(): Promise<void> {
   sdkLoadAttempted = true;
   try {
     // Dynamic import to avoid build issues if SDK not available
-    // @ts-ignore - openclaw/plugin-sdk types not available at build time
+    // @ts-expect-error - openclaw/plugin-sdk types not available at build time
     const sdk = await import("openclaw/plugin-sdk") as any;
     onDiagnosticEvent = sdk.onDiagnosticEvent;
   } catch {
@@ -132,7 +132,7 @@ function firstString(...values: unknown[]): string | undefined {
   return undefined;
 }
 
-function resolveDiagnosticRuntimeSessionKey(evt: any): string {
+function _resolveDiagnosticRuntimeSessionKey(evt: any): string {
   return resolveDiagnosticRuntimeSessionIdentities(evt)[0] || "unknown";
 }
 

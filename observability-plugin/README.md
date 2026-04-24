@@ -39,16 +39,18 @@ openclaw.request (root span)
 - `session.start` and `session.end` represent the plugin's user workflow session lifecycle
 - A session ends after 5 minutes of inactivity by default
 - OpenClaw `sessionKey` and `conversationId` are treated as runtime-session correlation identifiers and exported as `openclaw.runtime.session.*`
+- Optional `spanCache` retains a rolling in-process window of span attributes for trace/session lookups and derived metrics
+- Optional `spanCacheVerboseLogs` promotes span-cache insert/lookup/flush logs to the normal OpenClaw info log stream
 
 **Agent Payload Visibility:**
 - Optional agent input/output payload capture on `openclaw.agent.turn`
 - Request input captured on the root request span
-- Outbound message payload captured on `openclaw.message.sent`
+- Outbound message payload captured on `openclaw.message.sent` when the typed hook is available
 
 **Request Lifecycle:**
 - Full message → response tracing
 - Session context propagation
-- Outbound `message_sent` tracing for delivery visibility
+- Outbound delivery visibility via `message_sent`, diagnostic `message.processed`, or webchat `agent_end` inference when no outbound signal exists
 - Agent turn duration with token breakdown
 - Fallback `openclaw.request` root span creation during `before_agent_start` when inbound hooks only expose conversation metadata
 
@@ -81,7 +83,9 @@ openclaw.request (root span)
              "protocol": "http",
               "traces": true,
               "metrics": true,
-              "captureContent": true
+              "captureContent": true,
+              "spanCache": false,
+              "spanCacheVerboseLogs": false
            }
          }
        }

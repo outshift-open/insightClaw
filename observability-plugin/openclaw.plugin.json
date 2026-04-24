@@ -33,6 +33,14 @@
       "label": "Capture Agent/Tool Payload Content",
       "help": "When enabled, records request, agent, tool, and response payload content in spans. Disable for privacy."
     },
+    "spanCache": {
+      "label": "Enable Span Cache",
+      "help": "Retains a rolling in-process window of span attributes for trace/session lookups and derived metrics."
+    },
+    "spanCacheVerboseLogs": {
+      "label": "Enable Span Cache Verbose Logs",
+      "help": "Promotes span-cache insert, lookup, flush, and maintenance logs to the normal OpenClaw info log stream."
+    },
     "metricsIntervalMs": {
       "label": "Metrics Export Interval (ms)",
       "advanced": true
@@ -81,6 +89,14 @@
       "captureContent": {
         "type": "boolean",
         "description": "Capture request, agent, tool, and response payload content in spans"
+      },
+      "spanCache": {
+        "type": "boolean",
+        "description": "Enable the in-process span attribute cache for trace and session lookups"
+      },
+      "spanCacheVerboseLogs": {
+        "type": "boolean",
+        "description": "Promote span-cache insert, lookup, flush, and maintenance logs to info level"
       },
       "metricsIntervalMs": {
         "type": "integer",

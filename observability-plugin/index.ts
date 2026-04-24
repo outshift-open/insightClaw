@@ -21,7 +21,9 @@
  *             "serviceName": "openclaw-gateway",
  *             "traces": true,
  *             "metrics": true,
- *             "captureContent": false
+ *             "captureContent": false,
+ *             "spanCache": false,
+ *             "spanCacheVerboseLogs": false
  *           }
  *         }
  *       }
@@ -79,6 +81,8 @@ const otelObservabilityPlugin = {
             metrics: config.metrics,
             logs: config.logs,
             captureContent: config.captureContent,
+            spanCache: config.spanCache,
+            spanCacheVerboseLogs: config.spanCacheVerboseLogs,
           },
         });
       }
@@ -101,6 +105,8 @@ const otelObservabilityPlugin = {
             console.log(`  Metrics:         ${config.metrics ? "✅" : "❌"}`);
             console.log(`  Logs:            ${config.logs ? "✅" : "❌"}`);
             console.log(`  Capture content: ${config.captureContent ? "✅" : "❌"}`);
+            console.log(`  Span cache:      ${config.spanCache ? "✅" : "❌"}`);
+            console.log(`  Cache verbose logs: ${config.spanCacheVerboseLogs ? "✅" : "❌"}`);
             console.log(`  Initialized:     ${telemetry ? "✅" : "❌"}`);
             console.log(`  Cost tracking:   ${hasDiagnosticsSupport() ? "✅ (via diagnostics API)" : "❌"}`);
             console.log(`  Agent handoff:   ✅ (span links)`);
@@ -142,7 +148,10 @@ const otelObservabilityPlugin = {
         }
 
         // Start session lifecycle watcher (session.start + idle-based session.end detection)
-        startSessionWatcher(telemetry!.tracer, logger);
+        startSessionWatcher(telemetry!.tracer, logger, undefined, {
+          enableSpanCache: config.spanCache,
+          spanCacheVerboseLogs: config.spanCacheVerboseLogs,
+        });
 
         // Subscribe to OpenClaw diagnostic events (model.usage, etc.)
         // This gives us cost data and accurate token counts
@@ -196,6 +205,8 @@ const otelObservabilityPlugin = {
             metrics: config.metrics,
             logs: config.logs,
             captureContent: config.captureContent,
+            spanCache: config.spanCache,
+            spanCacheVerboseLogs: config.spanCacheVerboseLogs,
           };
           return {
             content: [
@@ -213,3 +224,16 @@ const otelObservabilityPlugin = {
 };
 
 export default otelObservabilityPlugin;
+
+// ── Span Cache public API ─────────────────────────────────────────
+// Re-exported so callers (e.g., tests or metric-computation helpers)
+// can query the cache without importing deep internals.
+export {
+  getByTrace,
+  getBySession,
+  getBySessionKey,
+  getCacheStats,
+  flushBySessionKey,
+  stopSpanCache,
+  type SpanRecord,
+} from "./src/span-cache.js";

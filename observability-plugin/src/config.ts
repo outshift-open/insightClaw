@@ -19,6 +19,10 @@ export interface OtelObservabilityConfig {
   logs: boolean;
   /** Capture prompt/completion content in spans (disable for privacy) */
   captureContent: boolean;
+  /** Enable the in-process span attribute cache for derived metrics/lookups */
+  spanCache: boolean;
+  /** Promote span-cache maintenance and lookup logs to info level */
+  spanCacheVerboseLogs: boolean;
   /** Metrics export interval in milliseconds */
   metricsIntervalMs: number;
   /** Additional OTel resource attributes */
@@ -34,6 +38,8 @@ const DEFAULTS: OtelObservabilityConfig = {
   metrics: true,
   logs: true,
   captureContent: false,
+  spanCache: false,
+  spanCacheVerboseLogs: false,
   metricsIntervalMs: 30_000,
   resourceAttributes: {},
 };
@@ -58,6 +64,11 @@ export function parseConfig(raw: unknown): OtelObservabilityConfig {
     logs: typeof obj.logs === "boolean" ? obj.logs : DEFAULTS.logs,
     captureContent:
       typeof obj.captureContent === "boolean" ? obj.captureContent : DEFAULTS.captureContent,
+    spanCache: typeof obj.spanCache === "boolean" ? obj.spanCache : DEFAULTS.spanCache,
+    spanCacheVerboseLogs:
+      typeof obj.spanCacheVerboseLogs === "boolean"
+        ? obj.spanCacheVerboseLogs
+        : DEFAULTS.spanCacheVerboseLogs,
     metricsIntervalMs:
       typeof obj.metricsIntervalMs === "number" && obj.metricsIntervalMs >= 1000
         ? obj.metricsIntervalMs

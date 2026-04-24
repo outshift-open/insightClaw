@@ -13,6 +13,7 @@ import {
   ATTR_OBSERVE_SPAN_KIND,
   ObserveSpanKind,
 } from "./observe-attributes.js";
+import { flushBySessionKey, startSpanCache, stopSpanCache } from "./span-cache.js";
 
 // ── Configuration ──────────────────────────────────────────────────
 
@@ -49,7 +50,8 @@ let idleTimeoutMs = DEFAULT_IDLE_TIMEOUT_MS;
 export function startSessionWatcher(
   tracer: Tracer,
   logger: any,
-  idleTimeout?: number
+  idleTimeout?: number,
+  options?: { enableSpanCache?: boolean; spanCacheVerboseLogs?: boolean }
 ): void {
   tracerRef = tracer;
   loggerRef = logger;
@@ -71,6 +73,13 @@ export function startSessionWatcher(
   process.on("SIGTERM", emitAllSessionEnds);
   process.on("SIGINT", emitAllSessionEnds);
 
+  // Start the span cache background sweep only when explicitly enabled.
+  startSpanCache({
+    logger,
+    enabled: options?.enableSpanCache === true,
+    verboseLogs: options?.spanCacheVerboseLogs === true,
+  });
+
   logger.info?.(
     `[otel:session] Session lifecycle watcher started (idleTimeout=${idleTimeoutMs}ms, checkInterval=${WATCHER_INTERVAL_MS}ms)`
   );
@@ -85,6 +94,7 @@ export function stopSessionWatcher(): void {
     watcherTimer = null;
     loggerRef?.debug?.("[otel:session] Session watcher stopped");
   }
+  stopSpanCache();
   process.removeListener("beforeExit", emitAllSessionEnds);
   process.removeListener("SIGTERM", emitAllSessionEnds);
   process.removeListener("SIGINT", emitAllSessionEnds);
@@ -139,6 +149,8 @@ export function endSession(runtimeSessionKey: string): void {
     emitSessionEnd(session);
   }
   sessions.delete(runtimeSessionKey);
+  // Flush span cache entries for this session after all span accounting is done
+  flushBySessionKey(runtimeSessionKey);
 }
 
 /**
@@ -174,6 +186,7 @@ function checkIdleSessions(): void {
       );
       emitSessionEnd(session);
       sessions.delete(key);
+      flushBySessionKey(key);
       idleCount++;
     }
   }

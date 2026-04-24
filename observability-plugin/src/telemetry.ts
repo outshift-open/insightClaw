@@ -74,6 +74,8 @@ export interface OtelHistograms {
   toolDuration: Histogram;
   /** Agent turn duration in ms */
   agentTurnDuration: Histogram;
+  /** Session-level memory tool failure rate derived from cached spans */
+  memoryFailureRate: Histogram;
   /** Memory search result fragmentation (0 to 1) */
   memorySearchFragmentation: Histogram;
   /** Memory read duration in ms */
@@ -255,6 +257,10 @@ export function initTelemetry(config: OtelObservabilityConfig, logger: any): Tel
     agentTurnDuration: meter.createHistogram("openclaw.agent.turn_duration", {
       description: "Full agent turn duration (LLM + tools)",
       unit: "ms",
+    }),
+    memoryFailureRate: meter.createHistogram("openclaw.memory.failure_rate", {
+      description: "Failure rate of memory access operations within the current session derived from cached spans",
+      unit: "1",
     }),
     memorySearchFragmentation: meter.createHistogram("openclaw.memory.search_fragmentation", {
       description: "Memory search result fragmentation (0 to 1)",

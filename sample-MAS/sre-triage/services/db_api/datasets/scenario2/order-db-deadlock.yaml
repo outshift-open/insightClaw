@@ -1,0 +1,120 @@
+# Incident fixture: order-db-deadlock
+#
+# Fully parameterizes all mock tool responses for this incident.
+# Selected declaratively via `spec.params.incident_fixture:` in an overlay.
+#
+# Root cause: order-service v2.4.1 introduced a bulk-update query that acquires
+# row-level locks in insertion order (non-canonical) while concurrent checkout
+# writers acquire them in primary-key order — creating a deadlock cycle.
+# Connection pool reaches 99% saturation. DB is the root cause here (unlike Scenario A).
+# Correct action: rollback order-service to v2.4.0.
+
+id: order-db-deadlock
+description: >
+  DB deadlock in order-service v2.4.1 bulk-update causes lock contention,
+  pool exhaustion, and 67% checkout write errors. DB is the root cause.
+timestamp: "2026-02-26T09:15:00"
+correct_action:
+  service: order-service
+  action: rollback
+  to_version: "2.4.0"
+  reasoning: >
+    v2.4.1 introduced a bulk inventory update query that acquires locks in
+    insertion order, creating deadlock cycles with concurrent checkout writers.
+    Pool exhaustion follows → 67% error rate on writes. Rollback resolves deadlock.
+
+services:
+  order-service:
+    aliases: [order_service]
+
+    metrics:
+      latency_ms: { p50: 4310.1, p95: 9870.2, p99: 12284.6 }
+      error_rate: 0.6712
+      requests_per_second: 187.3
+
+    health:
+      status: critical
+      uptime_percent: 98.1
+      error_rate_percent: 67.1
+      dependencies:
+        order-db: critical
+        inventory-service: degraded
+        payment-service: healthy
+        api-gateway: healthy
+
+    deployments:
+      - version: "2.4.1"
+        status: success
+        deployed_minutes_before_incident: 14
+        deployed_by: ci/cd-pipeline
+        commit_sha: d7e3b92
+        commit_message: "perf(orders): batch inventory update with bulk INSERT ON CONFLICT"
+        duration_seconds: 107
+        overlap_with_incident: true
+      - version: "2.4.0"
+        status: success
+        deployed_hours_before_incident: 36
+        deployed_by: ci/cd-pipeline
+        commit_sha: e2c1f80
+        commit_message: "chore: upgrade pg driver 4.11 → 4.12"
+        duration_seconds: 88
+        overlap_with_incident: false
+      - version: "2.3.9"
+        status: success
+        deployed_days_before_incident: 5
+        deployed_by: ci/cd-pipeline
+        commit_sha: f0a8d44
+        commit_message: "fix(orders): correct idempotency key generation"
+        duration_seconds: 93
+        overlap_with_incident: false
+
+    logs:
+      - level: ERROR
+        message: "[order-service] DB write error: deadlock detected (order_items row lock)"
+      - level: ERROR
+        message: "[order-service] DB write error: deadlock detected (inventory_reservations)"
+      - level: WARN
+        message: "[order-service] Pool exhausted: waiting for connection (queue depth=41)"
+      - level: ERROR
+        message: "[order-service] Checkout write failed: connection timeout after 8000ms"
+      - level: INFO
+        message: "[order-service] Deployment order-service:2.4.1 completed 14 minutes ago"
+
+  order-db:
+    aliases: [order_db, orders_db]
+
+    metrics:
+      query_latency_p99_ms: 9102.4
+      connection_pool_used: 0.99
+      connection_pool_size: 200
+      lock_wait_avg_ms: 8210.3
+      deadlock_count_last_5min: 47
+      active_connections: 198
+      blocking_queries: 12
+
+    health:
+      status: critical
+
+    query_analysis:
+      slow_queries:
+        - query_pattern: "INSERT INTO order_items ... ON CONFLICT DO UPDATE SET ..."
+          avg_ms: 7843.2
+          lock_type: ROW_EXCLUSIVE
+          lock_order: insertion_order
+          issue: "Non-canonical lock order causes deadlock with concurrent checkout writers"
+        - query_pattern: "UPDATE checkout_sessions SET ... WHERE order_id = ?"
+          avg_ms: 912.4
+          lock_type: ROW_SHARE
+          lock_order: primary_key_order
+          issue: "Canonical order — deadlocks with bulk insert when lock orders conflict"
+
+  inventory-service:
+    aliases: [inventory_service]
+
+    metrics:
+      latency_ms: { p50: 310.2, p95: 1240.8, p99: 2180.1 }
+      error_rate: 0.187
+      requests_per_second: 94.1
+
+    health:
+      status: degraded

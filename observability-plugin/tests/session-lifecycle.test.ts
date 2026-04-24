@@ -65,3 +65,27 @@ test("session lifecycle updates existing sessions and removes without emission",
 
   stopSessionWatcher();
 });
+
+test("spawned runtime sessions can alias the parent workflow session id", () => {
+  stopSessionWatcher();
+  const tracer = new MockTracer();
+  startSessionWatcher(tracer as any, createLogger(), 10_000);
+
+  const parentSessionId = touchSession("session-parent", context.active(), "workflow-a");
+  const childSessionId = touchSession("session-child", context.active(), undefined, parentSessionId);
+
+  assert.equal(childSessionId, parentSessionId);
+  assert.equal(activeSessionCount(), 1);
+  assert.equal(tracer.spans.length, 1);
+
+  endSession("session-child");
+  assert.equal(activeSessionCount(), 1);
+  assert.equal(tracer.spans.length, 1);
+
+  endSession("session-parent");
+  assert.equal(activeSessionCount(), 0);
+  assert.equal(tracer.spans.length, 2);
+  assert.equal(tracer.spans[1]?.options.attributes["session.id"], parentSessionId);
+
+  stopSessionWatcher();
+});

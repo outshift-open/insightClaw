@@ -552,9 +552,8 @@ test("registerHooks records span-cache-backed memory failure rate and logs its i
         toolName: "read",
         toolCallId: "memory-read-1",
         input: { path: "/memories/repo/notes.md" },
-        message: {
+        result: {
           content: [{ type: "text", text: "cached note" }],
-          is_error: false,
         },
         conversationId: sessionKey,
       },
@@ -576,10 +575,10 @@ test("registerHooks records span-cache-backed memory failure rate and logs its i
         toolName: "write",
         toolCallId: "memory-write-1",
         input: { path: "/memories/repo/notes.md" },
-        message: {
-          content: [{ type: "text", text: "write failed" }],
-          is_error: true,
+        result: {
+          content: [],
         },
+        error: "write failed",
         conversationId: sessionKey,
       },
       hookCtx

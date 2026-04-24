@@ -1,4 +1,4 @@
-import type { Span } from "@opentelemetry/api";
+import { type Span, SpanStatusCode } from "@opentelemetry/api";
 
 import { getBySessionKey } from "./span-cache.js";
 import type { OtelCounters, OtelHistograms } from "./telemetry.js";
@@ -176,13 +176,12 @@ export function recordMemoryFailureRateFromCache({
   const memoryRecords = getBySessionKey(runtimeSessionKey).filter((record) => {
     return record.spanKind === "tool" && record.attributes["openclaw.memory.is_long_term"] === true;
   });
-
   if (memoryRecords.length === 0) {
     return;
   }
 
   const failedOperations = memoryRecords.reduce((count, record) => {
-    return count + (record.attributes["openclaw.tool.success"] === false ? 1 : 0);
+    return count + (record.statusCode === SpanStatusCode.ERROR ? 1 : 0);
   }, 0);
   const failureRate = failedOperations / memoryRecords.length;
 

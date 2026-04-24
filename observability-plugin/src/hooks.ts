@@ -584,6 +584,7 @@ function handleToolOutput(
   config.histograms.toolDuration.record(durationMs, {
     "tool.name": toolName,
     "gen_ai.agent.id": agentId,
+    "session.id": getSessionId(runtimeSessionKey),
   });
 
   // Prefer toolInput captured on the span in before_tool_call; fall back to event fields.
@@ -596,6 +597,7 @@ function handleToolOutput(
   const parentContext = sessionCtx?.agentContext || sessionCtx?.rootContext || context.active();
 
   const agentSequence = getHandoffSequence(runtimeSessionKey);
+  const sessionId = getSessionId(runtimeSessionKey) || "unknown";
 
   if (toolName === "sessions_spawn") {
     handleSessionSpawnCall(event, span, parentContext, runtimeSessionKey, agentId, agentSequence, toolInput, config.logger);
@@ -610,9 +612,10 @@ function handleToolOutput(
       toolInput,
       counters: config.counters,
       histograms: config.histograms,
-      runtimeSessionKey,
+      sessionId,
       message: result,
       durationMs,
+      agentId,
     });
     memoryOperation = annotateMemoryToolSpan(span, toolName, toolInput);
 
@@ -693,6 +696,8 @@ function handleSessionSpawnCall(event: any,
         `[otel] Prepared subagent handoff from agent=${agentId} to ` +
         `[${targetAgentIds.join(", ")}], runtimeSession=${runtimeSessionKey}`
       );
+      targetAgentsMap.set(targetAgentId, agentId+"-"+runtimeSessionKey ); //TODO merge with current pendingSpawn struct
+
     } else {
       logger.debug(
         `[otel] sessions_spawn result captured but target agent could not be resolved, runtimeSession=${runtimeSessionKey}`

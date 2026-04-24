@@ -27,7 +27,8 @@ const WATCHER_INTERVAL_MS = 30_000; // 30 seconds
 
 interface SessionActivity {
   sessionId: string;
-  runtimeSessionKey: string;
+  primaryRuntimeSessionKey: string;
+  runtimeSessionKeys: Set<string>;
   lastActivityAt: number;
   rootContext: Context;
   workflowName?: string;
@@ -41,6 +42,30 @@ let watcherTimer: ReturnType<typeof setInterval> | null = null;
 let tracerRef: Tracer | null = null;
 let loggerRef: any = null;
 let idleTimeoutMs = DEFAULT_IDLE_TIMEOUT_MS;
+
+function getUniqueSessions(): SessionActivity[] {
+  return [...new Set(sessions.values())];
+}
+
+function findSessionById(sessionId: string): SessionActivity | undefined {
+  return getUniqueSessions().find((session) => session.sessionId === sessionId);
+}
+
+function detachRuntimeSessionKey(runtimeSessionKey: string, session: SessionActivity): void {
+  sessions.delete(runtimeSessionKey);
+  session.runtimeSessionKeys.delete(runtimeSessionKey);
+
+  if (session.primaryRuntimeSessionKey === runtimeSessionKey) {
+    session.primaryRuntimeSessionKey = session.runtimeSessionKeys.values().next().value ?? runtimeSessionKey;
+  }
+}
+
+function deleteSessionAliases(session: SessionActivity): void {
+  for (const runtimeSessionKey of session.runtimeSessionKeys) {
+    sessions.delete(runtimeSessionKey);
+  }
+  session.runtimeSessionKeys.clear();
+}
 
 // ── Public API ─────────────────────────────────────────────────────
 
@@ -106,18 +131,35 @@ export function stopSessionWatcher(): void {
 export function touchSession(
   runtimeSessionKey: string,
   rootContext: Context,
-  workflowName?: string
+  workflowName?: string,
+  inheritedSessionId?: string
 ): string {
+  const now = Date.now();
   const existing = sessions.get(runtimeSessionKey);
   if (existing) {
-    existing.lastActivityAt = Date.now();
+    existing.lastActivityAt = now;
+    existing.rootContext = rootContext;
     if (workflowName) existing.workflowName = workflowName;
     return existing.sessionId;
   } else {
-    const startedAt = Date.now();
+    const adopted = inheritedSessionId ? findSessionById(inheritedSessionId) : undefined;
+    if (adopted) {
+      adopted.lastActivityAt = now;
+      adopted.rootContext = rootContext;
+      if (workflowName) adopted.workflowName = workflowName;
+      adopted.runtimeSessionKeys.add(runtimeSessionKey);
+      sessions.set(runtimeSessionKey, adopted);
+      loggerRef?.info?.(
+        `[otel:session] Aliased runtime session: session=${adopted.sessionId}, runtimeSession=${runtimeSessionKey}, primaryRuntimeSession=${adopted.primaryRuntimeSessionKey}, activeSessions=${getUniqueSessions().length}`
+      );
+      return adopted.sessionId;
+    }
+
+    const startedAt = now;
     const session: SessionActivity = {
-      sessionId: randomUUID(),
-      runtimeSessionKey,
+      sessionId: inheritedSessionId || randomUUID(),
+      primaryRuntimeSessionKey: runtimeSessionKey,
+      runtimeSessionKeys: new Set([runtimeSessionKey]),
       lastActivityAt: startedAt,
       rootContext,
       workflowName,
@@ -126,7 +168,7 @@ export function touchSession(
     sessions.set(runtimeSessionKey, session);
     emitSessionStart(session);
     loggerRef?.info?.(
-      `[otel:session] New session tracked: session=${session.sessionId}, runtimeSession=${runtimeSessionKey}, activeSessions=${sessions.size}`
+      `[otel:session] New session tracked: session=${session.sessionId}, runtimeSession=${runtimeSessionKey}, activeSessions=${getUniqueSessions().length}`
     );
     return session.sessionId;
   }
@@ -142,22 +184,41 @@ export function getSessionId(runtimeSessionKey: string): string | undefined {
  */
 export function endSession(runtimeSessionKey: string): void {
   const session = sessions.get(runtimeSessionKey);
-  if (session && !session.ended) {
+  if (!session) {
+    return;
+  }
+
+  detachRuntimeSessionKey(runtimeSessionKey, session);
+  flushBySessionKey(runtimeSessionKey);
+
+  if (session.runtimeSessionKeys.size > 0) {
+    loggerRef?.debug?.(
+      `[otel:session] Detached runtime session alias: session=${session.sessionId}, runtimeSession=${runtimeSessionKey}, remainingAliases=${session.runtimeSessionKeys.size}`
+    );
+    return;
+  }
+
+  if (!session.ended) {
     loggerRef?.info?.(
       `[otel:session] Explicit session end: session=${session.sessionId}, runtimeSession=${runtimeSessionKey}`
     );
     emitSessionEnd(session);
   }
-  sessions.delete(runtimeSessionKey);
-  // Flush span cache entries for this session after all span accounting is done
-  flushBySessionKey(runtimeSessionKey);
 }
 
 /**
  * Remove a session without emitting session.end (e.g., normal cleanup).
  */
 export function removeSession(runtimeSessionKey: string): void {
-  sessions.delete(runtimeSessionKey);
+  const session = sessions.get(runtimeSessionKey);
+  if (!session) {
+    return;
+  }
+
+  detachRuntimeSessionKey(runtimeSessionKey, session);
+  if (session.runtimeSessionKeys.size === 0) {
+    session.ended = true;
+  }
 }
 
 /**
@@ -165,7 +226,7 @@ export function removeSession(runtimeSessionKey: string): void {
  */
 export function activeSessionCount(): number {
   let count = 0;
-  for (const s of sessions.values()) {
+  for (const s of getUniqueSessions()) {
     if (!s.ended) count++;
   }
   return count;
@@ -176,23 +237,25 @@ export function activeSessionCount(): number {
 function checkIdleSessions(): void {
   const now = Date.now();
   let idleCount = 0;
-  for (const [key, session] of sessions) {
+  for (const session of getUniqueSessions()) {
     if (session.ended) continue;
     const idleMs = now - session.lastActivityAt;
     if (idleMs > idleTimeoutMs) {
       loggerRef?.info?.(
-        `[otel:session] Session idle timeout: session=${session.sessionId}, runtimeSession=${key}, ` +
+        `[otel:session] Session idle timeout: session=${session.sessionId}, runtimeSession=${session.primaryRuntimeSessionKey}, ` +
         `idleFor=${Math.round(idleMs / 1000)}s (threshold=${Math.round(idleTimeoutMs / 1000)}s)`
       );
       emitSessionEnd(session);
-      sessions.delete(key);
-      flushBySessionKey(key);
+      for (const runtimeSessionKey of session.runtimeSessionKeys) {
+        flushBySessionKey(runtimeSessionKey);
+      }
+      deleteSessionAliases(session);
       idleCount++;
     }
   }
-  if (sessions.size > 0 || idleCount > 0) {
+  if (getUniqueSessions().length > 0 || idleCount > 0) {
     loggerRef?.debug?.(
-      `[otel:session] Idle check: active=${sessions.size}, expired=${idleCount}`
+      `[otel:session] Idle check: active=${getUniqueSessions().length}, expired=${idleCount}`
     );
   }
 }
@@ -209,7 +272,7 @@ function emitSessionStart(session: SessionActivity): void {
           [ATTR_OBSERVE_SPAN_KIND]: ObserveSpanKind.WORKFLOW,
           "session.id": session.sessionId,
           "session.started_at": new Date(session.lastActivityAt).toISOString(),
-          "openclaw.session.key": session.runtimeSessionKey,
+          "openclaw.session.key": session.primaryRuntimeSessionKey,
           ...(session.workflowName
             ? { "ioa_observe.workflow.name": session.workflowName }
             : {}),
@@ -241,7 +304,7 @@ function emitSessionEnd(session: SessionActivity): void {
           [ATTR_OBSERVE_SPAN_KIND]: ObserveSpanKind.WORKFLOW,
           "session.id": session.sessionId,
           "session.ended_at": new Date(session.lastActivityAt).toISOString(),
-          "openclaw.session.key": session.runtimeSessionKey,
+          "openclaw.session.key": session.primaryRuntimeSessionKey,
           ...(session.workflowName
             ? { "ioa_observe.workflow.name": session.workflowName }
             : {}),
@@ -261,14 +324,14 @@ function emitSessionEnd(session: SessionActivity): void {
 }
 
 function emitAllSessionEnds(): void {
-  const remaining = [...sessions.values()].filter(s => !s.ended);
+  const remaining = getUniqueSessions().filter(s => !s.ended);
   if (remaining.length > 0) {
     loggerRef?.info?.(
       `[otel:session] Process exit — emitting session.end for ${remaining.length} active session(s): ` +
       `[${remaining.map(s => s.sessionId).join(", ")}]`
     );
   }
-  for (const [key, session] of sessions) {
+  for (const session of remaining) {
     if (!session.ended) {
       emitSessionEnd(session);
     }

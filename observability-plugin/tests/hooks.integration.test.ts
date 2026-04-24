@@ -492,11 +492,16 @@ test("registerHooks links spawned subagent turns back to the spawning tool span"
   );
 
   const spans = telemetry.tracer.spans;
+  const parentRoot = spans.find((entry) => entry.name === "openclaw.request" && entry.options.attributes["openclaw.session.key"] === parentSession);
   const childRoot = spans.find((entry) => entry.name === "openclaw.request" && entry.options.attributes["openclaw.session.key"] === childSession);
   const childAgent = spans.filter((entry) => entry.name === "openclaw.agent.turn").at(-1);
+  const parentSessionId = parentRoot?.span.attributes.get("session.id");
 
+  assert.ok(parentRoot);
   assert.ok(childRoot);
   assert.ok(childAgent);
+  assert.equal(childRoot?.span.attributes.get("session.id"), parentSessionId);
+  assert.equal(childAgent?.span.attributes.get("session.id"), parentSessionId);
   assert.equal(childRoot?.options.links?.[0]?.attributes?.["link.type"], "agent_spawn");
   assert.equal(childRoot?.options.links?.[1]?.attributes?.["link.type"], "agent_handoff");
   assert.equal(childAgent?.options.links?.[0]?.attributes?.["link.type"], "agent_handoff");

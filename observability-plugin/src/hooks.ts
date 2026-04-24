@@ -127,6 +127,7 @@ interface SessionTraceContext {
 interface PendingSpawnHandoff {
   targetAgentId: string;
   sourceRuntimeSessionKey: string;
+  sourceSessionId?: string;
   sourceAgentId: string;
   sourceAgentSequence: number;
   sourceAgentSpanContext?: SpanContext;
@@ -139,6 +140,7 @@ interface RootSpanSeed {
   parentContext?: Context;
   links?: Link[];
   attributes?: Record<string, string | number | boolean>;
+  sessionId?: string;
 }
 
 interface PendingToolSpan {
@@ -691,7 +693,7 @@ function startRootSpan(
 
 
   const rootContext = trace.setSpan(parentContext, rootSpan);
-  const sessionId = touchSession(primaryRuntimeSessionKey, rootContext);
+  const sessionId = touchSession(primaryRuntimeSessionKey, rootContext, undefined, seed?.sessionId);
   rootSpan.setAttribute("session.id", sessionId);
   const capturedInput = config.captureContent
     ? setCapturedContent(rootSpan, "input", messageText, ["openclaw.request"])
@@ -1240,6 +1242,7 @@ export function registerHooks(
           const rootSeed: RootSpanSeed | undefined = pendingSpawnHandoff
             ? {
                 parentContext: pendingSpawnHandoff.parentContext,
+                sessionId: pendingSpawnHandoff.sourceSessionId,
                 links: [
                   {
                     context: pendingSpawnHandoff.spawnToolSpanContext,
@@ -1291,7 +1294,7 @@ export function registerHooks(
 
         const parentContext = sessionCtx?.rootContext || context.active();
         const sessionId = runtimeSessionKey !== "unknown"
-          ? touchSession(runtimeSessionKey, parentContext)
+          ? touchSession(runtimeSessionKey, parentContext, undefined, pendingSpawnHandoff?.sourceSessionId)
           : undefined;
 
         if (pendingSpawnHandoff?.sourceAgentSpanContext) {
@@ -1704,6 +1707,7 @@ export function registerHooks(
               queuePendingSpawnHandoff({
                 targetAgentId,
                 sourceRuntimeSessionKey: runtimeSessionKey,
+                sourceSessionId: getSessionId(runtimeSessionKey),
                 sourceAgentId: agentId,
                 sourceAgentSequence: agentSequence,
                 sourceAgentSpanContext,
@@ -1841,6 +1845,7 @@ export function registerHooks(
               queuePendingSpawnHandoff({
                 targetAgentId,
                 sourceRuntimeSessionKey: runtimeSessionKey,
+                sourceSessionId: getSessionId(runtimeSessionKey),
                 sourceAgentId: agentId,
                 sourceAgentSequence: agentSequence,
                 sourceAgentSpanContext,

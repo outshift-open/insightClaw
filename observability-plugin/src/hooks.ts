@@ -676,6 +676,7 @@ function handleSessionSpawnCall(event: any,
     queuePendingSpawnHandoff({
       targetAgentId,
       sourceRuntimeSessionKey: runtimeSessionKey,
+      sourceSessionId: getSessionId(runtimeSessionKey),
       sourceAgentId: agentId,
       sourceAgentSequence: agentSequence,
       sourceAgentSpanContext,
@@ -698,7 +699,6 @@ function handleSessionSpawnCall(event: any,
 
 function extractToolOutputPayload(event: any, message: any): unknown {
   const textParts = extractMessageTextParts(message);
-  console.info(`[otel] toolOutput extract ${message}`);
   if (textParts.length > 0) {
     return textParts.join("");
   }

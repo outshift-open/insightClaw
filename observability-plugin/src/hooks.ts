@@ -1246,7 +1246,7 @@ export function registerHooks(
 
             const noveltyScore = getNoveltyScore(output, parentContext?.systemPrompt + parentContext?.prompt + historyString);
             histograms.noveltyScore.record(noveltyScore, {
-              "openclaw.agent.id": agentId,
+              "gen_ai.agent.id": agentId,
               "openclaw.session.key": runtimeSessionKey,
             });
           } else {
@@ -1707,7 +1707,7 @@ export function registerHooks(
           const tpc = Date.now() - startTime;
           turnTimers.delete(agentId); // Cleanup
           histograms.contextPreparationDuration.record(tpc, {
-            "openclaw.agent.id": agentId,
+            "gen_ai.agent.id": agentId,
             "openclaw.session.key": runtimeSessionKey,
           });
         } else {
@@ -1758,7 +1758,7 @@ export function registerHooks(
                   : "";
             const noveltyScore = calculateCoverage(event.prompt, parentContext?.systemPrompt + parentContext?.prompt + historyString);
             histograms.downstreamContextSharing.record(noveltyScore, {
-              "openclaw.agent.id": agentId,
+              "gen_ai.agent.id": agentId,
               "openclaw.session.key": runtimeSessionKey,
             });
           } else {

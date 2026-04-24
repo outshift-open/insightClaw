@@ -1,16 +1,27 @@
-import { getGlobalPluginRegistry } from "openclaw/plugin-sdk/plugin-runtime";
 import type { OpenClawPluginApi, PluginHookName } from "openclaw/plugin-sdk/plugin-runtime";
 
 // Marker to avoid double-wrapping after a registry replacement
 const WRAPPED = Symbol.for("hook-observability.wrapped");
 
-export function wrapHooks(api: OpenClawPluginApi) {
-  const registry = getGlobalPluginRegistry();
+export async function wrapHooks(api: OpenClawPluginApi) {
+  let getGlobalPluginRegistry: (() => any) | undefined;
+  try {
+    // Dynamic import to avoid build issues if SDK not available
+    // @ts-expect-error - openclaw/plugin-sdk types not available at build time
+    const sdk = await import("openclaw/plugin-sdk/plugin-runtime") as any;
+    getGlobalPluginRegistry = sdk.getGlobalPluginRegistry;
+  } catch {
+    // SDK not available — skip hook wrapping
+    return;
+  }
+
+  const registry = getGlobalPluginRegistry?.();
   if (!registry) return;
 
   let wrapped = 0;
   for (const hook of registry.typedHooks) {
     if (hook.pluginId === api.id) continue;
+    if (!isActionHook(hook.hookName)) continue; // observe-only hooks: no wrapping needed
     const current = hook.handler as ((...args: unknown[]) => unknown) & { [WRAPPED]?: true };
     if (!current || current[WRAPPED]) continue; // already wrapped
 

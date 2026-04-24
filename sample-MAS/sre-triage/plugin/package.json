@@ -1,0 +1,15 @@
+{
+  "name": "@local/setup-cenario-plugin",
+  "version": "1.0.0",
+  "description": "Scenario command plugin — runs an external bash script with a scenario number to setup the scenario",
+  "type": "module",
+  "scripts": {
+    "package:artifact": "node ./scripts/prepare-artifact.mjs",
+    "postinstall": "chmod +x ./scripts/*.sh"
+  },
+  "openclaw": {
+    "extensions": [
+      "./index.ts"
+    ]
+  }
+}

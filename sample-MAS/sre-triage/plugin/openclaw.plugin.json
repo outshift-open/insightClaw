@@ -1,0 +1,15 @@
+{
+  "id": "scenario",
+  "name": "Scenario",
+  "description": "Runs an external bash script with a scenario number.",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "scriptPath": {
+        "type": "string",
+        "description": "Absolute path to the bash script to execute."
+      }
+    }
+  }
+}

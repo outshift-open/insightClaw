@@ -529,12 +529,13 @@ function extractLatestAssistantOutput(messages: any[]): unknown {
 
 function getToolStatus(event: any): ToolStatus | undefined {
   const result = event?.result ?? event?.message;
-  const error = event?.error ?? null;
-
   const details = result?.details;
+  const error = event?.error ?? details?.error ?? null;
+
   if (details != null) {
     const status = details.status;
     const exitCode = details.exitCode;
+    // check first that the status and exitCode are explicitly provided
     if (status != null && exitCode != null) {
       return { status, exitCode };
     } else if (status != null) {
@@ -542,8 +543,13 @@ function getToolStatus(event: any): ToolStatus | undefined {
     } else if (exitCode != null) {
       return { status: "unknown", exitCode };
     }
+    // fallback on the error field
+    if (error != null) {
+      return { status: "error", exitCode: -1 };
+    }
     return undefined;
   } else {
+    // no details provided, but error might have been populated
     if (error != null) {
       return { status: "error", exitCode: -1 };
     }

@@ -96,6 +96,7 @@ function captureSpanToCache(
       sessionKey,
       sessionId,
       attributes: snapshotSpanAttributes(span),
+      statusCode: (span as any).status?.code,
       recordedAt: Date.now(),
     };
     recordSpan(record);
@@ -526,7 +527,10 @@ function extractLatestAssistantOutput(messages: any[]): unknown {
   return undefined;
 }
 
-function getToolStatus(result: any): ToolStatus | undefined {
+function getToolStatus(event: any): ToolStatus | undefined {
+  const result = event?.result ?? event?.message;
+  const error = event?.error ?? null;
+
   const details = result?.details;
   if (details != null) {
     const status = details.status;
@@ -539,6 +543,10 @@ function getToolStatus(result: any): ToolStatus | undefined {
       return { status: "unknown", exitCode };
     }
     return undefined;
+  } else {
+    if (error != null) {
+      return { status: "error", exitCode: -1 };
+    }
   }
 }
 
@@ -617,7 +625,7 @@ function handleToolOutput(
       );
     }
 
-    const toolStatus = getToolStatus(result);
+    const toolStatus = getToolStatus(event);
     if (toolStatus) {
       if (toolStatus.status.toLowerCase() === "completed" || toolStatus.status.toLowerCase() === "accepted" || toolStatus.status.toLowerCase() === "yielded") {
         if (toolStatus.exitCode <= 0) {

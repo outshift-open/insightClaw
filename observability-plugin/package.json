@@ -48,8 +48,11 @@
     "import-in-the-middle": "^1.15.0"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@types/node": "^24.5.2",
+    "eslint": "^10.2.1",
     "tsx": "^4.20.6",
-    "typescript": "^5.7.0"
+    "typescript": "^5.7.0",
+    "typescript-eslint": "^8.58.2"
   }
 }

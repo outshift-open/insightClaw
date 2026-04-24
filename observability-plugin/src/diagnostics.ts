@@ -14,8 +14,19 @@ import { getSessionId } from "./session-lifecycle.js";
 // Import from OpenClaw plugin SDK (loaded lazily)
 type DiagnosticEventSubscriber = (listener: (evt: any) => void) => () => void;
 
+export interface MessageProcessedDiagnosticEvent {
+  runtimeSessionIdentities: string[];
+  runtimeSessionKey: string;
+  channel: string;
+  outcome: string;
+  durationMs?: number;
+  reason?: string;
+  error?: string;
+}
+
 let onDiagnosticEvent: DiagnosticEventSubscriber | null = null;
 let sdkLoadAttempted = false;
+let onMessageProcessedObserver: ((evt: MessageProcessedDiagnosticEvent) => void) | null = null;
 
 async function loadSdk(): Promise<void> {
   if (sdkLoadAttempted) return;
@@ -309,6 +320,12 @@ export function setOnDiagnosticEventForTest(subscriber: DiagnosticEventSubscribe
   sdkLoadAttempted = subscriber !== null;
 }
 
+export function setMessageProcessedObserver(
+  observer: ((evt: MessageProcessedDiagnosticEvent) => void) | null
+): void {
+  onMessageProcessedObserver = observer;
+}
+
 /**
  * Register diagnostic event listener to capture model.usage events.
  * Returns unsubscribe function.
@@ -551,6 +568,8 @@ export async function registerDiagnosticsListener(
       }
 
       case "message.processed": {
+        const runtimeSessionIdentities = resolveDiagnosticRuntimeSessionIdentities(evt);
+        const runtimeSessionKey = runtimeSessionIdentities[0] || "unknown";
         const attrs = {
           "openclaw.channel": firstString(evt.channel) || "unknown",
           "openclaw.outcome": firstString(evt.outcome) || "unknown",
@@ -575,6 +594,15 @@ export async function registerDiagnosticsListener(
           errorMessage: evt.outcome === "error"
             ? firstString(evt.error, evt.reason) || "message processing error"
             : undefined,
+        });
+        onMessageProcessedObserver?.({
+          runtimeSessionIdentities,
+          runtimeSessionKey,
+          channel: attrs["openclaw.channel"],
+          outcome: attrs["openclaw.outcome"],
+          durationMs: typeof evt.durationMs === "number" ? evt.durationMs : undefined,
+          reason: firstString(evt.reason),
+          error: firstString(evt.error),
         });
         return;
       }

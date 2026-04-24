@@ -1241,13 +1241,13 @@ export function registerHooks(
           const output = extractLatestAssistantOutput(messages);
           if (typeof output === "string") {
             const historyString = Array.isArray(parentContext?.historyMessages)
-              ? parentContext.historyMessages.map(msg =>
-                typeof msg.content === "string"
-                  ? msg.content
-                  : msg.content
-                    ? JSON.stringify(msg.content)
-                    : msg.summary || ""
-              ).join(" ")
+              ? parentContext.historyMessages.map((msg: any) =>
+                  typeof msg.content === "string"
+                    ? msg.content
+                    : msg.content
+                      ? JSON.stringify(msg.content)
+                      : msg.summary || ""
+                ).join(" ")
               : "";
 
             const noveltyScore = getNoveltyScore(output, parentContext?.systemPrompt + parentContext?.prompt + historyString);
@@ -1265,8 +1265,8 @@ export function registerHooks(
       }
 
       // checking if the agent is still listed in the targetAgentsMap (value), if not, it means the context can be removed
-      var foundInTargetMap = false;
-      for (const [targetAgentId, targetValue] of targetAgentsMap.entries()) {
+      let foundInTargetMap = false;
+      for (const [_, targetValue] of targetAgentsMap.entries()) {
         if (targetValue === agentId + "-" + runtimeSessionKey) {
           foundInTargetMap = true;
           break;
@@ -1754,14 +1754,14 @@ export function registerHooks(
           const parentContext = pendingAgentContextsMap.get(parentCaller);
           if (parentContext) {
             const historyString = Array.isArray(parentContext?.historyMessages)
-                  ? parentContext.historyMessages.map(msg =>
-                      typeof msg.content === "string"
-                        ? msg.content
-                        : msg.content
-                          ? JSON.stringify(msg.content)
-                          : msg.summary || ""
-                    ).join(" ")
-                  : "";
+              ? parentContext.historyMessages.map((msg: any) =>
+                typeof msg.content === "string"
+                  ? msg.content
+                  : msg.content
+                    ? JSON.stringify(msg.content)
+                    : msg.summary || ""
+              ).join(" ")
+              : "";
             const noveltyScore = calculateCoverage(event.prompt, parentContext?.systemPrompt + parentContext?.prompt + historyString);
             histograms.downstreamContextSharing.record(noveltyScore, {
               "gen_ai.agent.id": agentId,

@@ -1226,6 +1226,50 @@ export function registerHooks(
         });
       }
 
+      //if it's in the pending target, compare the context
+      //checking if agent was a target of a spawn, and if so, compare its context with the caller's context
+      const parentCaller = targetAgentsMap.get(agentId);
+      if (parentCaller) {
+        const parentContext = pendingAgentContextsMap.get(parentCaller);
+        if (parentContext) {
+          const output = extractLatestAssistantOutput(messages);
+          if (typeof output === "string") {
+            const historyString = Array.isArray(parentContext?.historyMessages)
+              ? parentContext.historyMessages.map(msg =>
+                typeof msg.content === "string"
+                  ? msg.content
+                  : msg.content
+                    ? JSON.stringify(msg.content)
+                    : msg.summary || ""
+              ).join(" ")
+              : "";
+
+            const noveltyScore = getNoveltyScore(output, parentContext?.systemPrompt + parentContext?.prompt + historyString);
+            histograms.noveltyScore.record(noveltyScore, {
+              "openclaw.agent.id": agentId,
+              "openclaw.session.key": runtimeSessionKey,
+            });
+          } else {
+            logger.warn(`[otel] Unable to compute novelty score for agent=${agentId} due to non-string output`);
+          }
+        } else {
+          logger.warn(`[otel] No spawn info found for pending spawn target agent=${agentId}`);
+        }
+        targetAgentsMap.delete(agentId);
+      }
+
+      // checking if the agent is still listed in the targetAgentsMap (value), if not, it means the context can be removed
+      var foundInTargetMap = false;
+      for (const [targetAgentId, targetValue] of targetAgentsMap.entries()) {
+        if (targetValue === agentId + "-" + runtimeSessionKey) {
+          foundInTargetMap = true;
+          break;
+        }
+      }
+      if (!foundInTargetMap) {
+        pendingAgentContextsMap.delete(agentId + "-" + runtimeSessionKey);
+      }
+
       const forkResult = finalizeAgentTurn(runtimeSessionKey);
       if (forkResult) {
         agentSpan.setAttribute("ioa_observe.fork.id", forkResult.forkId);

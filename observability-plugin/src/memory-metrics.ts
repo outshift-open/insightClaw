@@ -28,9 +28,10 @@ interface RecordMemoryToolMetricsParams {
   toolInput: unknown;
   counters: MemoryCounters;
   histograms: MemoryHistograms;
-  runtimeSessionKey: string;
+  sessionId: string;
   message: any;
   durationMs: number;
+  agentId: string;
 }
 
 interface RecordMemoryFailureRateParams {
@@ -56,20 +57,23 @@ export function recordMemoryToolMetrics({
   toolInput,
   counters,
   histograms,
-  runtimeSessionKey,
+  sessionId,
   message,
   durationMs,
+  agentId,
 }: RecordMemoryToolMetricsParams): void {
   if (toolName === "read") {
     if (isLongTermMemoryAccess(toolInput)) {
       counters.memoryReadEvents.add(1, {
         "tool.name": toolName,
-        "openclaw.session.key": runtimeSessionKey,
+        "session.id": sessionId,
+        "gen_ai.agent.id": agentId,
       });
 
       histograms.memoryReadDuration.record(durationMs, {
         "tool.name": toolName,
-        "openclaw.session.key": runtimeSessionKey,
+        "session.id": sessionId,
+        "gen_ai.agent.id": agentId,
       });
     }
     return;
@@ -79,11 +83,13 @@ export function recordMemoryToolMetrics({
     if (isLongTermMemoryAccess(toolInput)) {
       counters.memoryWriteEvents.add(1, {
         "tool.name": toolName,
-        "openclaw.session.key": runtimeSessionKey,
+        "session.id": sessionId,
+        "gen_ai.agent.id": agentId,
       });
       histograms.memoryWriteDuration.record(durationMs, {
         "tool.name": toolName,
-        "openclaw.session.key": runtimeSessionKey,
+        "session.id": sessionId,
+        "gen_ai.agent.id": agentId,
       });
     }
     return;
@@ -93,11 +99,13 @@ export function recordMemoryToolMetrics({
     if (isLongTermMemoryAccess(toolInput)) {
       counters.memoryEditEvents.add(1, {
         "tool.name": toolName,
-        "openclaw.session.key": runtimeSessionKey,
+        "session.id": sessionId,
+        "gen_ai.agent.id": agentId,
       });
       histograms.memoryEditDuration.record(durationMs, {
         "tool.name": toolName,
-        "openclaw.session.key": runtimeSessionKey,
+        "session.id": sessionId,
+        "gen_ai.agent.id": agentId,
       });
     }
     return;
@@ -124,7 +132,8 @@ export function recordMemoryToolMetrics({
 
   counters.memoryReadEvents.add(1, {
     "tool.name": toolName,
-    "openclaw.session.key": runtimeSessionKey,
+    "session.id": sessionId,
+    "gen_ai.agent.id": agentId,
   });
 
   if (!Array.isArray(results)) {
@@ -134,7 +143,8 @@ export function recordMemoryToolMetrics({
   if (results.length === 0) {
     counters.memorySearchMiss.add(1, {
       "tool.name": toolName,
-      "openclaw.session.key": runtimeSessionKey,
+      "session.id": sessionId,
+      "gen_ai.agent.id": agentId,
     });
     return;
   }
@@ -144,11 +154,13 @@ export function recordMemoryToolMetrics({
 
   histograms.memorySearchFragmentation.record(memoryFragmentation, {
     "tool.name": toolName,
-    "openclaw.session.key": runtimeSessionKey,
+    "session.id": sessionId,
+    "gen_ai.agent.id": agentId,
   });
   counters.memorySearchHit.add(1, {
     "tool.name": toolName,
-    "openclaw.session.key": runtimeSessionKey,
+    "session.id": sessionId,
+    "gen_ai.agent.id": agentId,
   });
 }
 

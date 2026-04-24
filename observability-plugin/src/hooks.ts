@@ -193,9 +193,9 @@ interface ToolStatus {
 /** Map of runtime session key -> active trace context. Cleaned up when the request span closes. */
 const sessionContextMap = new Map<string, SessionTraceContext>();
 const pendingSpawnHandoffs = new Map<string, PendingSpawnHandoff[]>();
-const turnTimers = new Map<string, number>();
-const pendingAgentContextsMap = new Map<string, any>();
-const targetAgentsMap = new Map<string, string>();
+const contextPrepTimers = new Map<string, number>();
+const pendingAgentContextsMap = new Map<string, any>(); //Note: this should be moved to the plugin cache once it will support the feature
+const targetAgentsMap = new Map<string, string>(); //Note: this should be moved to the plugin cache once it will support the feature
 const PENDING_SPAWN_TTL_MS = 60_000;
 const ROOT_COMPLETION_GRACE_MS = 30_000;
 const MAX_CAPTURE_CONTENT_CHARS = 4_096;
@@ -748,7 +748,7 @@ function extractToolOutputPayload(event: any, message: any): unknown {
  * Summarizes the content lengths of an LLM input context, similar to parse_llm_input_context in debug.py.
  * @param context The LLM input context object (parsed from JSON)
  */
-export function parseContext(event: any, histograms: any, sessionKey: any, agentId: any): void {
+export function parseContext(event: any, histograms: any, sessionId: any, agentId: any): void {
   // systemPrompt is a string
   const systemPrompt = event?.systemPrompt;
   const prompt = event?.prompt;
@@ -797,7 +797,7 @@ export function parseContext(event: any, histograms: any, sessionKey: any, agent
 
   histograms.contextSystemSize.record(systemData, { 
     "gen_ai.agent.id": agentId,
-    "openclaw.session.key": sessionKey,
+    "session.id": sessionId,
   });
   
   // not available at the moment
@@ -807,25 +807,25 @@ export function parseContext(event: any, histograms: any, sessionKey: any, agent
   // });
   histograms.contextHistoryMemorySize.record(historyMemory, { 
     "gen_ai.agent.id": agentId,
-    "openclaw.session.key": sessionKey,
+    "session.id": sessionId,
   });
   histograms.contextHistoryToolSize.record(historyTool, { 
     "gen_ai.agent.id": agentId,
-    "openclaw.session.key": sessionKey,
+    "session.id": sessionId,
   });
   histograms.contextHistoryUserSize.record(historyUser, { 
     "gen_ai.agent.id": agentId,
-    "openclaw.session.key": sessionKey,
+    "session.id": sessionId,
   });
 
   histograms.contextHistoryOtherSize.record(historyOthers, { 
     "gen_ai.agent.id": agentId,
-    "openclaw.session.key": sessionKey,
+    "session.id": sessionId,
   });
   
   histograms.contextPromptSize.record(prompt ? new TextEncoder().encode(prompt).length : 0, {
     "gen_ai.agent.id": agentId,
-    "openclaw.session.key": sessionKey,
+    "session.id": sessionId,
   });
 
   // not available at the moment
@@ -1223,6 +1223,7 @@ export function registerHooks(
         histograms.agentTurnDuration.record(durationMs, {
           "gen_ai.response.model": model,
           "gen_ai.agent.id": agentId,
+          "session.id": getSessionId(runtimeSessionKey),
         });
       }
 
@@ -1247,7 +1248,7 @@ export function registerHooks(
             const noveltyScore = getNoveltyScore(output, parentContext?.systemPrompt + parentContext?.prompt + historyString);
             histograms.noveltyScore.record(noveltyScore, {
               "gen_ai.agent.id": agentId,
-              "openclaw.session.key": runtimeSessionKey,
+              "session.id":  getSessionId(runtimeSessionKey),
             });
           } else {
             logger.warn(`[otel] Unable to compute novelty score for agent=${agentId} due to non-string output`);
@@ -1479,7 +1480,7 @@ export function registerHooks(
         const agentId = event?.agentId || ctx?.agentId || "unknown";
         const model = event?.model || "unknown";
 
-        turnTimers.set(agentId, Date.now()); // Would it be possible to have parallel instances of the same agent and same id?
+        contextPrepTimers.set(agentId, Date.now()); // Would it be possible to have parallel instances of the same agent and same id?
 
         let sessionCtx = getSessionTraceContext(event, ctx);
         if (sessionCtx?.pendingRootRuntimeSessionIdentities && !sessionCtx.agentSpan) {
@@ -1702,13 +1703,13 @@ export function registerHooks(
           ? touchSession(runtimeSessionKey, parentContext)
           : undefined;
 
-        const startTime = turnTimers.get(agentId);
+        const startTime = contextPrepTimers.get(agentId);
         if (startTime) {
           const tpc = Date.now() - startTime;
-          turnTimers.delete(agentId); // Cleanup
+          contextPrepTimers.delete(agentId); // Cleanup
           histograms.contextPreparationDuration.record(tpc, {
             "gen_ai.agent.id": agentId,
-            "openclaw.session.key": runtimeSessionKey,
+            "session.id": sessionId,
           });
         } else {
           logger.warn?.(`[otel] No start time found for agent=${agentId} in llm_input hook — cannot record context preparation time`);
@@ -1740,7 +1741,7 @@ export function registerHooks(
           agentId,
         });
         logger.info?.(`[otel] LLM span started: model=${model}, callId=${callId}, runtimeSession=${runtimeSessionKey}`);
-        parseContext(event, histograms, runtimeSessionKey, agentId);
+        parseContext(event, histograms, sessionId, agentId);
         pendingAgentContextsMap.set(agentId+"-"+runtimeSessionKey, event);
 
         const parentCaller = targetAgentsMap.get(agentId);
@@ -1759,7 +1760,7 @@ export function registerHooks(
             const noveltyScore = calculateCoverage(event.prompt, parentContext?.systemPrompt + parentContext?.prompt + historyString);
             histograms.downstreamContextSharing.record(noveltyScore, {
               "gen_ai.agent.id": agentId,
-              "openclaw.session.key": runtimeSessionKey,
+              "session.id": sessionId,
             });
           } else {
             logger.warn(`[otel] Unable to compute downstreamContextSharing for agent=${agentId} because parent context is missing for parentCaller=${parentCaller}`);
@@ -1879,7 +1880,8 @@ export function registerHooks(
         // Record metric
         counters.toolCalls.add(1, {
           "tool.name": toolName,
-          "openclaw.session.key": runtimeSessionKey,
+          "session.id": getSessionId(runtimeSessionKey),
+          "gen_ai.agent.id": agentId,
         });
 
         // Get parent context - prefer agent turn span, fall back to root

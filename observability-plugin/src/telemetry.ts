@@ -100,6 +100,12 @@ export interface OtelHistograms {
   contextPromptSize: Histogram;
   /** Size of other context in bytes */
   //contextOtherSize: Histogram; not available at the moment
+  /** Duration of context preparation in ms */
+  contextPreparationDuration: Histogram;
+  /** Novelty score of sub-agent output compared to parent context */
+  noveltyScore: Histogram;
+  /** Downstream context sharing score */
+  downstreamContextSharing: Histogram;
 }
 
 export interface OtelGauges {
@@ -301,6 +307,18 @@ export function initTelemetry(config: OtelObservabilityConfig, logger: any): Tel
     contextPromptSize: meter.createHistogram("openclaw.context.prompt_size", {
         description: "Size of prompt context in bytes",
         unit: "bytes",
+    }),
+    contextPreparationDuration: meter.createHistogram("openclaw.context.preparation_duration", {
+        description: "Duration of context preparation in ms",
+        unit: "ms",
+    }),
+    noveltyScore: meter.createHistogram("openclaw.agent.novelty_score", {
+        description: "Novelty score of sub-agent output compared to parent context",
+        unit: "1",
+    }),
+    downstreamContextSharing: meter.createHistogram("openclaw.agent.downstream_context_sharing", {
+        description: "Downstream context sharing score",
+        unit: "1",
     }),
   };
 

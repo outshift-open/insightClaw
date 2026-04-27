@@ -430,12 +430,29 @@ export function getSessionEndTime(sessionId: string): number | null {
 /**
  * Returns all the span records for a given session UUID and span type (spanName)
  */
-export function getSpansByType(sessionId: string, spanName: string): SpanRecord[] {
-  const records = bySession.get(sessionId);
-  if (!records) {
+export function getSpansByType(spanName: string, startTime?: number, endTime?: number, sessionId?: string): SpanRecord[] {
+  let records: SpanRecord[] = [];
+  if (sessionId){
+    records = bySession.get(sessionId) ?? [];
+    if (!records) {
+      return [];
+    }
+  } else if (startTime && endTime) { //Note: this assumes that all sessions are related to the main one. This is a strong assumption which means that all the sessions related to top-level agents are related to the current session
+    // get all the records with startAt >= startTime and recordedAt <= endTime
+    for (const sessionRecords of bySession.values()) {
+      for (const record of sessionRecords) {
+        const recordStart = record.startAt ?? record.recordedAt;
+        if (recordStart >= startTime && record.recordedAt <= endTime) {
+          records.push(record);
+        }
+      }
+    }
+  } else{
+    loggerRef.warn?.(`[otel:span-cache] getSpansByType called with insufficient parameters: spanName=${spanName} sessionId=${sessionId} startTime=${startTime} endTime=${endTime}`);
     return [];
   }
-   console.log(`DEBUG filtering for name ${spanName} in session ${sessionId}`);
+
+  console.log(`DEBUG filtering for name ${spanName} in session ${sessionId}`);
   for (const r of records.filter(record => record.spanName === spanName)) {
     console.log(`DEBUG getSpansByType: record ${formatRecord(r)} with spanName ${r.spanName} and sessionId ${r.sessionId}`);
   }

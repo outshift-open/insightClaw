@@ -18,7 +18,7 @@ import { flushBySessionKey, getSessionEndTime, getSessionStartTime, getSpansByTy
 // ── Configuration ──────────────────────────────────────────────────
 
 /** Default idle timeout before emitting session.end (ms) */
-const DEFAULT_IDLE_TIMEOUT_MS = 2 * 60 * 1000; // 5 minutes
+const DEFAULT_IDLE_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
 
 /** How often the watcher checks for idle sessions (ms) */
 const WATCHER_INTERVAL_MS = 30_000; // 30 seconds
@@ -347,7 +347,8 @@ export function recordParallelisationScore(runtimeSessionKey: string, histograms
   const sessionDurationTillNow = endTime - startTime;
 
   console.log("DEBUG Session start time for session ", sessionId, ": startTime ", startTime);
-  const spans = getSpansByType(sessionId,"openclaw.agent.turn");
+  //TODO We need to find another solution. This would be done also for the secondary top-level agents. Also, what does happen when the secondary agents have also sub-agents?
+  const spans = getSpansByType("openclaw.agent.turn", startTime, endTime, undefined);
   console.log("DEBUG Found spans for session ", sessionId, ": ", spans.length);
 
     const durationKeys = [

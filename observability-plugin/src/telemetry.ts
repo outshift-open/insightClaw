@@ -107,6 +107,8 @@ export interface OtelHistograms {
   noveltyScore: Histogram;
   /** Downstream context sharing score */
   downstreamContextSharing: Histogram;
+  /** Parallelisation score */
+  parallelisationScore: Histogram;
 }
 
 export interface OtelGauges {
@@ -319,6 +321,10 @@ export function initTelemetry(config: OtelObservabilityConfig, logger: any): Tel
     }),
     downstreamContextSharing: meter.createHistogram("openclaw.agent.downstream_context_sharing", {
         description: "Downstream context sharing score",
+        unit: "1",
+    }),
+    parallelisationScore: meter.createHistogram("openclaw.session.parallelisation_score", {
+        description: "Parallelisation score",
         unit: "1",
     }),
   };

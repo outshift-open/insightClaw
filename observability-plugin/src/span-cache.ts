@@ -26,6 +26,7 @@ export interface SpanRecord {
   /** SpanStatusCode recorded just before span.end() — 0=UNSET, 1=OK, 2=ERROR */
   statusCode?: number;
   recordedAt: number;
+  startAt?: number;
 }
 
 // ── Configuration ────────────────────────────────────────────────────
@@ -221,6 +222,8 @@ export function recordSpan(record: SpanRecord): void {
     return;
   }
 
+  record.startAt = record.recordedAt - getSpanDuration(record)
+
   const { traceId, sessionKey, sessionId } = record;
 
   const sessionKeyEvicted = appendCapped(bySessionKey, sessionKey, record, maxRecordsPerSession);
@@ -387,4 +390,76 @@ function sweepStale(): void {
   }
 
   logCacheSnapshot("maintenance.1m");
+}
+
+
+/**
+ * Returns the first timestamp available for a given session UUID * 
+ */
+export function getSessionStartTime(sessionId: string): number | null {
+  const records = bySession.get(sessionId);
+  //returning the earliest startAt timestamp available for the session
+  if (!records || records.length === 0) {
+    return null;
+  }
+
+  return records.reduce((earliest, record) => {    const recordStart = record.startAt ?? record.recordedAt;
+    return recordStart < earliest ? recordStart : earliest;
+  }, records[0].startAt ?? records[0].recordedAt);
+
+  //// Assuming records are added in chronological order, the first record's timestamp is the start time
+  //console.log(`DEBUG getSessionStartTime for session ${sessionId}: first record at ${records[0].recordedAt}, duration=${getSpanDuration(records[0])}ms`);
+  //return records[0].recordedAt - getSpanDuration(records[0]);
+}
+
+/**
+ * Returns the last timestamp available for a given session UUID * 
+ */
+export function getSessionEndTime(sessionId: string): number | null {
+  const records = bySession.get(sessionId);
+  //returning the latest endAt timestamp available for the session
+  if (!records || records.length === 0) {
+    return null;
+  }
+
+  return records.reduce((latest, record) => {    const recordEnd = record.recordedAt;
+    return recordEnd > latest ? recordEnd : latest;
+  }, records[0].recordedAt);
+}
+
+/**
+ * Returns all the span records for a given session UUID and span type (spanName)
+ */
+export function getSpansByType(sessionId: string, spanName: string): SpanRecord[] {
+  const records = bySession.get(sessionId);
+  if (!records) {
+    return [];
+  }
+   console.log(`DEBUG filtering for name ${spanName} in session ${sessionId}`);
+  for (const r of records.filter(record => record.spanName === spanName)) {
+    console.log(`DEBUG getSpansByType: record ${formatRecord(r)} with spanName ${r.spanName} and sessionId ${r.sessionId}`);
+  }
+  return records.filter(record => record.spanName === spanName);
+}
+
+
+/**
+ * Returns the duration of a given span record in milliseconds.
+ */
+function getSpanDuration(record: SpanRecord): number {
+  // Depending on the span type, duration attribute changes
+  const keys = [
+    "otel.span.duration_ms",
+    "openclaw.request.duration_ms",
+    "openclaw.agent.duration_ms",
+    "openclaw.tool.duration_ms"
+  ];
+  console.log(`DEBUG getSpanDuration for record ${formatRecord(record)}: checking keys ${keys.join(", ")}`);
+  for (const key of keys) {
+    const duration = record.attributes[key];
+    if (typeof duration === "number") {
+      return duration;
+    }
+  }
+  return -1;
 }

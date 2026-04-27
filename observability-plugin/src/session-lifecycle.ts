@@ -13,12 +13,12 @@ import {
   ATTR_OBSERVE_SPAN_KIND,
   ObserveSpanKind,
 } from "./observe-attributes.js";
-import { flushBySessionKey, startSpanCache, stopSpanCache } from "./span-cache.js";
+import { flushBySessionKey, getSessionEndTime, getSessionStartTime, getSpansByType, startSpanCache, stopSpanCache } from "./span-cache.js";
 
 // ── Configuration ──────────────────────────────────────────────────
 
 /** Default idle timeout before emitting session.end (ms) */
-const DEFAULT_IDLE_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
+const DEFAULT_IDLE_TIMEOUT_MS = 2 * 60 * 1000; // 5 minutes
 
 /** How often the watcher checks for idle sessions (ms) */
 const WATCHER_INTERVAL_MS = 30_000; // 30 seconds
@@ -78,6 +78,7 @@ function deleteSessionAliases(session: SessionActivity): void {
  */
 export function startSessionWatcher(
   tracer: Tracer,
+  histograms: any,
   logger: any,
   idleTimeout?: number,
   options?: { enableSpanCache?: boolean; spanCacheVerboseLogs?: boolean }
@@ -94,7 +95,7 @@ export function startSessionWatcher(
   }
 
   watcherTimer = setInterval(() => {
-    checkIdleSessions();
+    checkIdleSessions(histograms);
   }, WATCHER_INTERVAL_MS);
 
   // Emit session.end for all remaining sessions on process exit
@@ -261,11 +262,13 @@ export function getSessionSpanContext(runtimeSessionKey: string): import("@opent
  * Explicitly end a session associated with a runtime session key.
  * Prevents duplicate session.end emissions.
  */
-export function endSession(runtimeSessionKey: string): void {
+export function endSession(runtimeSessionKey: string, histograms: any): void {
   const session = sessions.get(runtimeSessionKey);
   if (!session) {
     return;
   }
+  //computing end of session scores 
+  recordEndOfSessionMetrics(runtimeSessionKey,histograms);
 
   detachRuntimeSessionKey(runtimeSessionKey, session);
   flushBySessionKey(runtimeSessionKey);
@@ -288,11 +291,14 @@ export function endSession(runtimeSessionKey: string): void {
 /**
  * Remove a session without emitting session.end (e.g., normal cleanup).
  */
-export function removeSession(runtimeSessionKey: string): void {
+export function removeSession(runtimeSessionKey: string, histograms: any): void {
   const session = sessions.get(runtimeSessionKey);
   if (!session) {
     return;
   }
+
+  //computing end of session scores
+  recordEndOfSessionMetrics(runtimeSessionKey, histograms);
 
   detachRuntimeSessionKey(runtimeSessionKey, session);
   if (session.runtimeSessionKeys.size === 0) {
@@ -311,9 +317,66 @@ export function activeSessionCount(): number {
   return count;
 }
 
+
+/**
+ * Compute all the derived metrics on the session that just terminated 
+ */
+export function recordEndOfSessionMetrics(runtimeSessionKey: string, histograms: any): void {
+  // Note: change here if we want a different 
+  recordParallelisationScore(runtimeSessionKey, histograms);
+}
+
+export function recordParallelisationScore(runtimeSessionKey: string, histograms: any): void {
+  const sessionId = getSessionId(runtimeSessionKey);
+  if (!sessionId) {
+    loggerRef?.warn?.(`[otel:session] Cannot record parallelisation score, session not found for runtimeSessionKey=${runtimeSessionKey}`);
+    return;
+  }
+  console.log("DEBUG Recording parallelisation score for session ", sessionId);
+  const startTime = getSessionStartTime(sessionId);
+  if (!startTime) {
+    loggerRef?.warn?.(`[otel:session] Cannot record parallelisation score, session not found: session=${sessionId}`);
+    return;
+  }
+
+  const endTime = getSessionEndTime(sessionId);
+  if (!endTime) {
+    loggerRef?.warn?.(`[otel:session] Cannot record parallelisation score, session not ended: session=${sessionId}`);
+    return;
+  }
+  const sessionDurationTillNow = endTime - startTime;
+
+  console.log("DEBUG Session start time for session ", sessionId, ": startTime ", startTime);
+  const spans = getSpansByType(sessionId,"openclaw.agent.turn");
+  console.log("DEBUG Found spans for session ", sessionId, ": ", spans.length);
+
+    const durationKeys = [
+      "openclaw.request.duration_ms",
+      "openclaw.agent.duration_ms",
+      "openclaw.tool.duration_ms"
+    ];
+  
+
+  let spansDuration = 0
+  for (const r of spans) {
+    for (const key of durationKeys) {
+      const duration = r.attributes[key];
+      if (typeof duration === "number") {
+        console.log(`DEBUG Found duration attribute ${key} with value ${duration}ms`);
+        spansDuration += duration;
+        break;
+      }
+    }
+  }
+  const score = spansDuration / sessionDurationTillNow;
+  console.log("DEBUG Parallelisation score for runtimeSessionKey ", runtimeSessionKey, ": ", score, " (spansDuration=", spansDuration, "ms, sessionDurationTillNow=", sessionDurationTillNow, "ms)");
+ 
+  histograms.parallelisationScore.record(score, { "openclaw.session.key": runtimeSessionKey });
+}
+
 // ── Internal ───────────────────────────────────────────────────────
 
-function checkIdleSessions(): void {
+function checkIdleSessions(histograms: any): void {
   const now = Date.now();
   let idleCount = 0;
   for (const session of getUniqueSessions()) {
@@ -324,6 +387,8 @@ function checkIdleSessions(): void {
         `[otel:session] Session idle timeout: session=${session.sessionId}, runtimeSession=${session.primaryRuntimeSessionKey}, ` +
         `idleFor=${Math.round(idleMs / 1000)}s (threshold=${Math.round(idleTimeoutMs / 1000)}s)`
       );
+      //computing end of session scores
+      recordEndOfSessionMetrics(session.primaryRuntimeSessionKey,histograms);
       emitSessionEnd(session);
       for (const runtimeSessionKey of session.runtimeSessionKeys) {
         flushBySessionKey(runtimeSessionKey);

@@ -2319,7 +2319,7 @@ export function registerHooks(
             "command.source": event?.context?.commandSource || "unknown",
           });
           // End session lifecycle tracking on reset
-          endSession(runtimeSessionKey);
+          endSession(runtimeSessionKey, histograms);
           logger.info(`[otel] Session ended via command:${action}: runtimeSession=${runtimeSessionKey}`);
         }
 

@@ -159,6 +159,7 @@ test("registerHooks wires lifecycle hooks that create and complete request spans
           { role: "toolResult", toolName: "memory_get", content: llmInputToolResult },
           { role: "toolResult", toolName: "memory_get", content: llmInputToolResult },
           { role: "toolResult", toolName: "write", content: llmInputToolResult },
+          { role: "toolResult", toolName: "compactionSummary", content: llmInputToolResult }
         ]
        },
       hookCtx
@@ -268,7 +269,7 @@ test("registerHooks wires lifecycle hooks that create and complete request spans
     assert.equal(telemetry.histograms.contextHistoryUserSize.calls[0]?.value, new TextEncoder().encode(llmInputUserMessage).length);
     assert.equal(telemetry.histograms.contextHistoryToolSize.calls[0]?.value, new TextEncoder().encode(llmInputToolResult).length);
     assert.equal(telemetry.histograms.contextHistoryOtherSize.calls[0]?.value, new TextEncoder().encode(llmInputHistoryOtherMessage).length);
-    assert.equal(telemetry.histograms.contextHistoryMemorySize.calls[0]?.value, 2 * new TextEncoder().encode(llmInputToolResult).length);
+    assert.equal(telemetry.histograms.contextHistoryMemorySize.calls[0]?.value, 3 * new TextEncoder().encode(llmInputToolResult).length);
     assert.equal(telemetry.histograms.contextPromptSize.calls[0]?.value, new TextEncoder().encode(llmInputPrompt).length);
 
   } finally {

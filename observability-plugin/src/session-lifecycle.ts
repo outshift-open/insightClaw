@@ -262,13 +262,15 @@ export function getSessionSpanContext(runtimeSessionKey: string): import("@opent
  * Explicitly end a session associated with a runtime session key.
  * Prevents duplicate session.end emissions.
  */
-export function endSession(runtimeSessionKey: string, histograms: any): void {
+export function endSession(runtimeSessionKey: string, histograms?: any): void {
   const session = sessions.get(runtimeSessionKey);
   if (!session) {
     return;
   }
   //computing end of session scores 
-  recordEndOfSessionMetrics(runtimeSessionKey,histograms);
+  if (histograms) {
+    recordEndOfSessionMetrics(runtimeSessionKey, histograms);
+  }
 
   detachRuntimeSessionKey(runtimeSessionKey, session);
   flushBySessionKey(runtimeSessionKey);
@@ -291,15 +293,16 @@ export function endSession(runtimeSessionKey: string, histograms: any): void {
 /**
  * Remove a session without emitting session.end (e.g., normal cleanup).
  */
-export function removeSession(runtimeSessionKey: string, histograms: any): void {
+export function removeSession(runtimeSessionKey: string, histograms?: any): void {
   const session = sessions.get(runtimeSessionKey);
   if (!session) {
     return;
   }
 
-  //computing end of session scores
-  recordEndOfSessionMetrics(runtimeSessionKey, histograms);
-
+  if (histograms) {
+    //computing end of session scores
+    recordEndOfSessionMetrics(runtimeSessionKey, histograms);
+  }
   detachRuntimeSessionKey(runtimeSessionKey, session);
   if (session.runtimeSessionKeys.size === 0) {
     session.ended = true;
@@ -377,7 +380,7 @@ export function recordParallelisationScore(runtimeSessionKey: string, histograms
 
 // ── Internal ───────────────────────────────────────────────────────
 
-function checkIdleSessions(histograms: any): void {
+function checkIdleSessions(histograms?: any): void {
   const now = Date.now();
   let idleCount = 0;
   for (const session of getUniqueSessions()) {
@@ -388,8 +391,10 @@ function checkIdleSessions(histograms: any): void {
         `[otel:session] Session idle timeout: session=${session.sessionId}, runtimeSession=${session.primaryRuntimeSessionKey}, ` +
         `idleFor=${Math.round(idleMs / 1000)}s (threshold=${Math.round(idleTimeoutMs / 1000)}s)`
       );
-      //computing end of session scores
-      recordEndOfSessionMetrics(session.primaryRuntimeSessionKey,histograms);
+      if(histograms) {
+        //computing end of session scores
+        recordEndOfSessionMetrics(session.primaryRuntimeSessionKey,histograms);
+      }
       emitSessionEnd(session);
       for (const runtimeSessionKey of session.runtimeSessionKeys) {
         flushBySessionKey(runtimeSessionKey);

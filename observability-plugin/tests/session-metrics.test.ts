@@ -32,43 +32,12 @@ function createTelemetry() {
   return {
     tracer: new MockTracer(),
     meter: {},
-    counters: {
-      llmRequests: counter(),
-      llmErrors: counter(),
-      tokensTotal: counter(),
-      tokensPrompt: counter(),
-      tokensCompletion: counter(),
-      toolCalls: counter(),
-      toolErrors: counter(),
-      sessionResets: counter(),
-      messagesReceived: counter(),
-      messagesSent: counter(),
-      memorySearchMiss: counter(),
-      memorySearchHit: counter(),
-      memoryWriteEvents: counter(),
-      memoryReadEvents: counter(),
-      memoryEditEvents: counter(),
-    },
+    counters: {},
     histograms: {
-      llmDuration: histogram(),
-      toolDuration: histogram(),
-      agentTurnDuration: histogram(),
-      memoryFailureRate: histogram(),
-      memorySearchFragmentation: histogram(),
-      memoryReadDuration: histogram(),
-      memoryWriteDuration: histogram(),
-      memoryEditDuration: histogram(),
-      contextSystemSize: histogram(),
-      contextHistoryMemorySize: histogram(),
-      contextHistoryToolSize: histogram(),
-      contextHistoryUserSize: histogram(),
-      contextHistoryOtherSize: histogram(),
-      contextPromptSize: histogram(),
       parallelisationScore: histogram(),
+      repetitionScore: histogram(),
     },
-    gauges: {
-      activeSessions: counter(),
-    },
+    gauges: {},
     shutdown: async () => {},
   };
 }
@@ -89,11 +58,8 @@ test("session parallelisation score", () => {
   globalThis.setInterval = ((() => ({ unref() {} })) as unknown) as typeof setInterval;
 
   startSessionWatcher(tracer as any,logger, 10_000);
-
-  console.log("Testing session parallelisation score...");
   const telemetry = createTelemetry();
   startSpanCache({ enabled: true, logger: logger, verboseLogs: true});
-  console.log("Cache started");
 
   const notMainSessionId = touchSession("non-main-session-1", context.active(), "workflow-a", undefined, "webchat");
 
@@ -106,7 +72,6 @@ test("session parallelisation score", () => {
   // Use fixed timestamps to simulate time passing
   const baseTime = Date.now();
 
-  console.log("Recording spans...");
   recordSpan({
     traceId,
     spanId:"span-id-000",
@@ -174,6 +139,126 @@ test("session parallelisation score", () => {
   endSession("non-main-session-1",telemetry.histograms);
 
   assert.equal(telemetry.histograms.parallelisationScore.calls[0]?.value, 3/2);
+  
+  stopSessionWatcher();
+  stopSpanCache();
+  
+  // Restore original setInterval
+  globalThis.setInterval = originalSetInterval;
+});
+
+
+
+test("session loop score", () => {
+  // Ensure clean state before starting
+  stopSessionWatcher();
+  stopSpanCache();
+  
+  const tracer = new MockTracer();
+  const logger =  createLogger();
+  
+  // Mock setInterval to prevent actual timers from running
+  const originalSetInterval = globalThis.setInterval;
+  globalThis.setInterval = ((() => ({ unref() {} })) as unknown) as typeof setInterval;
+
+  startSessionWatcher(tracer as any,logger, 10_000);
+
+  const telemetry = createTelemetry();
+  startSpanCache({ enabled: true, logger: logger, verboseLogs: true});
+
+  const sessionId = touchSession("agent-session-1", context.active(), "workflow-a", undefined, "webchat");
+  const sessionKey = "session-1";
+  const traceId = "trace-id-123";
+  const spanKind = "internal";
+  
+  // Use fixed timestamps to simulate time passing
+  const baseTime = Date.now();
+  recordSpan({
+    traceId,
+    spanId:"span-id-000",
+    spanName: "openclaw.llm.call",
+    spanKind,
+    sessionKey,
+    sessionId,
+    attributes: {"gen_ai.agent.id": "agent01", "openclaw.entity.input": "The payment service is experiencing a critical incident with p99 latency at 4200ms and an error rate of 0.12. The checkout flow is impacted. This suggests database pressure. Investigate for lock contention, slow queries, connection pool saturation, or other database-level issues."},
+    statusCode: 0,
+    recordedAt: baseTime,
+  });
+
+  recordSpan({
+    traceId,
+    spanId:"span-id-001",
+    spanName: "openclaw.llm.call",
+    spanKind,
+    sessionKey,
+    sessionId,
+    attributes: {"gen_ai.agent.id": "agent01", "openclaw.entity.input": "The payment service is undergoing a major incident with p99 latency reaching 4200ms and an error rate of 0.12. The checkout process is affected. This indicates possible database stress. Check for lock contention, slow-running queries, connection pool exhaustion, or other database-related problems."},
+    statusCode: 0,
+    recordedAt: baseTime,
+  });
+  
+  recordSpan({
+    traceId,
+    spanId:"span-id-001",
+    spanName: "openclaw.llm.call",
+    spanKind,
+    sessionKey,
+    sessionId,
+    attributes: {"gen_ai.agent.id": "agent01", "openclaw.entity.input": "Paris is a city in France."},
+    statusCode: 0,
+    recordedAt: baseTime,
+  });
+
+  recordSpan({
+    traceId,
+    spanId:"span-id-002",
+    spanName: "openclaw.llm.call",
+    spanKind,
+    sessionKey,
+    sessionId,
+    attributes: {"gen_ai.agent.id": "agent02", "openclaw.entity.input": "value2"},
+    statusCode: 0,
+    recordedAt: baseTime + 1000, // 1 second later
+  });
+
+  recordSpan({
+    traceId,
+    spanId:"span-id-003",
+    spanName: "openclaw.llm.call",
+    spanKind,
+    sessionKey,
+    sessionId,
+    attributes: {"gen_ai.agent.id": "agent03", "openclaw.entity.input": "value2"},
+    statusCode: 0,
+    recordedAt: baseTime + 1000, // 1 second later
+  });
+
+  recordSpan({
+    traceId,
+    spanId:"span-id-003-missing-attribute",
+    spanName: "openclaw.llm.call",
+    spanKind,
+    sessionKey,
+    sessionId,
+    attributes: {"gen_ai.agent.id": "agent03"},
+    statusCode: 0,
+    recordedAt: baseTime + 1000, // 1 second later
+  });
+
+  recordSpan({
+    traceId,
+    spanId:"span-id-003-wrong-type",
+    spanName: "openclaw.llm.turn",
+    spanKind,
+    sessionKey,
+    sessionId,
+    attributes: {"gen_ai.agent.id": "agent03", "openclaw.entity.input": "value2"},
+    statusCode: 0,
+    recordedAt: baseTime + 1000, // 1 second later
+  });
+
+  endSession("agent-session-1",telemetry.histograms);
+  assert.ok(Math.abs(telemetry.histograms.repetitionScore.calls[0]?.value - 0.4) < 0.05);
   
   stopSessionWatcher();
   stopSpanCache();

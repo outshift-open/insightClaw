@@ -14,6 +14,7 @@ import {
   ObserveSpanKind,
 } from "./observe-attributes.js";
 import { flushBySessionKey, getSessionEndTime, getSessionStartTime, getSpansByType, startSpanCache, stopSpanCache } from "./span-cache.js";
+import { getJaccardSimilarity } from "./context-analysis.js";
 
 // ── Configuration ──────────────────────────────────────────────────
 
@@ -338,10 +339,87 @@ export function activeSessionCount(): number {
  * Compute all the derived metrics on the session that just terminated 
  */
 export function recordEndOfSessionMetrics(runtimeSessionKey: string, histograms: any): void {
-  // Note: change here if we want a different 
   recordParallelisationScore(runtimeSessionKey, histograms);
+  recordRepetitionScore(runtimeSessionKey, histograms);
 }
 
+
+/**
+ * Computes the repetition score: given all the LLM calls (openclaw.llm.call) in a session (including sub-agents and other top-level agents),
+ * we compute the Jaccard similarity of the prompts between each pair of calls for the same agent
+ * The final score reflects the presence of repetition in the prompts for the same agent
+ */
+function recordRepetitionScore(runtimeSessionKey: string, histograms: any): void {
+  const sessionId = getSessionId(runtimeSessionKey);
+  if (!sessionId) {
+    loggerRef?.warn?.(`[otel:session] Cannot record repetition score, session not found for runtimeSessionKey=${runtimeSessionKey}`);
+    return;
+  }
+
+  const session = sessions.get(runtimeSessionKey);
+  if (!session) {
+    loggerRef?.warn?.(`[otel:session] Cannot record repetition score, session not found for sessionId=${sessionId}`);
+    return;
+  }
+
+  if (!session.isRoot) {
+    // we do not compute the score for a secondary agent
+    return;
+  }
+
+  const startTime = getSessionStartTime(sessionId);
+  if (!startTime) {
+    loggerRef?.warn?.(`[otel:session] Cannot record repetition score, session not found: session=${sessionId}`);
+    return;
+  }
+
+  const endTime = getSessionEndTime(sessionId);
+  if (!endTime) {
+    loggerRef?.warn?.(`[otel:session] Cannot record repetition score, session not ended: session=${sessionId}`);
+    return;
+  }
+
+  // Getting all spans of type llm call
+  const calls = getSpansByType("openclaw.llm.call", startTime, endTime, undefined);
+
+  const callsByAgent = new Map<string, Array<{ prompt: string }>>();    
+  //TODO need to filter out system calls, heartbeat ... (once we have links between top-level agents, we can leverage those to filter)
+  for (const call of calls) {
+    const agentId = call.attributes["gen_ai.agent.id"] as string | undefined;
+    const prompt = call.attributes["openclaw.entity.input"] as string | undefined;      
+    if (!agentId || !prompt) continue;
+      
+    if (!callsByAgent.has(agentId)) {
+      callsByAgent.set(agentId, []);
+    }
+    loggerRef?.debug?.(`[otel:session] Recording call for agent ${agentId} with prompt: ${prompt}`);
+    callsByAgent.get(agentId)!.push({ prompt });
+  }
+
+  const scores = new Array<number>();
+
+  for (const [agentId, agentCalls] of callsByAgent) {
+    if (agentCalls.length < 2) continue;
+    //for each pair of call, compute the getJaccardSimilarity of the prompt
+    let agentScores = new Array<number>();
+    for (let i = 0; i < agentCalls.length; i++) {
+      for (let j = i + 1; j < agentCalls.length; j++) {
+        const similarity = getJaccardSimilarity(agentCalls[i].prompt, agentCalls[j].prompt);
+        loggerRef?.debug?.(`[otel:session] Jaccard similarity: session=${sessionId}, agent=${agentId}, similarity=${similarity}`);
+        agentScores.push(similarity);
+      }
+    }
+    scores.push(Math.max(...agentScores));
+  }
+
+  let finalScore = 0;
+  if (scores.length > 0) {
+    finalScore = scores.reduce((a, b) => a + b, 0) / scores.length;
+  }
+  loggerRef?.info?.(`[otel:session] Final repetition score for session ${sessionId}-${runtimeSessionKey}: ${finalScore}`);
+
+  histograms.repetitionScore.record(finalScore, { "openclaw.session.key": runtimeSessionKey });
+}
 
 /** 
  * The score is computed only for a session labelled as root

@@ -109,6 +109,8 @@ export interface OtelHistograms {
   downstreamContextSharing: Histogram;
   /** Parallelisation score */
   parallelisationScore: Histogram;
+  /** Repetition score */
+  repetitionScore: Histogram;
 }
 
 export interface OtelGauges {
@@ -325,6 +327,10 @@ export function initTelemetry(config: OtelObservabilityConfig, logger: any): Tel
     }),
     parallelisationScore: meter.createHistogram("openclaw.session.parallelisation_score", {
         description: "Parallelisation score",
+        unit: "1",
+    }),
+    repetitionScore: meter.createHistogram("openclaw.session.repetition_score", {
+        description: "Repetition score",
         unit: "1",
     }),
   };

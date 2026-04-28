@@ -1310,6 +1310,7 @@ export function registerHooks(
     unregisterActiveAgentSpan(runtimeSessionIdentities);
     cleanupHandoff(runtimeSessionKey);
     cleanupForkJoin(runtimeSessionKey);
+    // Clear the legacy single-global fallback.
     (globalThis as any).__OPENCLAW_ACTIVE_AGENT_CONTEXT = undefined;
 
     if (!sessionCtx || sessionCtx.rootSpan === sessionCtx.agentSpan) {
@@ -1548,13 +1549,23 @@ export function registerHooks(
 
         markLifecycleEvent(sessionCtx, "before_agent_start");
 
-        if (sessionCtx?.agentSpan) {
+        if (sessionCtx?.agentSpan && sessionCtx.runtimeSessionKey === runtimeSessionKey) {
           const activeAgentId = sessionCtx.agentId || "unknown";
           logger.warn?.(
             `[otel] Duplicate before_agent_start ignored: runtimeSession=${runtimeSessionKey}, ` +
             `activeAgent=${activeAgentId}, incomingAgent=${agentId}`
           );
           return undefined;
+        }
+
+        // If this is a different agent running under a shared identity (e.g.
+        // same conversationId but different sessionKey), create a fresh context
+        // rather than attaching to the existing one.
+        if (sessionCtx?.agentSpan && sessionCtx.runtimeSessionKey !== runtimeSessionKey) {
+          sessionCtx = undefined;
+          if (!sessionContextMap.has(runtimeSessionKey)) {
+            sessionCtx = startRootSpan(tracer, event, ctx, config, logger, counters);
+          }
         }
 
         const parentContext = sessionCtx?.rootContext || context.active();
@@ -1629,9 +1640,11 @@ export function registerHooks(
 
         const agentContext = trace.setSpan(parentContext, agentSpan);
 
-        // Expose the agent context globally so AgentAwareContextManager in preload.mjs
-        // can return it when context.active() has no span (broken async chain between
-        // hook dispatch and the auto-instrumented Anthropic/OpenAI call).
+        // Store the agent context so llm_input can call enterWith() in the
+        // correct async execution context (the one that actually makes the
+        // LLM call). before_agent_start fires in a separate async chain from
+        // the LLM call, so enterWith() here would not propagate.
+        // Legacy single-global fallback for runtimes without preload.mjs.
         (globalThis as any).__OPENCLAW_ACTIVE_AGENT_CONTEXT = agentContext;
 
         // Store agent span context for tool spans
@@ -1770,6 +1783,18 @@ export function registerHooks(
           } else {
             logger.warn(`[otel] Unable to compute downstreamContextSharing for agent=${agentId} because parent context is missing for parentCaller=${parentCaller}`);
           }
+        }
+
+        // llm_input is SYNCHRONOUS and fires in the same async execution frame
+        // as the actual anthropic/openai messages.create() call that follows.
+        // enterWith() here correctly propagates the agent context into the
+        // Promise chain created by messages.create(), so OpenLLMetry's
+        // auto-instrumented span picks up the right parentSpanId even when
+        // multiple agents run in parallel (each agent's LLM call has its own
+        // executionAsyncId, so there is no cross-agent interference).
+        const agentContextStore = (globalThis as any).__OPENCLAW_AGENT_CONTEXT_STORE;
+        if (agentContextStore && sessionCtx?.agentContext) {
+          agentContextStore.enterWith(sessionCtx.agentContext);
         }
       } catch {
         // Never let telemetry errors break the main flow

@@ -44,8 +44,6 @@ function createTelemetry() {
 
 
 test("session parallelisation score", () => {
-  console.log("Start Testing session parallelisation score...");
-
   // Ensure clean state before starting
   stopSessionWatcher();
   stopSpanCache();

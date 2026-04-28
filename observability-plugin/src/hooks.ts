@@ -926,7 +926,8 @@ function startRootSpan(
 
   // Touch (or create) the session BEFORE creating the request span so that the
   // long-lived session.start span is opened first and can act as the trace root.
-  const sessionId = touchSession(primaryRuntimeSessionKey, parentContext, undefined, seed?.sessionId);
+  const sessionId = touchSession(primaryRuntimeSessionKey, parentContext, undefined, seed?.sessionId, channel);
+
   const didMerge = previousSessionIdSnapshot != null && previousSessionIdSnapshot !== sessionId;
 
   // When a merge occurred, add a link from the new openclaw.request back to the

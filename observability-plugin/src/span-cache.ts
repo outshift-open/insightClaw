@@ -407,9 +407,6 @@ export function getSessionStartTime(sessionId: string): number | null {
     return recordStart < earliest ? recordStart : earliest;
   }, records[0].startAt ?? records[0].recordedAt);
 
-  //// Assuming records are added in chronological order, the first record's timestamp is the start time
-  //console.log(`DEBUG getSessionStartTime for session ${sessionId}: first record at ${records[0].recordedAt}, duration=${getSpanDuration(records[0])}ms`);
-  //return records[0].recordedAt - getSpanDuration(records[0]);
 }
 
 /**
@@ -452,10 +449,6 @@ export function getSpansByType(spanName: string, startTime?: number, endTime?: n
     return [];
   }
 
-  console.log(`DEBUG filtering for name ${spanName} in session ${sessionId}`);
-  for (const r of records.filter(record => record.spanName === spanName)) {
-    console.log(`DEBUG getSpansByType: record ${formatRecord(r)} with spanName ${r.spanName} and sessionId ${r.sessionId}`);
-  }
   return records.filter(record => record.spanName === spanName);
 }
 
@@ -471,7 +464,6 @@ function getSpanDuration(record: SpanRecord): number {
     "openclaw.agent.duration_ms",
     "openclaw.tool.duration_ms"
   ];
-  console.log(`DEBUG getSpanDuration for record ${formatRecord(record)}: checking keys ${keys.join(", ")}`);
   for (const key of keys) {
     const duration = record.attributes[key];
     if (typeof duration === "number") {

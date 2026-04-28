@@ -95,7 +95,9 @@ test("session parallelisation score", () => {
   startSpanCache({ enabled: true, logger: logger, verboseLogs: true});
   console.log("Cache started");
 
-  const sessionId = touchSession("session-1", context.active(), "workflow-a");
+  const notMainSessionId = touchSession("non-main-session-1", context.active(), "workflow-a", undefined, "webchat");
+
+  const sessionId = touchSession("agent-session-1", context.active(), "workflow-a", undefined, "webchat");
 
   const sessionKey = "session-1";
   const traceId = "trace-id-123";
@@ -105,6 +107,18 @@ test("session parallelisation score", () => {
   const baseTime = Date.now();
 
   console.log("Recording spans...");
+  recordSpan({
+    traceId,
+    spanId:"span-id-000",
+    spanName: "openclaw.agent.turn",
+    spanKind,
+    sessionKey,
+    sessionId:notMainSessionId,
+    attributes: {"attr1": "value1", "attr2": "value2","openclaw.request.duration_ms":1000},
+    statusCode: 0,
+    recordedAt: baseTime-1000, // 1 second before the main session
+  });
+
   // first 2 turn in parallel, then one sequential. (total duration 2 sec)
   // finally, a toll call while running the last turn (total duration 2 sec)
   // Final score: // parallelisation score = turn time / total time = 3/2
@@ -156,7 +170,8 @@ test("session parallelisation score", () => {
     recordedAt: baseTime + 1000, // 1 second later
   });
 
-  endSession("session-1",telemetry.histograms);
+  endSession("agent-session-1",telemetry.histograms);
+  endSession("non-main-session-1",telemetry.histograms);
 
   assert.equal(telemetry.histograms.parallelisationScore.calls[0]?.value, 3/2);
   

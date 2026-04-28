@@ -37,6 +37,8 @@ interface SessionActivity {
   sessionContext?: Context;
   workflowName?: string;
   ended: boolean;
+  channel?: string;
+  isRoot: boolean;
 }
 
 // ── State ──────────────────────────────────────────────────────────
@@ -137,7 +139,8 @@ export function touchSession(
   runtimeSessionKey: string,
   rootContext: Context,
   workflowName?: string,
-  inheritedSessionId?: string
+  inheritedSessionId?: string,
+  channel?: string
 ): string {
   const now = Date.now();
   const existing = sessions.get(runtimeSessionKey);
@@ -218,6 +221,13 @@ export function touchSession(
       }
     }
 
+
+    //look if there are other sessions that are not ended, are root and have a channel different from heartbeat, 
+    //the agent check is required because the first span is coming from the messaging app, but it's not the main agent session ID used by agent and sub-agents
+    const isRoot = runtimeSessionKey.includes("agent") && Boolean(channel) && getUniqueSessions().filter(s => !s.ended && s.isRoot && s.channel && s.channel != "heartbeat").length === 0;
+    loggerRef?.info?.(
+      `[otel:session] Determined root session: isRoot=${isRoot}, runtimeSession=${runtimeSessionKey}`
+    );
     const session: SessionActivity = {
       sessionId,
       primaryRuntimeSessionKey: runtimeSessionKey,
@@ -228,7 +238,10 @@ export function touchSession(
       sessionContext,
       workflowName,
       ended: false,
+      channel: channel,
+      isRoot: isRoot,
     };
+
     sessions.set(runtimeSessionKey, session);
     loggerRef?.info?.(
       `[otel:session] New session tracked: session=${session.sessionId}, runtimeSession=${runtimeSessionKey}, activeSessions=${getUniqueSessions().length}`
@@ -329,13 +342,34 @@ export function recordEndOfSessionMetrics(runtimeSessionKey: string, histograms:
   recordParallelisationScore(runtimeSessionKey, histograms);
 }
 
+
+/** 
+ * The score is computed only for a session labelled as root
+ * The score is the ratio between the sum of durations of spans of type agent turn, and the total session duration.
+ * All the spans recorded during the session lifecycle are considered, no matter their session IDs (thus including sub-agents and other top-level agent)
+ * 
+ * The higher the score, the more parallelization there was in the session (i.e., multiple agents working at the same time, or an agent working while waiting for a tool response).
+ * Low score means low parallelisation or the ageint waiting for external actions.
+ * 
+*/
 export function recordParallelisationScore(runtimeSessionKey: string, histograms: any): void {
   const sessionId = getSessionId(runtimeSessionKey);
   if (!sessionId) {
     loggerRef?.warn?.(`[otel:session] Cannot record parallelisation score, session not found for runtimeSessionKey=${runtimeSessionKey}`);
     return;
   }
-  console.log("DEBUG Recording parallelisation score for session ", sessionId);
+
+  const session = sessions.get(runtimeSessionKey);
+  if (!session) {
+    loggerRef?.warn?.(`[otel:session] Cannot record parallelisation score, session not found for sessionId=${sessionId}`);
+    return;
+  }
+
+  if (!session.isRoot) {
+    // we do not compute the score for a secondary agent
+    return;
+  }
+
   const startTime = getSessionStartTime(sessionId);
   if (!startTime) {
     loggerRef?.warn?.(`[otel:session] Cannot record parallelisation score, session not found: session=${sessionId}`);
@@ -348,33 +382,25 @@ export function recordParallelisationScore(runtimeSessionKey: string, histograms
     return;
   }
   const sessionDurationTillNow = endTime - startTime;
-
-  console.log("DEBUG Session start time for session ", sessionId, ": startTime ", startTime);
-  //TODO We need to find another solution. This would be done also for the secondary top-level agents. Also, what does happen when the secondary agents have also sub-agents?
   const spans = getSpansByType("openclaw.agent.turn", startTime, endTime, undefined);
-  console.log("DEBUG Found spans for session ", sessionId, ": ", spans.length);
 
-    const durationKeys = [
-      "openclaw.request.duration_ms",
-      "openclaw.agent.duration_ms",
-      "openclaw.tool.duration_ms"
-    ];
+  const durationKeys = [
+    "openclaw.request.duration_ms",
+    "openclaw.agent.duration_ms",
+    "openclaw.tool.duration_ms"
+  ];
   
-
   let spansDuration = 0
   for (const r of spans) {
     for (const key of durationKeys) {
       const duration = r.attributes[key];
       if (typeof duration === "number") {
-        console.log(`DEBUG Found duration attribute ${key} with value ${duration}ms`);
         spansDuration += duration;
         break;
       }
     }
   }
-  const score = spansDuration / sessionDurationTillNow;
-  console.log("DEBUG Parallelisation score for runtimeSessionKey ", runtimeSessionKey, ": ", score, " (spansDuration=", spansDuration, "ms, sessionDurationTillNow=", sessionDurationTillNow, "ms)");
- 
+  const score = spansDuration / sessionDurationTillNow; 
   histograms.parallelisationScore.record(score, { "openclaw.session.key": runtimeSessionKey });
 }
 

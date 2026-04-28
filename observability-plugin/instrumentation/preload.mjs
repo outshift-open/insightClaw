@@ -35,22 +35,54 @@ const { OpenAIInstrumentation } = await import("@traceloop/instrumentation-opena
 const { VertexAIInstrumentation } = await import("@traceloop/instrumentation-vertexai");
 const { trace } = await import("@opentelemetry/api");
 const { AsyncLocalStorageContextManager } = await import("@opentelemetry/context-async-hooks");
+const { AsyncLocalStorage } = await import("node:async_hooks");
 
 /**
- * Custom ContextManager that falls back to the agent context stored by
- * hooks.ts when the async chain between a hook callback and the actual
- * LLM call is broken (e.g. OpenClaw dispatches hooks then calls Anthropic
- * in a separate async turn). This ensures auto-instrumented LLM spans
- * (OpenLLMetry) are correctly parented under the active agent span.
+ * Per-async-chain store for the active agent OTel context.
  *
- * hooks.ts sets globalThis.__OPENCLAW_ACTIVE_AGENT_CONTEXT in before_agent_start
- * and clears it in agent_end.
+ * Why AsyncLocalStorage instead of a single global:
+ *   When two agents run in parallel each occupies its own Promise chain.
+ *   Using enterWith() in before_agent_start writes the agent context into
+ *   the *current* async resource, so every continuation in that chain
+ *   (including the auto-instrumented Anthropic/OpenAI call) inherits it
+ *   independently from all other parallel agents.
+ *   A single global variable would be overwritten by whichever agent starts
+ *   last, causing all LLM spans to share the same parentSpanId.
+ */
+const agentContextFallbackStore = new AsyncLocalStorage();
+
+/**
+ * Expose the store so hooks.ts can call enterWith() / clear() on it
+ * without importing from this ESM module.
+ */
+globalThis.__OPENCLAW_AGENT_CONTEXT_STORE = agentContextFallbackStore;
+
+/**
+ * Custom ContextManager that falls back to the per-chain agent context when
+ * the async chain between a hook callback and the actual LLM call is broken
+ * (e.g. OpenClaw dispatches hooks then calls Anthropic in a separate async
+ * turn). This ensures auto-instrumented LLM spans (OpenLLMetry) are
+ * correctly parented under the active agent span even for parallel agents.
+ *
+ * Priority:
+ *   1. Normal OTel async-local context (active span present) → use as-is.
+ *   2. Per-chain fallback via agentContextFallbackStore (set by enterWith in
+ *      before_agent_start) → correct context for each parallel agent chain.
+ *   3. Legacy single-global __OPENCLAW_ACTIVE_AGENT_CONTEXT → backward compat
+ *      for runtimes that do not yet populate the store.
  */
 class AgentAwareContextManager extends AsyncLocalStorageContextManager {
   active() {
     const ctx = super.active();
-    if (!trace.getSpan(ctx) && globalThis.__OPENCLAW_ACTIVE_AGENT_CONTEXT) {
-      return globalThis.__OPENCLAW_ACTIVE_AGENT_CONTEXT;
+    if (!trace.getSpan(ctx)) {
+      const chainContext = agentContextFallbackStore.getStore();
+      if (chainContext) {
+        return chainContext;
+      }
+      // Legacy fallback (single-agent or older plugin versions)
+      if (globalThis.__OPENCLAW_ACTIVE_AGENT_CONTEXT) {
+        return globalThis.__OPENCLAW_ACTIVE_AGENT_CONTEXT;
+      }
     }
     return ctx;
   }

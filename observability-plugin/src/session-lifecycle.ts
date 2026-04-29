@@ -7,7 +7,7 @@
  */
 
 import { randomUUID } from "node:crypto";
-import { SpanKind, SpanStatusCode } from "@opentelemetry/api";
+import { trace, SpanKind, SpanStatusCode, type Span } from "@opentelemetry/api";
 import type { Context, Tracer } from "@opentelemetry/api";
 import {
   ATTR_OBSERVE_SPAN_KIND,
@@ -31,6 +31,10 @@ interface SessionActivity {
   runtimeSessionKeys: Set<string>;
   lastActivityAt: number;
   rootContext: Context;
+  /** Long-lived span that acts as the trace root for the entire session. */
+  sessionSpan?: Span;
+  /** OTel context with sessionSpan active — used as parent for all request spans. */
+  sessionContext?: Context;
   workflowName?: string;
   ended: boolean;
 }
@@ -140,6 +144,34 @@ export function touchSession(
     existing.lastActivityAt = now;
     existing.rootContext = rootContext;
     if (workflowName) existing.workflowName = workflowName;
+
+    // If an inherited session ID is provided (e.g. via sessions_send from another
+    // agent) and this session has a different ID, merge into the inherited session
+    // so all spans share the same session.id across agents.
+    if (inheritedSessionId && inheritedSessionId !== existing.sessionId) {
+      const inheritedSession = findSessionById(inheritedSessionId);
+      if (inheritedSession && !inheritedSession.ended) {
+        loggerRef?.info?.(
+          `[otel:session] Merging session=${existing.sessionId} into session=${inheritedSession.sessionId} ` +
+          `for runtimeSession=${runtimeSessionKey}`
+        );
+        for (const key of existing.runtimeSessionKeys) {
+          sessions.set(key, inheritedSession);
+          inheritedSession.runtimeSessionKeys.add(key);
+        }
+        inheritedSession.lastActivityAt = now;
+        existing.runtimeSessionKeys.clear();
+        existing.ended = true;
+        // Close the orphaned session.start span without emitting session.end
+        if (existing.sessionSpan) {
+          existing.sessionSpan.setStatus({ code: SpanStatusCode.OK });
+          existing.sessionSpan.end();
+          existing.sessionSpan = undefined;
+        }
+        return inheritedSession.sessionId;
+      }
+    }
+
     return existing.sessionId;
   } else {
     const adopted = inheritedSessionId ? findSessionById(inheritedSessionId) : undefined;
@@ -156,17 +188,47 @@ export function touchSession(
     }
 
     const startedAt = now;
+    const sessionId = inheritedSessionId || randomUUID();
+
+    // Create the long-lived session.start span that will act as root for all
+    // spans in this session. It stays open until emitSessionEnd is called.
+    let sessionSpan: Span | undefined;
+    let sessionContext: Context | undefined;
+    if (tracerRef) {
+      try {
+        sessionSpan = tracerRef.startSpan(
+          "session.start",
+          {
+            kind: SpanKind.INTERNAL,
+            attributes: {
+              [ATTR_OBSERVE_SPAN_KIND]: ObserveSpanKind.WORKFLOW,
+              "session.id": sessionId,
+              "session.started_at": new Date(startedAt).toISOString(),
+              "openclaw.session.key": runtimeSessionKey,
+              ...(workflowName ? { "ioa_observe.workflow.name": workflowName } : {}),
+            },
+          },
+          rootContext
+        );
+        sessionContext = trace.setSpan(rootContext, sessionSpan);
+        loggerRef?.debug?.(`[otel:session] session.start span opened for session=${sessionId}`);
+      } catch {
+        // If span creation fails the session still works without a root span
+      }
+    }
+
     const session: SessionActivity = {
-      sessionId: inheritedSessionId || randomUUID(),
+      sessionId,
       primaryRuntimeSessionKey: runtimeSessionKey,
       runtimeSessionKeys: new Set([runtimeSessionKey]),
       lastActivityAt: startedAt,
       rootContext,
+      sessionSpan,
+      sessionContext,
       workflowName,
       ended: false,
     };
     sessions.set(runtimeSessionKey, session);
-    emitSessionStart(session);
     loggerRef?.info?.(
       `[otel:session] New session tracked: session=${session.sessionId}, runtimeSession=${runtimeSessionKey}, activeSessions=${getUniqueSessions().length}`
     );
@@ -176,6 +238,23 @@ export function touchSession(
 
 export function getSessionId(runtimeSessionKey: string): string | undefined {
   return sessions.get(runtimeSessionKey)?.sessionId;
+}
+
+/**
+ * Return the OTel context with the long-lived session.start span active.
+ * Use this as the parent context when creating root request spans so that
+ * every span in the session descends from session.start.
+ */
+export function getSessionContext(runtimeSessionKey: string): Context | undefined {
+  return sessions.get(runtimeSessionKey)?.sessionContext;
+}
+
+/**
+ * Return the SpanContext of the long-lived session.start span for the given
+ * runtime session key. Use this to build span links that point to the session root.
+ */
+export function getSessionSpanContext(runtimeSessionKey: string): import("@opentelemetry/api").SpanContext | undefined {
+  return sessions.get(runtimeSessionKey)?.sessionSpan?.spanContext();
 }
 
 /**
@@ -260,43 +339,16 @@ function checkIdleSessions(): void {
   }
 }
 
-function emitSessionStart(session: SessionActivity): void {
-  if (!tracerRef) return;
 
-  try {
-    const span = tracerRef.startSpan(
-      "session.start",
-      {
-        kind: SpanKind.INTERNAL,
-        attributes: {
-          [ATTR_OBSERVE_SPAN_KIND]: ObserveSpanKind.WORKFLOW,
-          "session.id": session.sessionId,
-          "session.started_at": new Date(session.lastActivityAt).toISOString(),
-          "openclaw.session.key": session.primaryRuntimeSessionKey,
-          ...(session.workflowName
-            ? { "ioa_observe.workflow.name": session.workflowName }
-            : {}),
-        },
-      },
-      session.rootContext
-    );
-    span.setStatus({ code: SpanStatusCode.OK });
-    span.end();
-
-    loggerRef?.debug?.(
-      `[otel] Emitted session.start for session=${session.sessionId}`
-    );
-  } catch {
-    // Never let session telemetry errors propagate
-  }
-}
 
 function emitSessionEnd(session: SessionActivity): void {
   if (session.ended || !tracerRef) return;
   session.ended = true;
 
   try {
-    const span = tracerRef.startSpan(
+    // Emit session.end as a child span nested inside the long-lived session.start span.
+    const parentContext = session.sessionContext ?? session.rootContext;
+    const endSpan = tracerRef.startSpan(
       "session.end",
       {
         kind: SpanKind.INTERNAL,
@@ -310,14 +362,19 @@ function emitSessionEnd(session: SessionActivity): void {
             : {}),
         },
       },
-      session.rootContext
+      parentContext
     );
-    span.setStatus({ code: SpanStatusCode.OK });
-    span.end();
+    endSpan.setStatus({ code: SpanStatusCode.OK });
+    endSpan.end();
 
-    loggerRef?.debug?.(
-      `[otel] Emitted session.end for session=${session.sessionId}`
-    );
+    // Close the long-lived session.start root span.
+    if (session.sessionSpan) {
+      session.sessionSpan.setAttribute("session.ended_at", new Date(session.lastActivityAt).toISOString());
+      session.sessionSpan.setStatus({ code: SpanStatusCode.OK });
+      session.sessionSpan.end();
+    }
+
+    loggerRef?.debug?.(`[otel:session] session.start span closed for session=${session.sessionId}`);
   } catch {
     // Never let session telemetry errors propagate
   }

@@ -15,7 +15,7 @@ const TOKENS = [
   // Common adverbs/determiners
   "all", "any", "some", "each", "more", "most", "other", "such", "just", "very", "also", "only", "even",
   // OpenClaw keywords
-  "NO_REPLY"
+  "NO_REPLY", "Agent-to-agent announce step"
 ]; // common stop words to ignore
 
 

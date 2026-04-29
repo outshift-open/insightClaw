@@ -39,7 +39,6 @@ interface SessionActivity {
   workflowName?: string;
   ended: boolean;
   channel?: string;
-  isRoot: boolean;
 }
 
 // ── State ──────────────────────────────────────────────────────────
@@ -222,13 +221,6 @@ export function touchSession(
       }
     }
 
-
-    //look if there are other sessions that are not ended, are root and have a channel different from heartbeat, 
-    //the agent check is required because the first span is coming from the messaging app, but it's not the main agent session ID used by agent and sub-agents
-    const isRoot = runtimeSessionKey.includes("agent") && Boolean(channel) && getUniqueSessions().filter(s => !s.ended && s.isRoot && s.channel && s.channel != "heartbeat").length === 0;
-    loggerRef?.info?.(
-      `[otel:session] Determined root session: isRoot=${isRoot}, runtimeSession=${runtimeSessionKey}`
-    );
     const session: SessionActivity = {
       sessionId,
       primaryRuntimeSessionKey: runtimeSessionKey,
@@ -240,7 +232,6 @@ export function touchSession(
       workflowName,
       ended: false,
       channel: channel,
-      isRoot: isRoot,
     };
 
     sessions.set(runtimeSessionKey, session);
@@ -362,28 +353,16 @@ function recordRepetitionScore(runtimeSessionKey: string, histograms: any): void
     return;
   }
 
-  if (!session.isRoot) {
-    // we do not compute the score for a secondary agent
-    return;
-  }
-
-  const startTime = getSessionStartTime(sessionId);
-  if (!startTime) {
-    loggerRef?.warn?.(`[otel:session] Cannot record repetition score, session not found: session=${sessionId}`);
-    return;
-  }
-
-  const endTime = getSessionEndTime(sessionId);
-  if (!endTime) {
-    loggerRef?.warn?.(`[otel:session] Cannot record repetition score, session not ended: session=${sessionId}`);
+  if (!session.channel || session.channel === "heartbeat") {
+    // we do not compute the score for heartbeat sessions
+    loggerRef?.info?.(`[otel:session] Skipping repetition score for heartbeat session: session=${sessionId}`);
     return;
   }
 
   // Getting all spans of type llm call
-  const calls = getSpansByType("openclaw.llm.call", startTime, endTime, undefined);
+  const calls = getSpansByType("openclaw.llm.call", undefined, undefined, sessionId);
 
   const callsByAgent = new Map<string, Array<{ prompt: string }>>();    
-  //TODO need to filter out system calls, heartbeat ... (once we have links between top-level agents, we can leverage those to filter)
   for (const call of calls) {
     const agentId = call.attributes["gen_ai.agent.id"] as string | undefined;
     const prompt = call.attributes["openclaw.entity.input"] as string | undefined;      
@@ -422,7 +401,6 @@ function recordRepetitionScore(runtimeSessionKey: string, histograms: any): void
 }
 
 /** 
- * The score is computed only for a session labelled as root
  * The score is the ratio between the sum of durations of spans of type agent turn, and the total session duration.
  * All the spans recorded during the session lifecycle are considered, no matter their session IDs (thus including sub-agents and other top-level agent)
  * 
@@ -443,8 +421,9 @@ export function recordParallelisationScore(runtimeSessionKey: string, histograms
     return;
   }
 
-  if (!session.isRoot) {
-    // we do not compute the score for a secondary agent
+  if (!session.channel || session.channel === "heartbeat") {
+    // we do not compute the score for heartbeat sessions
+    loggerRef?.info?.(`[otel:session] Skipping parallelisation score for heartbeat session: session=${sessionId}`);
     return;
   }
 
@@ -460,7 +439,7 @@ export function recordParallelisationScore(runtimeSessionKey: string, histograms
     return;
   }
   const sessionDurationTillNow = endTime - startTime;
-  const spans = getSpansByType("openclaw.agent.turn", startTime, endTime, undefined);
+  const spans = getSpansByType("openclaw.agent.turn", undefined, undefined, sessionId);
 
   const durationKeys = [
     "openclaw.request.duration_ms",

@@ -12,7 +12,7 @@ from typing import Any
 
 import yaml
 from fastapi import FastAPI, HTTPException, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 logging.basicConfig(
     level=logging.INFO,
@@ -49,6 +49,10 @@ class RemediateRequest(BaseModel):
     reason: str = "not specified"
     caller: str = "unknown"
     verifier_status: str = "unknown"
+
+
+class ScenarioRequest(BaseModel):
+    scenario: int = Field(..., ge=1, le=2, description="Scenario number (1 or 2)")
 
 
 class SceneStore:
@@ -363,6 +367,53 @@ async def _parse_query_request(req: Request) -> QueryRequest:
 _SCENARIO = _parse_scenario_arg(sys.argv[1:])
 _FIXTURE_PATH = _resolve_fixture_path(_SCENARIO)
 store = SceneStore(_FIXTURE_PATH)
+
+
+def _set_scenario(scenario: int) -> dict[str, Any]:
+    """Dynamically reload the scenario fixture.
+    
+    Args:
+        scenario: Scenario number (1 or 2)
+        
+    Returns:
+        Dictionary with status and loaded scenario info
+    """
+    global _SCENARIO, _FIXTURE_PATH, store
+    
+    scenario_str = str(scenario)
+    if scenario_str not in ("1", "2"):
+        raise ValueError(f"Invalid scenario: {scenario_str}. Must be 1 or 2.")
+    
+    previous_scenario = _SCENARIO
+    previous_fixture = _FIXTURE_PATH.name if _FIXTURE_PATH else None
+
+    _SCENARIO = scenario_str
+    _FIXTURE_PATH = _resolve_fixture_path(_SCENARIO)
+    store = SceneStore(_FIXTURE_PATH)
+    current_fixture = _FIXTURE_PATH.name if _FIXTURE_PATH else None
+    
+    logger.info(
+        "Scenario reloaded: %s (%s) -> %s (%s), file: %s -> %s, incident_id=%s services=%s",
+        previous_scenario,
+        previous_fixture,
+        _SCENARIO,
+        current_fixture,
+        previous_fixture,
+        current_fixture,
+        store.incident_id,
+        sorted(store.services.keys()),
+    )
+    
+    return {
+        "status": "ok",
+        "scenario": _SCENARIO,
+        "file_name": _FIXTURE_PATH.name if _FIXTURE_PATH else None,
+        "incident_id": store.incident_id,
+        "loaded_services": sorted(store.services.keys()),
+        "timestamp": datetime.utcnow().isoformat() + "Z",
+    }
+
+
 app = FastAPI(title="OpenClaw DB API", version="1.0.0")
 
 
@@ -386,13 +437,26 @@ def services(req: Request) -> dict[str, Any]:
 
 
 @app.get("/scenario")
-def scenario(req: Request) -> dict[str, Any]:
+def get_scenario(req: Request) -> dict[str, Any]:
     caller = req.headers.get("X-Agent-Id", "unknown")
     logger.info("caller=%s endpoint=GET /scenario", caller)
     return {
         "scenario": _SCENARIO,
         "file_name": _FIXTURE_PATH.name if _FIXTURE_PATH else None,
+        "incident_id": store.incident_id,
+        "loaded_services": sorted(store.services.keys()),
     }
+
+
+@app.post("/scenario")
+def set_scenario(request: ScenarioRequest, req: Request) -> dict[str, Any]:
+    caller = req.headers.get("X-Agent-Id", "unknown")
+    logger.info("caller=%s endpoint=POST /scenario scenario=%s", caller, request.scenario)
+    try:
+        result = _set_scenario(request.scenario)
+        return result
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @app.post("/query_db")

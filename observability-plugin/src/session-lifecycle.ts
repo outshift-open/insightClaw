@@ -380,7 +380,7 @@ function recordRepetitionScore(runtimeSessionKey: string, histograms: any): void
   for (const [agentId, agentCalls] of callsByAgent) {
     if (agentCalls.length < 2) continue;
     //for each pair of call, compute the getJaccardSimilarity of the prompt
-    let agentScores = new Array<number>();
+    const agentScores = new Array<number>();
     for (let i = 0; i < agentCalls.length; i++) {
       for (let j = i + 1; j < agentCalls.length; j++) {
         const similarity = getJaccardSimilarity(agentCalls[i].prompt, agentCalls[j].prompt);

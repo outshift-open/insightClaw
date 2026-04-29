@@ -30,6 +30,7 @@ export interface TelemetryRuntime {
   counters: OtelCounters;
   histograms: OtelHistograms;
   gauges: OtelGauges;
+  forceFlush: () => Promise<void>;
   shutdown: () => Promise<void>;
 }
 
@@ -362,12 +363,25 @@ export function initTelemetry(config: OtelObservabilityConfig, logger: any): Tel
     }
   }, config.metricsIntervalMs || 30_000); // Match the export interval
 
+  const forceFlush = async () => {
+    if (!tracerProvider) {
+      return;
+    }
+
+    try {
+      await tracerProvider.forceFlush();
+    } catch (err) {
+      logger.warn?.(`[otel] Trace forceFlush error: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  };
+
   // ── Shutdown ────────────────────────────────────────────────────
 
   const shutdown = async () => {
     logger.info("[otel] Shutting down telemetry...");
     clearInterval(metricHeartbeatInterval);
     try {
+      await forceFlush();
       if (tracerProvider) await tracerProvider.shutdown();
       if (meterProvider) await meterProvider.shutdown();
     } catch (err) {
@@ -375,5 +389,5 @@ export function initTelemetry(config: OtelObservabilityConfig, logger: any): Tel
     }
   };
 
-  return { tracer, meter, counters, histograms, gauges, shutdown };
+  return { tracer, meter, counters, histograms, gauges, forceFlush, shutdown };
 }

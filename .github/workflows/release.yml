@@ -1,0 +1,57 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build & publish release
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: observability-plugin
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: observability-plugin/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm run ci-test
+
+      - name: Build
+        run: npm run build
+
+      - name: Package artifact
+        run: npm run package:artifact
+
+      - name: Create archive
+        run: |
+          VERSION="${GITHUB_REF_NAME}"
+          ARCHIVE="openclaw-deep-observability-${VERSION}.zip"
+          cd artifact
+          zip -r "../${ARCHIVE}" package/
+          echo "ARCHIVE=${ARCHIVE}" >> "$GITHUB_ENV"
+          echo "VERSION=${VERSION}" >> "$GITHUB_ENV"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "openclaw-deep-observability ${{ env.VERSION }}"
+          generate_release_notes: true
+          files: observability-plugin/${{ env.ARCHIVE }}

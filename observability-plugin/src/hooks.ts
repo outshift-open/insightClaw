@@ -1754,9 +1754,7 @@ export function registerHooks(
             attributes: {
               [ATTR_OBSERVE_SPAN_KIND]: ObserveSpanKind.TASK,
               [ATTR_OBSERVE_ENTITY_NAME]: "openclaw.llm.call",
-              [GEN_AI_OPERATION_NAME_ATTR]: GEN_AI_OPERATION.CHAT,
               "openclaw.session.key": runtimeSessionKey,
-              ...(runtimeSessionKey !== "unknown" ? { [GEN_AI_CONVERSATION_ID_ATTR]: runtimeSessionKey } : {}),
               ...(sessionId ? { "session.id": sessionId } : {}),
               "gen_ai.agent.id": agentId,
               "gen_ai.request.model": model,

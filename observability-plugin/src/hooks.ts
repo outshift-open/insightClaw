@@ -1148,7 +1148,7 @@ export function registerHooks(
 
   setMessageProcessedObserver(handleMessageProcessed);
 
-  function finalizeAgentCompletion(completion: DeferredAgentCompletion): void {
+  async function finalizeAgentCompletion(completion: DeferredAgentCompletion): Promise<void> {
     const {
       runtimeSessionIdentities,
       runtimeSessionKey,
@@ -1305,6 +1305,12 @@ export function registerHooks(
 
       captureSpanToCache(agentSpan, "openclaw.agent.turn", "agent", runtimeSessionKey, getSessionId(runtimeSessionKey));
       agentSpan.end();
+
+      try {
+        await getTelemetry().forceFlush();
+      } catch {
+        // Telemetry runtime already logs flush failures; never block agent cleanup.
+      }
     }
 
     unregisterActiveAgentSpan(runtimeSessionIdentities);
@@ -1851,7 +1857,7 @@ export function registerHooks(
           logger.info(
             `[otel] Completing deferred trace finalization for runtimeSession=${pendingRuntimeSessionKey} after final llm_output`
           );
-          finalizeAgentCompletion(deferredCompletion);
+          void finalizeAgentCompletion(deferredCompletion);
         }
       } catch {
         // Never let telemetry errors break the main flow
@@ -2088,7 +2094,7 @@ export function registerHooks(
           return undefined;
         }
 
-        finalizeAgentCompletion(completion);
+        await finalizeAgentCompletion(completion);
       } catch (error) {
         logger.debug(`[otel] agent_end hook failed: ${String(error)}`);
         // Silently ignore

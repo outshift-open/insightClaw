@@ -200,6 +200,18 @@ const PENDING_SPAWN_TTL_MS = 60_000;
 const ROOT_COMPLETION_GRACE_MS = 30_000;
 const MAX_CAPTURE_CONTENT_CHARS = 4_096;
 
+const GEN_AI_OPERATION_NAME_ATTR = "gen_ai.operation.name";
+const GEN_AI_AGENT_NAME_ATTR = "gen_ai.agent.name";
+const GEN_AI_CONVERSATION_ID_ATTR = "gen_ai.conversation.id";
+const GEN_AI_TOOL_NAME_ATTR = "gen_ai.tool.name";
+const GEN_AI_TOOL_CALL_ID_ATTR = "gen_ai.tool.call.id";
+
+const GEN_AI_OPERATION = {
+  CHAT: "chat",
+  EXECUTE_TOOL: "execute_tool",
+  INVOKE_AGENT: "invoke_agent",
+} as const;
+
 function initHookConfig(
   otel_config: OtelObservabilityConfig,
   getTelemetry: () => TelemetryRuntime,
@@ -1603,8 +1615,11 @@ export function registerHooks(
             attributes: {
               [ATTR_OBSERVE_SPAN_KIND]: ObserveSpanKind.AGENT,
               [ATTR_OBSERVE_ENTITY_NAME]: agentId,
+              [GEN_AI_OPERATION_NAME_ATTR]: GEN_AI_OPERATION.INVOKE_AGENT,
               "gen_ai.agent.id": agentId,
+              [GEN_AI_AGENT_NAME_ATTR]: agentId,
               "openclaw.session.key": runtimeSessionKey,
+              ...(runtimeSessionKey !== "unknown" ? { [GEN_AI_CONVERSATION_ID_ATTR]: runtimeSessionKey } : {}),
               ...(sessionId ? { "session.id": sessionId } : {}),
               "gen_ai.agent.model": model,
               ...handoff.attributes,
@@ -1739,7 +1754,9 @@ export function registerHooks(
             attributes: {
               [ATTR_OBSERVE_SPAN_KIND]: ObserveSpanKind.TASK,
               [ATTR_OBSERVE_ENTITY_NAME]: "openclaw.llm.call",
+              [GEN_AI_OPERATION_NAME_ATTR]: GEN_AI_OPERATION.CHAT,
               "openclaw.session.key": runtimeSessionKey,
+              ...(runtimeSessionKey !== "unknown" ? { [GEN_AI_CONVERSATION_ID_ATTR]: runtimeSessionKey } : {}),
               ...(sessionId ? { "session.id": sessionId } : {}),
               "gen_ai.agent.id": agentId,
               "gen_ai.request.model": model,
@@ -1929,10 +1946,14 @@ export function registerHooks(
             attributes: {
               [ATTR_OBSERVE_SPAN_KIND]: ObserveSpanKind.TOOL,
               [ATTR_OBSERVE_ENTITY_NAME]: toolName,
+              [GEN_AI_OPERATION_NAME_ATTR]: GEN_AI_OPERATION.EXECUTE_TOOL,
+              [GEN_AI_TOOL_NAME_ATTR]: toolName,
               "openclaw.tool.name": toolName,
+              ...(toolCallId ? { [GEN_AI_TOOL_CALL_ID_ATTR]: toolCallId } : {}),
               "openclaw.tool.call_id": toolCallId,
               "openclaw.tool.is_synthetic": isSynthetic,
               "openclaw.session.key": runtimeSessionKey,
+              ...(runtimeSessionKey !== "unknown" ? { [GEN_AI_CONVERSATION_ID_ATTR]: runtimeSessionKey } : {}),
               ...(sessionId ? { "session.id": sessionId } : {}),
               "gen_ai.agent.id": agentId,
             },

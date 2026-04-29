@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { trace } from "@opentelemetry/api";
 
 import { registerHooks } from "../src/hooks.ts";
 import { activeAgentSpans } from "../src/diagnostics.ts";
@@ -509,11 +510,148 @@ test("registerHooks links spawned subagent turns back to the spawning tool span"
   assert.ok(childAgent);
   assert.equal(childRoot?.span.attributes.get("session.id"), parentSessionId);
   assert.equal(childAgent?.span.attributes.get("session.id"), parentSessionId);
-  assert.equal(childRoot?.options.links?.[0]?.attributes?.["link.type"], "agent_spawn");
-  assert.equal(childRoot?.options.links?.[1]?.attributes?.["link.type"], "agent_handoff");
+  // openclaw.request is parented under tool.sessions_spawn via parentContext — no redundant link.
+  // The first (and only) link on the child root is agent_handoff to the source agent span.
+  assert.equal(childRoot?.options.links?.[0]?.attributes?.["link.type"], "agent_handoff");
   assert.equal(childAgent?.options.links?.[0]?.attributes?.["link.type"], "agent_handoff");
   assert.equal(childAgent?.options.attributes["ioa_observe.agent.sequence"], 2);
   assert.equal(childAgent?.options.attributes["ioa_observe.agent.previous"], "planner");
+});
+
+test("registerHooks links sessions_send target turns back to the sending tool span", () => {
+  const telemetry = createTelemetry();
+  const { api, typedHooks } = createApi();
+  const originalSetInterval = globalThis.setInterval;
+
+  globalThis.setInterval = ((() => ({ unref() {} })) as unknown) as typeof setInterval;
+
+  try {
+    registerHooks(api as any, () => telemetry as any, {
+      endpoint: "http://localhost:4318",
+      protocol: "http",
+      serviceName: "test-service",
+      headers: {},
+      traces: true,
+      metrics: true,
+      logs: false,
+      captureContent: false,
+      spanCache: false,
+      spanCacheVerboseLogs: false,
+      metricsIntervalMs: 30_000,
+      resourceAttributes: {},
+    });
+  } finally {
+    globalThis.setInterval = originalSetInterval;
+  }
+
+  const parentSession = "agent:orchestrator:main";
+  const targetSession = "agent:worker:main";
+
+  // Target agent already has an active session BEFORE the orchestrator calls sessions_send
+  // (realistic: verifier/comms agents are long-running sessions contacted via sessions_send)
+  typedHooks.get("message_received")?.(
+    { content: "Worker init", metadata: { conversationId: targetSession, channelId: "chat" } },
+    { conversationId: targetSession, channelId: "chat", agentId: "worker" }
+  );
+  const targetOwnSessionId = telemetry.tracer.spans
+    .find((e) => e.name === "openclaw.request" && e.options.attributes["openclaw.session.key"] === targetSession)
+    ?.span.attributes.get("session.id");
+  assert.ok(targetOwnSessionId, "target must have its own session.id before sessions_send");
+
+  // Parent agent receives a message and starts its turn
+  typedHooks.get("message_received")?.(
+    { content: "Delegate to worker", metadata: { conversationId: parentSession, channelId: "chat" } },
+    { conversationId: parentSession, channelId: "chat", agentId: "orchestrator" }
+  );
+  typedHooks.get("before_agent_start")?.(
+    { agentId: "orchestrator", model: "claude", conversationId: parentSession },
+    { conversationId: parentSession, channelId: "chat", agentId: "orchestrator" }
+  );
+
+  // Parent calls sessions_send — handoff is pre-queued during before_tool_call
+  typedHooks.get("before_tool_call")?.(
+    {
+      toolName: "sessions_send",
+      toolCallId: "send-1",
+      input: { targetAgentId: "worker", message: "please process this" },
+      conversationId: parentSession,
+    },
+    { conversationId: parentSession, channelId: "chat", agentId: "orchestrator" }
+  );
+
+  // Simulate the target agent receiving the message (fires BEFORE after_tool_call)
+  typedHooks.get("message_received")?.(
+    { content: "please process this", metadata: { conversationId: targetSession, channelId: "chat" } },
+    { conversationId: targetSession, channelId: "chat", agentId: "worker" }
+  );
+  typedHooks.get("before_agent_start")?.(
+    { agentId: "worker", model: "claude", conversationId: targetSession },
+    { conversationId: targetSession, channelId: "chat", agentId: "worker" }
+  );
+
+  // Tool result arrives AFTER target agent has already started
+  typedHooks.get("after_tool_call")?.(
+    {
+      toolName: "sessions_send",
+      toolCallId: "send-1",
+      input: { targetAgentId: "worker", message: "please process this" },
+      message: { content: [{ type: "text", text: "done" }] },
+      conversationId: parentSession,
+    },
+    { conversationId: parentSession, channelId: "chat", agentId: "orchestrator" }
+  );
+
+  const spans = telemetry.tracer.spans;
+  const parentRoot = spans.find((e) => e.name === "openclaw.request" && e.options.attributes["openclaw.session.key"] === parentSession);
+  // The worker has two openclaw.request spans: the initial one and the sessions_send-triggered one.
+  // We want the latter (the one nested under the send tool span), which is the last one for targetSession.
+  const targetRoot = spans.filter((e) => e.name === "openclaw.request" && e.options.attributes["openclaw.session.key"] === targetSession).at(-1);
+  const sendToolSpan = spans.find((e) => e.name === "tool.sessions_send");
+  const targetAgent = spans.filter((e) => e.name === "openclaw.agent.turn").at(-1);
+  const parentSessionId = parentRoot?.span.attributes.get("session.id");
+
+  assert.ok(parentRoot, "parent openclaw.request must exist");
+  assert.ok(targetRoot, "target openclaw.request must exist");
+  assert.ok(sendToolSpan, "tool.sessions_send span must exist");
+  assert.ok(targetAgent, "target agent turn must exist");
+
+  // The target openclaw.request must be a child of tool.sessions_send
+  const sendSpanId = sendToolSpan?.span.spanContext().spanId;
+  const parentOfTargetRoot = targetRoot?.context ? trace.getSpan(targetRoot.context) : undefined;
+  assert.equal(parentOfTargetRoot?.spanContext().spanId, sendSpanId,
+    "target openclaw.request parent must be tool.sessions_send");
+
+  // Both agents must share the same session.id
+  assert.equal(targetRoot?.span.attributes.get("session.id"), parentSessionId,
+    "target session.id must match parent session.id");
+  assert.equal(targetAgent?.span.attributes.get("session.id"), parentSessionId,
+    "target agent session.id must match parent session.id");
+
+  // The new openclaw.request must carry a session_merge link pointing back to
+  // the worker's own session.start span (or openclaw.request when the session watcher
+  // is not running, as in this test).
+  const workerSessionRoot = spans.find((e) =>
+    e.name === "session.start" ||
+    (e.name === "openclaw.request" && e.options.attributes["openclaw.session.key"] === targetSession && e !== targetRoot)
+  );
+  const mergeLink = targetRoot?.options.links?.find((l: any) => l.attributes?.["link.type"] === "session_merge");
+  assert.ok(mergeLink, "target openclaw.request must have a session_merge link");
+  assert.equal(mergeLink?.context?.spanId, workerSessionRoot?.span.spanContext().spanId,
+    "session_merge link must point to the worker's previous session root span");
+  assert.equal(mergeLink?.attributes?.["session.id"], targetOwnSessionId,
+    "session_merge link must carry the worker's pre-merge session.id");
+
+  // The agent turn must also carry the session_merge link to the session root
+  const agentMergeLink = targetAgent?.options.links?.find((l: any) => l.attributes?.["link.type"] === "session_merge");
+  assert.ok(agentMergeLink, "target agent turn must have a session_merge link");
+  assert.equal(agentMergeLink?.context?.spanId, workerSessionRoot?.span.spanContext().spanId,
+    "agent session_merge link must point to the same session root span");
+
+  // Links on the target root span: no agent_send link (openclaw.request is already a
+  // child of tool.sessions_send via parentContext); only agent_handoff and session_merge.
+  const rootLinks = targetRoot?.options.links ?? [];
+  assert.ok(!rootLinks.some((l: any) => l.attributes?.["link.type"] === "agent_send"),
+    "target openclaw.request must NOT carry a redundant agent_send link");
 });
 
 test("registerHooks records span-cache-backed memory failure rate and logs its inputs", () => {

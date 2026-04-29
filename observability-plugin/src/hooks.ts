@@ -51,7 +51,7 @@ import {
   recordMemoryFailureRateFromCache,
   recordMemoryToolMetrics,
 } from "./memory-metrics.js";
-import { touchSession, endSession, getSessionId } from "./session-lifecycle.js";
+import { touchSession, endSession, getSessionId, getSessionContext, getSessionSpanContext } from "./session-lifecycle.js";
 import { recordSpan, type SpanAttributeValue, type SpanRecord } from "./span-cache.js";
 import { calculateCoverage, getNoveltyScore} from "./context-analysis.js";
 
@@ -122,6 +122,8 @@ interface SessionTraceContext {
   latestOutput?: unknown;
   lastLifecycleEvent?: string;
   lastLifecycleAt?: number;
+  /** SpanContext of the session.start span of the session this agent held before being merged via sessions_send. */
+  previousSessionStartSpanContext?: SpanContext;
   startTime: number;
 }
 
@@ -134,6 +136,8 @@ interface PendingSpawnHandoff {
   sourceAgentSpanContext?: SpanContext;
   spawnToolSpanContext: SpanContext;
   parentContext: Context;
+  /** "agent_spawn" for sessions_spawn, "agent_send" for sessions_send */
+  linkType: string;
   createdAt: number;
 }
 
@@ -346,6 +350,14 @@ function consumePendingSpawnHandoff(agentId: string): PendingSpawnHandoff | unde
     pendingSpawnHandoffs.set(agentId, remaining);
   }
   return next;
+}
+
+/** Non-consuming peek — returns the freshest pending handoff without removing it. */
+function peekPendingSpawnHandoff(agentId: string): PendingSpawnHandoff | undefined {
+  const existing = pendingSpawnHandoffs.get(agentId);
+  if (!existing || existing.length === 0) return undefined;
+  const cutoff = Date.now() - PENDING_SPAWN_TTL_MS;
+  return existing.find((entry) => entry.createdAt >= cutoff);
 }
 
 function resolveRuntimeSessionKey(event?: any, ctx?: any): string {
@@ -612,7 +624,8 @@ function handleToolOutput(
   const sessionId = getSessionId(runtimeSessionKey) || "unknown";
 
   if (toolName === "sessions_spawn") {
-    handleSessionSpawnCall(event, span, parentContext, runtimeSessionKey, agentId, agentSequence, toolInput, config.logger);
+    // sessions_spawn: target agent ID comes from the result, handle post-result.
+    handleSessionHandoffCall(toolName, event, span, parentContext, runtimeSessionKey, agentId, agentSequence, toolInput, config.logger);
   }
   const result = event?.result ?? event?.message;
   let memoryOperation: "read" | "write" | "edit" | "search" | undefined;
@@ -680,7 +693,9 @@ function handleToolOutput(
 
 }
 
-function handleSessionSpawnCall(event: any,
+function handleSessionHandoffCall(
+    toolName: string,
+    event: any,
     span: any,
     parentContext: any,
     runtimeSessionKey: string,
@@ -691,6 +706,7 @@ function handleSessionSpawnCall(event: any,
   ): void {
   const targetAgentIds = extractSpawnTargetAgentIds(toolInput, event);
   const sourceAgentSpanContext = getSessionTraceContext(event)?.agentSpan?.spanContext();
+  const linkType = toolName === "sessions_spawn" ? "agent_spawn" : "agent_send";
   for (const targetAgentId of targetAgentIds) {
     queuePendingSpawnHandoff({
       targetAgentId,
@@ -701,20 +717,22 @@ function handleSessionSpawnCall(event: any,
       sourceAgentSpanContext,
       spawnToolSpanContext: span.spanContext(),
       parentContext: trace.setSpan(parentContext, span),
+      linkType,
       createdAt: Date.now(),
     });
-    if (targetAgentIds.length > 0) {
-      logger.info(
-        `[otel] Prepared subagent handoff from agent=${agentId} to ` +
-        `[${targetAgentIds.join(", ")}], runtimeSession=${runtimeSessionKey}`
-      );
-      targetAgentsMap.set(targetAgentId, agentId+"-"+runtimeSessionKey ); //TODO merge with current pendingSpawn struct
-
-    } else {
-      logger.debug(
-        `[otel] sessions_spawn result captured but target agent could not be resolved, runtimeSession=${runtimeSessionKey}`
-      );
+  }
+  if (targetAgentIds.length > 0) {
+    logger.info(
+      `[otel] Prepared agent handoff (${toolName}) from agent=${agentId} to ` +
+      `[${targetAgentIds.join(", ")}], runtimeSession=${runtimeSessionKey}`
+    );
+    for (const targetAgentId of targetAgentIds) {
+      targetAgentsMap.set(targetAgentId, agentId + "-" + runtimeSessionKey); //TODO merge with current pendingSpawn struct
     }
+  } else {
+    logger.debug(
+      `[otel] ${toolName} result captured but target agent could not be resolved, runtimeSession=${runtimeSessionKey}`
+    );
   }
 }
 
@@ -896,6 +914,45 @@ function startRootSpan(
   const messageText = extractMessageText(event);
 
   const parentContext = seed?.parentContext || context.active();
+
+  // Capture the session.start SpanContext of the existing session BEFORE touchSession
+  // so we can link to it if a sessions_send merge happens.
+  // Falls back to the openclaw.request span when session.start is not available
+  // (e.g. session watcher not started yet).
+  const previousSessionIdSnapshot = getSessionId(primaryRuntimeSessionKey);
+  const previousSessionStartSpanContext = previousSessionIdSnapshot
+    ? (getSessionSpanContext(primaryRuntimeSessionKey) ?? getSessionTraceContext(event, ctx)?.rootSpan.spanContext())
+    : undefined;
+
+  // Touch (or create) the session BEFORE creating the request span so that the
+  // long-lived session.start span is opened first and can act as the trace root.
+  const sessionId = touchSession(primaryRuntimeSessionKey, parentContext, undefined, seed?.sessionId);
+  const didMerge = previousSessionIdSnapshot != null && previousSessionIdSnapshot !== sessionId;
+
+  // When a merge occurred, add a link from the new openclaw.request back to the
+  // previous session.start span so the two sessions are navigable in the trace UI.
+  const sessionMergeLink: Link | undefined = didMerge && previousSessionStartSpanContext
+    ? {
+        context: previousSessionStartSpanContext,
+        attributes: {
+          "link.type": "session_merge",
+          "session.id": previousSessionIdSnapshot!,
+        },
+      }
+    : undefined;
+
+  // For spawned sub-agents, seed.parentContext explicitly points to the
+  // sessions_spawn tool span. Overriding it with getSessionContext() would
+  // reparent openclaw.request onto the *parent* session's session.start span,
+  // severing the spawn-tool → sub-agent link in the trace.
+  // For normal inbound messages (no explicit parent), nest openclaw.request
+  // under the fresh session.start span so it acts as the true trace root.
+  const sessionParentContext = seed?.parentContext != null
+    ? parentContext
+    : (getSessionContext(primaryRuntimeSessionKey) ?? parentContext);
+
+  const allLinks = [...(seed?.links ?? []), ...(sessionMergeLink ? [sessionMergeLink] : [])];
+
   const rootSpan = tracer.startSpan(
     "openclaw.request",
     {
@@ -909,15 +966,12 @@ function startRootSpan(
         "openclaw.message.from": from,
         ...seed?.attributes,
       },
-      links: seed?.links,
+      links: allLinks.length > 0 ? allLinks : undefined,
     },
-    parentContext
+    sessionParentContext
   );
 
-
-
-  const rootContext = trace.setSpan(parentContext, rootSpan);
-  const sessionId = touchSession(primaryRuntimeSessionKey, rootContext, undefined, seed?.sessionId);
+  const rootContext = trace.setSpan(sessionParentContext, rootSpan);
   rootSpan.setAttribute("session.id", sessionId);
   const capturedInput = config.captureContent
     ? setCapturedContent(rootSpan, "input", messageText, ["openclaw.request"])
@@ -928,6 +982,7 @@ function startRootSpan(
     rootSpan,
     rootContext,
     latestInput: capturedInput,
+    previousSessionStartSpanContext: sessionMergeLink ? previousSessionStartSpanContext : undefined,
     lastLifecycleEvent: "root_started",
     lastLifecycleAt: Date.now(),
     startTime: Date.now(),
@@ -1386,20 +1441,16 @@ export function registerHooks(
       try {
         ensureRuntime();
         const runtimeSessionKey = resolveRuntimeSessionKey(event, ctx);
-        let sessionCtx = getSessionTraceContext(event, ctx);
-        if (sessionCtx?.pendingRootRuntimeSessionIdentities && !sessionCtx.agentSpan) {
-          logger.warn?.(
-            `[otel] Closing previous request span before new inbound message: runtimeSession=${sessionCtx.runtimeSessionKey}`
-          );
-          finalizeRootSpan(
-            sessionCtx,
-            sessionCtx.pendingRootRuntimeSessionIdentities,
-            sessionCtx.runtimeSessionKey,
-            "superseded_by_new_message"
-          );
-          sessionCtx = undefined;
-        }
-        if (sessionCtx) {
+        const sessionCtx = getSessionTraceContext(event, ctx);
+
+        // Check for a pre-queued sessions_send handoff BEFORE deciding whether to reuse
+        // the existing session context. If a handoff is pending it means this message was
+        // routed by sessions_send and we must create a fresh openclaw.request span nested
+        // under the send tool span, even when the target agent already has an active session.
+        const incomingAgentId = ctx?.agentId || event?.agentId;
+        const preQueuedHandoff = incomingAgentId ? peekPendingSpawnHandoff(incomingAgentId) : undefined;
+
+        if (sessionCtx && !preQueuedHandoff) {
           setSessionTraceContext(sessionCtx, event, ctx);
           if (runtimeSessionKey !== "unknown") {
             touchSession(runtimeSessionKey, sessionCtx.rootContext);
@@ -1415,8 +1466,59 @@ export function registerHooks(
               ["openclaw.request"]
             ) ?? sessionCtx.latestInput;
           }
+
+          if (sessionCtx.pendingRootRuntimeSessionIdentities && !sessionCtx.agentSpan) {
+            logger.warn?.(
+              `[otel] Closing previous request span before new inbound message: runtimeSession=${sessionCtx.runtimeSessionKey}`
+            );
+            finalizeRootSpan(
+              sessionCtx,
+              sessionCtx.pendingRootRuntimeSessionIdentities,
+              sessionCtx.runtimeSessionKey,
+              "superseded_by_new_message"
+            );
+          }
         } else {
-          const startedSessionCtx = startRootSpan(tracer, event, ctx, config, logger, counters);
+          // Either new session, or a sessions_send handoff forces a fresh root span.
+          // Close any previous pending root first.
+          if (sessionCtx?.pendingRootRuntimeSessionIdentities && !sessionCtx.agentSpan) {
+            logger.warn?.(
+              `[otel] Closing previous request span before ${preQueuedHandoff ? "sessions_send" : "new inbound message"}: runtimeSession=${sessionCtx.runtimeSessionKey}`
+            );
+            finalizeRootSpan(
+              sessionCtx,
+              sessionCtx.pendingRootRuntimeSessionIdentities,
+              sessionCtx.runtimeSessionKey,
+              preQueuedHandoff ? "superseded_by_sessions_send" : "superseded_by_new_message"
+            );
+          }
+
+          const seed: RootSpanSeed | undefined = preQueuedHandoff
+            ? {
+                parentContext: preQueuedHandoff.parentContext,
+                sessionId: preQueuedHandoff.sourceSessionId,
+                // Note: no link to spawnToolSpanContext here — openclaw.request is already a
+                // *child* of the tool span (via parentContext), so an explicit link would
+                // duplicate the parent relationship and show twice in trace viewers.
+                links: [
+                  ...(preQueuedHandoff.sourceAgentSpanContext
+                    ? [{
+                        context: preQueuedHandoff.sourceAgentSpanContext,
+                        attributes: {
+                          "link.type": "agent_handoff",
+                          "ioa_observe.agent.previous": preQueuedHandoff.sourceAgentId,
+                          "ioa_observe.agent.previous_sequence": preQueuedHandoff.sourceAgentSequence,
+                        },
+                      }]
+                    : []),
+                ],
+                attributes: {
+                  "openclaw.handoff.source_runtime_session": preQueuedHandoff.sourceRuntimeSessionKey,
+                  "openclaw.handoff.source_agent": preQueuedHandoff.sourceAgentId,
+                },
+              }
+            : undefined;
+          const startedSessionCtx = startRootSpan(tracer, event, ctx, config, logger, counters, seed);
           markLifecycleEvent(startedSessionCtx, "message_received");
         }
       } catch (error) {
@@ -1521,15 +1623,10 @@ export function registerHooks(
             ? {
                 parentContext: pendingSpawnHandoff.parentContext,
                 sessionId: pendingSpawnHandoff.sourceSessionId,
+                // Note: no link to spawnToolSpanContext here — openclaw.request is already a
+                // *child* of the tool span (via parentContext), so an explicit link would
+                // duplicate the parent relationship and show twice in trace viewers.
                 links: [
-                  {
-                    context: pendingSpawnHandoff.spawnToolSpanContext,
-                    attributes: {
-                      "link.type": "agent_spawn",
-                      "openclaw.handoff.source_runtime_session": pendingSpawnHandoff.sourceRuntimeSessionKey,
-                      "openclaw.handoff.source_agent": pendingSpawnHandoff.sourceAgentId,
-                    },
-                  },
                   ...(pendingSpawnHandoff.sourceAgentSpanContext
                     ? [{
                         context: pendingSpawnHandoff.sourceAgentSpanContext,
@@ -1605,7 +1702,12 @@ export function registerHooks(
 
         // Prepare handoff links before span creation so OTel records them.
         const handoff = onAgentStart(runtimeSessionKey, agentId);
-        const agentLinks: Link[] = [...joinLinks, ...handoff.links];
+        // When this agent was merged into another session via sessions_send, add a link
+        // from the agent turn back to the agent's own previous root span.
+        const sessionMergeLinks: Link[] = sessionCtx?.previousSessionStartSpanContext
+          ? [{ context: sessionCtx.previousSessionStartSpanContext, attributes: { "link.type": "session_merge" } }]
+          : [];
+        const agentLinks: Link[] = [...joinLinks, ...handoff.links, ...sessionMergeLinks];
 
         // Create agent turn span as child of root span
         const agentSpan = tracer.startSpan(
@@ -1987,6 +2089,36 @@ export function registerHooks(
           // No toolCallId to key on — close immediately with no output
           span.setStatus({ code: SpanStatusCode.OK });
           span.end();
+        }
+
+        // For sessions_send, pre-queue the handoff NOW (before the tool executes and
+        // the target agent's message_received fires) so the root span can be correctly
+        // parented under this tool span. sessions_spawn is handled post-result in
+        // handleToolOutput because the target agent ID comes from the result.
+        if (toolName === "sessions_send") {
+          const sendTargetIds = extractSpawnTargetAgentIds(toolInput, {});
+          if (sendTargetIds.length > 0) {
+            const sourceAgentSpanContext = sessionCtx?.agentSpan?.spanContext();
+            for (const targetAgentId of sendTargetIds) {
+              queuePendingSpawnHandoff({
+                targetAgentId,
+                sourceRuntimeSessionKey: runtimeSessionKey,
+                sourceSessionId: getSessionId(runtimeSessionKey),
+                sourceAgentId: agentId,
+                sourceAgentSequence: agentSequence,
+                sourceAgentSpanContext,
+                spawnToolSpanContext: span.spanContext(),
+                parentContext: trace.setSpan(parentContext, span),
+                linkType: "agent_send",
+                createdAt: Date.now(),
+              });
+              targetAgentsMap.set(targetAgentId, agentId + "-" + runtimeSessionKey);
+            }
+            logger.info?.(
+              `[otel] Pre-queued sessions_send handoff to [${sendTargetIds.join(", ")}], ` +
+              `runtimeSession=${runtimeSessionKey}`
+            );
+          }
         }
 
         logger.info?.(`[otel] Tool span started: tool=${toolName}, callId=${toolCallId}, runtimeSession=${runtimeSessionKey}`);

@@ -39,7 +39,7 @@ printf '%s
 'from pathlib import Path' \
 "base = Path('${REMOTE_BASE}')" \
 'agents_base = base / "agents"' \
-'template = agents_base / "trip-concierge-agent" / "agent"' \
+'template = agents_base / "main" / "agent"' \
 'template_models = template / "models.json"' \
 'template_auth = template / "auth-profiles.json"' \
 'agent_ids = ["sre", "telemetry", "backend", "db", "verifier", "comms"]' \
@@ -48,6 +48,8 @@ printf '%s
 '    sdir = agents_base / aid / "sessions"' \
 '    adir.mkdir(parents=True, exist_ok=True)' \
 '    sdir.mkdir(parents=True, exist_ok=True)' \
+'    if not template.exists():' \
+'        print(f"Warning: template agent directory {template} does not exist.")' \
 '    if template_models.exists() and not (adir / "models.json").exists():' \
 '        (adir / "models.json").write_text(template_models.read_text(encoding="utf-8"), encoding="utf-8")' \
 '    if template_auth.exists() and not (adir / "auth-profiles.json").exists():' \
@@ -97,12 +99,12 @@ printf '%s
 'cfg["agents"].setdefault("list", [])' \
 'agent_list = cfg["agents"]["list"]' \
 'new_agents = [' \
-'  {"id": "sre", "name": "SRE Lead", "workspace": "sre", "agentDir": "sre", "identity": {"name": "SRE Lead"}, "subagents": {"allowAgents": ["telemetry", "backend", "db"]}, "tools": {"allow": ["sessions_spawn", "sessions_list", "sessions_send"]}},' \
-'  {"id": "telemetry", "name": "Telemetry Analyst", "workspace": "telemetry", "agentDir": "telemetry", "identity": {"name": "Telemetry"}, "tools": {"allow": ["get_metrics", "list_services", "get_service_health", "get_logs", "query_db"]}},' \
-'  {"id": "backend", "name": "Backend Specialist", "workspace": "backend", "agentDir": "backend", "identity": {"name": "Backend"}, "tools": {"allow": ["get_deployments", "get_logs", "get_metrics", "run_action", "query_db"]}},' \
-'  {"id": "db", "name": "Database Specialist", "workspace": "db", "agentDir": "db", "identity": {"name": "Database"}, "tools": {"allow": ["query_db"]}},' \
-'  {"id": "verifier", "name": "Verifier", "workspace": "verifier", "agentDir": "verifier", "identity": {"name": "Verifier"}},' \
-'  {"id": "comms", "name": "Communications", "workspace": "comms", "agentDir": "comms", "identity": {"name": "Communications"}}' \
+'  {"id": "sre", "name": "SRE Lead", "workspace": "'"${REMOTE_WS}"'/sre", "agentDir": "'"${REMOTE_BASE}"'/agents/sre", "identity": {"name": "SRE Lead"}, "subagents": {"allowAgents": ["telemetry", "backend", "db"]}, "tools": {"allow": ["sessions_spawn", "sessions_list", "sessions_send"]}},' \
+'  {"id": "telemetry", "name": "Telemetry Analyst", "workspace": "'"${REMOTE_WS}"'/telemetry", "agentDir": "'"${REMOTE_BASE}"'/agents/telemetry", "identity": {"name": "Telemetry"}, "tools": {"allow": ["get_metrics", "list_services", "get_service_health", "get_logs", "query_db"]}},' \
+'  {"id": "backend", "name": "Backend Specialist", "workspace": "'"${REMOTE_WS}"'/backend", "agentDir": "'"${REMOTE_BASE}"'/agents/backend", "identity": {"name": "Backend"}, "tools": {"allow": ["get_deployments", "get_logs", "get_metrics", "run_action", "query_db"]}},' \
+'  {"id": "db", "name": "Database Specialist", "workspace": "'"${REMOTE_WS}"'/db", "agentDir": "'"${REMOTE_BASE}"'/agents/db", "identity": {"name": "Database"}, "tools": {"allow": ["query_db"]}},' \
+'  {"id": "verifier", "name": "Verifier", "workspace": "'"${REMOTE_WS}"'/verifier", "agentDir": "'"${REMOTE_BASE}"'/agents/verifier", "identity": {"name": "Verifier"}},' \
+'  {"id": "comms", "name": "Communications", "workspace": "'"${REMOTE_WS}"'/comms", "agentDir": "'"${REMOTE_BASE}"'/agents/comms", "identity": {"name": "Communications"}}' \
 ']' \
 'existing = {a.get("id"): i for i, a in enumerate(agent_list) if isinstance(a, dict)}' \
 'for agent in new_agents:' \

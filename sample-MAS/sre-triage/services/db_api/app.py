@@ -30,6 +30,19 @@ _QUERY_TYPE_ALIASES = {
     "releases": "deployments",
 }
 
+_SCENARIO_CATALOG = {
+    "1": {
+        "name": "payment async timeout",
+        "directory": "scenario1",
+        "file_name": "payment-async-timeout.yaml",
+    },
+    "2": {
+        "name": "order DB deadlock",
+        "directory": "scenario2",
+        "file_name": "order-db-deadlock.yaml",
+    },
+}
+
 
 def _hash_float(service_name: str, field: str, lo: float, hi: float) -> float:
     key = f"{service_name}:{field}".encode()
@@ -289,7 +302,7 @@ class SceneStore:
 
 def _parse_scenario_arg(argv: list[str]) -> str:
     parser = argparse.ArgumentParser(add_help=False)
-    parser.add_argument("--scenario", choices=["1", "2"], default="2")
+    parser.add_argument("--scenario", choices=sorted(_SCENARIO_CATALOG.keys()), default="2")
     args, _ = parser.parse_known_args(argv)
     return args.scenario
 
@@ -297,11 +310,8 @@ def _parse_scenario_arg(argv: list[str]) -> str:
 def _resolve_fixture_path(scenario: str = "2") -> Path | None:
     base = Path(__file__).resolve().parent / "datasets"
 
-    # Explicit scenario selection: scenario 1 -> payment timeout, else scenario 2.
-    if scenario == "1":
-        selected = base / "scenario1" / "payment-async-timeout.yaml"
-    else:
-        selected = base / "scenario2" / "order-db-deadlock.yaml"
+    scenario_info = _SCENARIO_CATALOG.get(scenario, _SCENARIO_CATALOG["2"])
+    selected = base / scenario_info["directory"] / scenario_info["file_name"]
     if selected.exists():
         return selected
 
@@ -314,6 +324,26 @@ def _resolve_fixture_path(scenario: str = "2") -> Path | None:
     if local_default.exists():
         return local_default
     return None
+
+
+def _list_scenarios() -> list[dict[str, Any]]:
+    base = Path(__file__).resolve().parent / "datasets"
+    scenarios: list[dict[str, Any]] = []
+
+    for scenario_id in sorted(_SCENARIO_CATALOG.keys()):
+        scenario_info = _SCENARIO_CATALOG[scenario_id]
+        fixture_path = base / scenario_info["directory"] / scenario_info["file_name"]
+        scenarios.append(
+            {
+                "scenario": scenario_id,
+                "name": scenario_info["name"],
+                "file_name": scenario_info["file_name"],
+                "available": fixture_path.exists(),
+                "selected": scenario_id == _SCENARIO,
+            }
+        )
+
+    return scenarios
 
 
 def _normalize_query_type(query_type: str | None) -> str:
@@ -381,8 +411,10 @@ def _set_scenario(scenario: int) -> dict[str, Any]:
     global _SCENARIO, _FIXTURE_PATH, store
     
     scenario_str = str(scenario)
-    if scenario_str not in ("1", "2"):
-        raise ValueError(f"Invalid scenario: {scenario_str}. Must be 1 or 2.")
+    if scenario_str not in _SCENARIO_CATALOG:
+        raise ValueError(
+            f"Invalid scenario: {scenario_str}. Must be one of {', '.join(sorted(_SCENARIO_CATALOG.keys()))}."
+        )
     
     previous_scenario = _SCENARIO
     previous_fixture = _FIXTURE_PATH.name if _FIXTURE_PATH else None
@@ -445,6 +477,16 @@ def get_scenario(req: Request) -> dict[str, Any]:
         "file_name": _FIXTURE_PATH.name if _FIXTURE_PATH else None,
         "incident_id": store.incident_id,
         "loaded_services": sorted(store.services.keys()),
+    }
+
+
+@app.get("/scenarios")
+def list_scenarios(req: Request) -> dict[str, Any]:
+    caller = req.headers.get("X-Agent-Id", "unknown")
+    logger.info("caller=%s endpoint=GET /scenarios", caller)
+    return {
+        "selected": _SCENARIO,
+        "scenarios": _list_scenarios(),
     }
 
 

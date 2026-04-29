@@ -36,6 +36,57 @@ What the script does:
 4. Copies `sample-MAS/sre-triage` into the remote repo as `sre-triage/openclaw`.
 5. Runs `nemoclaw onboard` non-interactively with the configured model settings.
 
+## Enter The Sandbox
+
+After the install completes, SSH to the remote machine and run:
+
+```bash
+nemoclaw my-assistant connect
+```
+
+This opens a shell inside the NemoClaw sandbox.
+
+To open the SRE lead chat from inside the sandbox, run:
+
+```bash
+openclaw tui
+```
+
+## Change The DB API Scenario
+
+To switch the DB API dataset, first enter the sandbox:
+
+```bash
+nemoclaw my-assistant connect
+```
+
+Then call the local DB API scenario endpoint from inside the sandbox:
+
+```bash
+curl -X POST http://127.0.0.1:8765/scenario \
+  -H "Content-Type: application/json" \
+  -d '{"scenario": 1}'
+```
+
+Available scenarios:
+
+1. `1`: payment async timeout
+2. `2`: order DB deadlock
+
+You can also inspect the currently loaded scenario with the `GET /scenario` endpoint:
+
+```bash
+curl http://127.0.0.1:8765/scenario
+```
+
+The response includes the selected scenario number, fixture file name, incident id, and loaded services.
+
+To list all available scenarios and see which one is currently selected, use the `GET /scenarios` endpoint:
+
+```bash
+curl http://127.0.0.1:8765/scenarios
+```
+
 ## Dry Run
 
 Use `DRY_RUN=1` to print the `ssh` and `scp` commands without changing the remote machine:

@@ -148,7 +148,7 @@ const otelObservabilityPlugin = {
         }
 
         // Start session lifecycle watcher (session.start + idle-based session.end detection)
-        startSessionWatcher(telemetry!.tracer, logger, undefined, {
+        startSessionWatcher(telemetry!.tracer, telemetry!.histograms, logger, undefined, {
           enableSpanCache: config.spanCache,
           spanCacheVerboseLogs: config.spanCacheVerboseLogs,
         });

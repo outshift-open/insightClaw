@@ -13,7 +13,9 @@ const TOKENS = [
   "is", "are", "was", "were", "be", "been", "being", "have", "has", "had",
   "do", "does", "did",
   // Common adverbs/determiners
-  "all", "any", "some", "each", "more", "most", "other", "such", "just", "very", "also", "only", "even"
+  "all", "any", "some", "each", "more", "most", "other", "such", "just", "very", "also", "only", "even",
+  // OpenClaw keywords
+  "NO_REPLY", "Agent-to-agent announce step"
 ]; // common stop words to ignore
 
 

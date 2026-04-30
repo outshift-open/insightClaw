@@ -13,7 +13,8 @@ import {
   ATTR_OBSERVE_SPAN_KIND,
   ObserveSpanKind,
 } from "./observe-attributes.js";
-import { flushBySessionKey, startSpanCache, stopSpanCache } from "./span-cache.js";
+import { flushBySessionKey, getSessionEndTime, getSessionStartTime, getSpansByType, startSpanCache, stopSpanCache } from "./span-cache.js";
+import { getJaccardSimilarity } from "./context-analysis.js";
 
 // ── Configuration ──────────────────────────────────────────────────
 
@@ -37,6 +38,7 @@ interface SessionActivity {
   sessionContext?: Context;
   workflowName?: string;
   ended: boolean;
+  channel?: string;
 }
 
 // ── State ──────────────────────────────────────────────────────────
@@ -78,6 +80,7 @@ function deleteSessionAliases(session: SessionActivity): void {
  */
 export function startSessionWatcher(
   tracer: Tracer,
+  histograms: any,
   logger: any,
   idleTimeout?: number,
   options?: { enableSpanCache?: boolean; spanCacheVerboseLogs?: boolean }
@@ -94,7 +97,7 @@ export function startSessionWatcher(
   }
 
   watcherTimer = setInterval(() => {
-    checkIdleSessions();
+    checkIdleSessions(histograms);
   }, WATCHER_INTERVAL_MS);
 
   // Emit session.end for all remaining sessions on process exit
@@ -136,7 +139,8 @@ export function touchSession(
   runtimeSessionKey: string,
   rootContext: Context,
   workflowName?: string,
-  inheritedSessionId?: string
+  inheritedSessionId?: string,
+  channel?: string
 ): string {
   const now = Date.now();
   const existing = sessions.get(runtimeSessionKey);
@@ -227,7 +231,9 @@ export function touchSession(
       sessionContext,
       workflowName,
       ended: false,
+      channel: channel,
     };
+
     sessions.set(runtimeSessionKey, session);
     loggerRef?.info?.(
       `[otel:session] New session tracked: session=${session.sessionId}, runtimeSession=${runtimeSessionKey}, activeSessions=${getUniqueSessions().length}`
@@ -261,10 +267,14 @@ export function getSessionSpanContext(runtimeSessionKey: string): import("@opent
  * Explicitly end a session associated with a runtime session key.
  * Prevents duplicate session.end emissions.
  */
-export function endSession(runtimeSessionKey: string): void {
+export function endSession(runtimeSessionKey: string, histograms?: any): void {
   const session = sessions.get(runtimeSessionKey);
   if (!session) {
     return;
+  }
+  //computing end of session scores 
+  if (histograms) {
+    recordEndOfSessionMetrics(runtimeSessionKey, histograms);
   }
 
   detachRuntimeSessionKey(runtimeSessionKey, session);
@@ -288,12 +298,16 @@ export function endSession(runtimeSessionKey: string): void {
 /**
  * Remove a session without emitting session.end (e.g., normal cleanup).
  */
-export function removeSession(runtimeSessionKey: string): void {
+export function removeSession(runtimeSessionKey: string, histograms?: any): void {
   const session = sessions.get(runtimeSessionKey);
   if (!session) {
     return;
   }
 
+  if (histograms) {
+    //computing end of session scores
+    recordEndOfSessionMetrics(runtimeSessionKey, histograms);
+  }
   detachRuntimeSessionKey(runtimeSessionKey, session);
   if (session.runtimeSessionKeys.size === 0) {
     session.ended = true;
@@ -311,9 +325,145 @@ export function activeSessionCount(): number {
   return count;
 }
 
+
+/**
+ * Compute all the derived metrics on the session that just terminated 
+ */
+export function recordEndOfSessionMetrics(runtimeSessionKey: string, histograms: any): void {
+  recordParallelisationScore(runtimeSessionKey, histograms);
+  recordRepetitionScore(runtimeSessionKey, histograms);
+}
+
+
+/**
+ * Computes the repetition score: given all the LLM calls (openclaw.llm.call) in a session (including sub-agents and other top-level agents),
+ * we compute the Jaccard similarity of the prompts between each pair of calls for the same agent
+ * The final score reflects the presence of repetition in the prompts for the same agent
+ */
+function recordRepetitionScore(runtimeSessionKey: string, histograms: any): void {
+  const sessionId = getSessionId(runtimeSessionKey);
+  if (!sessionId) {
+    loggerRef?.warn?.(`[otel:session] Cannot record repetition score, session not found for runtimeSessionKey=${runtimeSessionKey}`);
+    return;
+  }
+
+  const session = sessions.get(runtimeSessionKey);
+  if (!session) {
+    loggerRef?.warn?.(`[otel:session] Cannot record repetition score, session not found for sessionId=${sessionId}`);
+    return;
+  }
+
+  if (!session.channel || session.channel === "heartbeat") {
+    // we do not compute the score for heartbeat sessions
+    loggerRef?.info?.(`[otel:session] Skipping repetition score for heartbeat session: session=${sessionId}`);
+    return;
+  }
+
+  // Getting all spans of type llm call
+  const calls = getSpansByType("openclaw.llm.call", undefined, undefined, sessionId);
+
+  const callsByAgent = new Map<string, Array<{ prompt: string }>>();    
+  for (const call of calls) {
+    const agentId = call.attributes["gen_ai.agent.id"] as string | undefined;
+    const prompt = call.attributes["openclaw.entity.input"] as string | undefined;      
+    if (!agentId || !prompt) continue;
+      
+    if (!callsByAgent.has(agentId)) {
+      callsByAgent.set(agentId, []);
+    }
+    loggerRef?.debug?.(`[otel:session] Recording call for agent ${agentId} with prompt: ${prompt}`);
+    callsByAgent.get(agentId)!.push({ prompt });
+  }
+
+  const scores = new Array<number>();
+
+  for (const [agentId, agentCalls] of callsByAgent) {
+    if (agentCalls.length < 2) continue;
+    //for each pair of call, compute the getJaccardSimilarity of the prompt
+    const agentScores = new Array<number>();
+    for (let i = 0; i < agentCalls.length; i++) {
+      for (let j = i + 1; j < agentCalls.length; j++) {
+        const similarity = getJaccardSimilarity(agentCalls[i].prompt, agentCalls[j].prompt);
+        loggerRef?.debug?.(`[otel:session] Jaccard similarity: session=${sessionId}, agent=${agentId}, similarity=${similarity}`);
+        agentScores.push(similarity);
+      }
+    }
+    scores.push(Math.max(...agentScores));
+  }
+
+  let finalScore = 0;
+  if (scores.length > 0) {
+    finalScore = scores.reduce((a, b) => a + b, 0) / scores.length;
+  }
+  loggerRef?.info?.(`[otel:session] Final repetition score for session ${sessionId}-${runtimeSessionKey}: ${finalScore}`);
+
+  histograms.repetitionScore.record(finalScore, { "openclaw.session.key": runtimeSessionKey });
+}
+
+/** 
+ * The score is the ratio between the sum of durations of spans of type agent turn, and the total session duration.
+ * All the spans recorded during the session lifecycle are considered, no matter their session IDs (thus including sub-agents and other top-level agent)
+ * 
+ * The higher the score, the more parallelization there was in the session (i.e., multiple agents working at the same time, or an agent working while waiting for a tool response).
+ * Low score means low parallelisation or the ageint waiting for external actions.
+ * 
+*/
+export function recordParallelisationScore(runtimeSessionKey: string, histograms: any): void {
+  const sessionId = getSessionId(runtimeSessionKey);
+  if (!sessionId) {
+    loggerRef?.warn?.(`[otel:session] Cannot record parallelisation score, session not found for runtimeSessionKey=${runtimeSessionKey}`);
+    return;
+  }
+
+  const session = sessions.get(runtimeSessionKey);
+  if (!session) {
+    loggerRef?.warn?.(`[otel:session] Cannot record parallelisation score, session not found for sessionId=${sessionId}`);
+    return;
+  }
+
+  if (!session.channel || session.channel === "heartbeat") {
+    // we do not compute the score for heartbeat sessions
+    loggerRef?.info?.(`[otel:session] Skipping parallelisation score for heartbeat session: session=${sessionId}`);
+    return;
+  }
+
+  const startTime = getSessionStartTime(sessionId);
+  if (!startTime) {
+    loggerRef?.warn?.(`[otel:session] Cannot record parallelisation score, session not found: session=${sessionId}`);
+    return;
+  }
+
+  const endTime = getSessionEndTime(sessionId);
+  if (!endTime) {
+    loggerRef?.warn?.(`[otel:session] Cannot record parallelisation score, session not ended: session=${sessionId}`);
+    return;
+  }
+  const sessionDurationTillNow = endTime - startTime;
+  const spans = getSpansByType("openclaw.agent.turn", undefined, undefined, sessionId);
+
+  const durationKeys = [
+    "openclaw.request.duration_ms",
+    "openclaw.agent.duration_ms",
+    "openclaw.tool.duration_ms"
+  ];
+  
+  let spansDuration = 0
+  for (const r of spans) {
+    for (const key of durationKeys) {
+      const duration = r.attributes[key];
+      if (typeof duration === "number") {
+        spansDuration += duration;
+        break;
+      }
+    }
+  }
+  const score = spansDuration / sessionDurationTillNow; 
+  histograms.parallelisationScore.record(score, { "openclaw.session.key": runtimeSessionKey });
+}
+
 // ── Internal ───────────────────────────────────────────────────────
 
-function checkIdleSessions(): void {
+function checkIdleSessions(histograms?: any): void {
   const now = Date.now();
   let idleCount = 0;
   for (const session of getUniqueSessions()) {
@@ -324,6 +474,10 @@ function checkIdleSessions(): void {
         `[otel:session] Session idle timeout: session=${session.sessionId}, runtimeSession=${session.primaryRuntimeSessionKey}, ` +
         `idleFor=${Math.round(idleMs / 1000)}s (threshold=${Math.round(idleTimeoutMs / 1000)}s)`
       );
+      if(histograms) {
+        //computing end of session scores
+        recordEndOfSessionMetrics(session.primaryRuntimeSessionKey,histograms);
+      }
       emitSessionEnd(session);
       for (const runtimeSessionKey of session.runtimeSessionKeys) {
         flushBySessionKey(runtimeSessionKey);

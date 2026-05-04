@@ -6,13 +6,14 @@ if [ "$#" -lt 1 ]; then
   echo "Optional env vars:"
   echo "  TARGET_DIR=/home/ubuntu/NemoClaw"
   echo "  NEMOCLAW_REPO_URL=https://github.com/NVIDIA/NemoClaw.git"
-  echo "  NEMOCLAW_TAG=v0.0.20"
-  echo "  DIFF_FILE=/path/to/nemoclaw-nuc-v0.0.20.diff"
+  echo "  NEMOCLAW_TAG=v0.0.33"
+  echo "  DIFF_FILE=/path/to/nemoclaw-nuc-v0.0.33.diff"
   echo "  LOCAL_TRIAGE_DIR=/path/to/sample-MAS/sre-triage"
   echo "  REMOTE_TRIAGE_DIR=~/NemoClaw/sre-triage"
   echo "  NEMOCLAW_PROVIDER=custom"
   echo "  NEMOCLAW_ENDPOINT_URL=https://your-endpoint.example.com"
   echo "  NEMOCLAW_MODEL=vertex_ai/gemini-2.5-pro"
+  echo "  NEMOCLAW_SANDBOX_NAME=my-assistant"
   echo "  NEMOCLAW_ONBOARD_FROM=~/NemoClaw/Dockerfile"
   echo "  COMPATIBLE_API_KEY=<required>"
   echo "  DRY_RUN=1"
@@ -23,9 +24,9 @@ fi
 TARGET_HOST="$1"
 TARGET_DIR="${TARGET_DIR:-/home/ubuntu/NemoClaw}"
 NEMOCLAW_REPO_URL="${NEMOCLAW_REPO_URL:-https://github.com/NVIDIA/NemoClaw.git}"
-NEMOCLAW_TAG="${NEMOCLAW_TAG:-v0.0.20}"
+NEMOCLAW_TAG="${NEMOCLAW_TAG:-v0.0.33}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-DIFF_FILE="${DIFF_FILE:-${SCRIPT_DIR}/nemoclaw-nuc-v0.0.20.diff}"
+DIFF_FILE="${DIFF_FILE:-${SCRIPT_DIR}/nemoclaw-nuc-v0.0.33.diff}"
 LOCAL_TRIAGE_DIR="${LOCAL_TRIAGE_DIR:-${SCRIPT_DIR}/..}"
 REMOTE_TRIAGE_DIR="${REMOTE_TRIAGE_DIR:-${TARGET_DIR}/sre-triage}"
 REMOTE_TRIAGE_OPENCLAW_DIR="${REMOTE_TRIAGE_DIR}/openclaw"
@@ -33,6 +34,7 @@ REMOTE_DIFF="${TARGET_DIR}/.nemoclaw-local.diff"
 NEMOCLAW_PROVIDER="${NEMOCLAW_PROVIDER:-custom}"
 NEMOCLAW_ENDPOINT_URL="${NEMOCLAW_ENDPOINT_URL:-https://your-endpoint.example.com}"
 NEMOCLAW_MODEL="${NEMOCLAW_MODEL:-vertex_ai/gemini-2.5-pro}"
+NEMOCLAW_SANDBOX_NAME="${NEMOCLAW_SANDBOX_NAME:-my-assistant}"
 NEMOCLAW_ONBOARD_FROM="${NEMOCLAW_ONBOARD_FROM:-${TARGET_DIR}/Dockerfile}"
 DRY_RUN="${DRY_RUN:-0}"
 CLEAN="${CLEAN:-0}"
@@ -111,8 +113,10 @@ run_remote "
 
   # shellcheck disable=SC1090
   . \"\$NVM_DIR/nvm.sh\"
-  nvm install 22
-  nvm use 22
+  if ! nvm use --delete-prefix 22 >/dev/null 2>&1; then
+    nvm install 22
+    nvm use --delete-prefix 22 >/dev/null
+  fi
 
   command -v node >/dev/null 2>&1
   command -v npm >/dev/null 2>&1
@@ -136,10 +140,32 @@ run_remote "
 echo "[4/7] Installing nemoclaw CLI from source"
 run_remote "
   set -euo pipefail
-  export NVM_DIR=\"\${NVM_DIR:-\$HOME/.nvm}\"
-  # shellcheck disable=SC1090
-  . \"\$NVM_DIR/nvm.sh\"
-  nvm use 22 >/dev/null
+  if command -v node >/dev/null 2>&1 && command -v npm >/dev/null 2>&1; then
+    NODE_MAJOR=\"\$(node -v | sed -E 's/^v([0-9]+).*/\1/')\"
+    if [ \"\${NODE_MAJOR}\" -lt 22 ]; then
+      export NVM_DIR=\"\${NVM_DIR:-\$HOME/.nvm}\"
+      if [ ! -s \"\$NVM_DIR/nvm.sh\" ]; then
+        curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash
+      fi
+      # shellcheck disable=SC1090
+      . \"\$NVM_DIR/nvm.sh\"
+      if ! nvm use --delete-prefix 22 >/dev/null 2>&1; then
+        nvm install 22
+        nvm use --delete-prefix 22 >/dev/null
+      fi
+    fi
+  else
+    export NVM_DIR=\"\${NVM_DIR:-\$HOME/.nvm}\"
+    if [ ! -s \"\$NVM_DIR/nvm.sh\" ]; then
+      curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash
+    fi
+    # shellcheck disable=SC1090
+    . \"\$NVM_DIR/nvm.sh\"
+    if ! nvm use --delete-prefix 22 >/dev/null 2>&1; then
+      nvm install 22
+      nvm use --delete-prefix 22 >/dev/null
+    fi
+  fi
   cd ${TARGET_DIR}
   npm install --ignore-scripts
   npm run --if-present build:cli
@@ -169,16 +195,27 @@ if ! is_dry_run; then
 fi
 run_remote "
   set -euo pipefail
-  export NVM_DIR=\"\${NVM_DIR:-\$HOME/.nvm}\"
-  # shellcheck disable=SC1090
-  . \"\$NVM_DIR/nvm.sh\"
-  nvm use 22 >/dev/null
+  if command -v node >/dev/null 2>&1; then
+    NODE_MAJOR=\"\$(node -v | sed -E 's/^v([0-9]+).*/\1/')\"
+    if [ \"\${NODE_MAJOR}\" -lt 22 ]; then
+      export NVM_DIR=\"\${NVM_DIR:-\$HOME/.nvm}\"
+      # shellcheck disable=SC1090
+      . \"\$NVM_DIR/nvm.sh\"
+      nvm use --delete-prefix 22 >/dev/null
+    fi
+  else
+    export NVM_DIR=\"\${NVM_DIR:-\$HOME/.nvm}\"
+    # shellcheck disable=SC1090
+    . \"\$NVM_DIR/nvm.sh\"
+    nvm use --delete-prefix 22 >/dev/null
+  fi
   cd ${TARGET_DIR}
   NEMOCLAW_NON_INTERACTIVE=1 \
   NEMOCLAW_RECREATE_SANDBOX=1 \
   NEMOCLAW_PROVIDER='${NEMOCLAW_PROVIDER}' \
   NEMOCLAW_ENDPOINT_URL='${NEMOCLAW_ENDPOINT_URL}' \
   NEMOCLAW_MODEL='${NEMOCLAW_MODEL}' \
+  NEMOCLAW_SANDBOX_NAME='${NEMOCLAW_SANDBOX_NAME}' \
   COMPATIBLE_API_KEY='${COMPATIBLE_API_KEY:-}' \
   nemoclaw onboard --non-interactive --recreate-sandbox --from '${NEMOCLAW_ONBOARD_FROM}' --yes-i-accept-third-party-software
 "

@@ -1,0 +1,250 @@
+diff --git a/Dockerfile b/Dockerfile
+index 645fe6a..bc4d740 100644
+--- a/Dockerfile
++++ b/Dockerfile
+@@ -233,6 +233,30 @@ COPY scripts/generate-openclaw-config.py /usr/local/lib/nemoclaw/generate-opencl
+ RUN chmod 755 /usr/local/bin/nemoclaw-start /usr/local/bin/nemoclaw-codex-acp /usr/local/lib/nemoclaw/sandbox-init.sh \
+     && chmod 644 /usr/local/lib/nemoclaw/ws-proxy-fix.js
+ 
++# Import SRE triage assets (agent workspaces + DB API service) when present
++# in the Docker build context from sample-MAS/sre-triage.
++ARG OPENCLAW_REPO_DIR=sre-triage
++COPY ${OPENCLAW_REPO_DIR}/openclaw/services/db_api/ /sandbox/.openclaw/services/db_api/
++RUN if [ -f /sandbox/.openclaw/services/db_api/requirements.txt ]; then \
++      python3 -m pip install --no-cache-dir --break-system-packages \
++        -r /sandbox/.openclaw/services/db_api/requirements.txt; \
++    fi
++COPY ${OPENCLAW_REPO_DIR}/openclaw/workspaces/ /sandbox/.openclaw/workspaces/
++COPY ${OPENCLAW_REPO_DIR}/openclaw/workspaces/sre/ /sandbox/.openclaw/agents/sre/agent/
++COPY ${OPENCLAW_REPO_DIR}/openclaw/workspaces/telemetry/ /sandbox/.openclaw/agents/telemetry/agent/
++COPY ${OPENCLAW_REPO_DIR}/openclaw/workspaces/backend/ /sandbox/.openclaw/agents/backend/agent/
++COPY ${OPENCLAW_REPO_DIR}/openclaw/workspaces/db/ /sandbox/.openclaw/agents/db/agent/
++COPY ${OPENCLAW_REPO_DIR}/openclaw/workspaces/verifier/ /sandbox/.openclaw/agents/verifier/agent/
++COPY ${OPENCLAW_REPO_DIR}/openclaw/workspaces/comms/ /sandbox/.openclaw/agents/comms/agent/
++RUN chown -R sandbox:sandbox /sandbox/.openclaw/workspaces \
++    /sandbox/.openclaw/agents/sre \
++    /sandbox/.openclaw/agents/telemetry \
++    /sandbox/.openclaw/agents/backend \
++    /sandbox/.openclaw/agents/db \
++    /sandbox/.openclaw/agents/verifier \
++    /sandbox/.openclaw/agents/comms \
++    /sandbox/.openclaw/services/db_api
++
+ # Build args for config that varies per deployment.
+ # nemoclaw onboard passes these at image build time.
+ ARG NEMOCLAW_MODEL=nvidia/nemotron-3-super-120b-a12b
+diff --git a/scripts/generate-openclaw-config.py b/scripts/generate-openclaw-config.py
+index 24be871..0706685 100755
+--- a/scripts/generate-openclaw-config.py
++++ b/scripts/generate-openclaw-config.py
+@@ -39,6 +39,7 @@ import base64
+ import json
+ import os
+ import re
++from pathlib import Path
+ from urllib.parse import urlparse
+ 
+ 
+@@ -54,6 +55,105 @@ def is_loopback(hostname: str) -> bool:
+     return bool(re.match(r"^127(?:\.\d{1,3}){3}$", normalized))
+ 
+ 
++def build_sre_triage_agents_list() -> list[dict]:
++    """Build agents.list entries for SRE triage workspaces.
++
++    Generates entries that mirror sample-MAS/sre-triage/nemoclaw/list.json,
++    but uses sandbox paths baked into the NemoClaw image.
++    """
++    workspace_root = Path("/sandbox/.openclaw/workspaces")
++    agent_root = Path("/sandbox/.openclaw/agents")
++
++    workspace_ids = (
++        sorted(
++            d.name
++            for d in workspace_root.iterdir()
++            if d.is_dir() and not d.name.startswith(".")
++        )
++        if workspace_root.exists()
++        else []
++    )
++
++    if not workspace_ids:
++        workspace_ids = ["sre", "telemetry", "backend", "db", "verifier", "comms"]
++
++    allow_candidates = ["telemetry", "backend", "db", "debug", "debug_01", "debug_02"]
++    allow_agents = [aid for aid in allow_candidates if aid in workspace_ids]
++
++    special: dict[str, dict] = {
++        "sre": {
++            "name": "sre",
++            "identity": {"name": "sre"},
++            "subagents": {"allowAgents": allow_agents},
++            "tools": {"allow": ["sessions_spawn", "sessions_list", "sessions_send"]},
++        },
++        "telemetry": {
++            "name": "telemetry",
++            "identity": {"name": "telemetry"},
++            "tools": {
++                "allow": [
++                    "get_metrics",
++                    "list_services",
++                    "get_service_health",
++                    "get_logs",
++                    "query_db",
++                ]
++            },
++        },
++        "backend": {
++            "name": "backend",
++            "identity": {"name": "backend"},
++            "tools": {
++                "allow": [
++                    "get_deployments",
++                    "get_logs",
++                    "get_metrics",
++                    "run_action",
++                    "query_db",
++                ]
++            },
++        },
++        "db": {
++            "name": "db",
++            "identity": {"name": "db"},
++            "tools": {"allow": ["query_db"]},
++        },
++        "verifier": {
++            "name": "verifier",
++            "identity": {"name": "verifier"},
++        },
++        "comms": {
++            "name": "Communications",
++            "identity": {"name": "Communications"},
++        },
++    }
++
++    entries: list[dict] = []
++    for aid in workspace_ids:
++        entry: dict = {
++            "id": aid,
++            "workspace": str(workspace_root / aid),
++            "agentDir": str(agent_root / aid / "agent"),
++            "name": aid,
++            "identity": {"name": aid},
++        }
++        if aid in special:
++            entry.update(special[aid])
++        entries.append(entry)
++
++    if "sre" in workspace_ids:
++        entries.insert(
++            0,
++            {
++                "id": "main",
++                "workspace": str(workspace_root / "sre"),
++                "subagents": {"allowAgents": allow_agents},
++            },
++        )
++
++    return entries
++
++
+ def build_config(env: dict | None = None) -> dict:
+     """Build the complete openclaw config dict from environment variables.
+ 
+@@ -256,10 +356,15 @@ def build_config(env: dict | None = None) -> dict:
+                 # NemoClaw's sandbox contract is a direct CLI answer, not an
+                 # interactive reasoning session.
+                 "thinkingDefault": "off",
+-            }
++            },
++            "list": build_sre_triage_agents_list(),
+         },
+         "models": {"mode": "merge", "providers": providers},
+         "channels": {"defaults": {}, **_ch_cfg},
++        "tools": {
++            "sessions": {"visibility": "all"},
++            "agentToAgent": {"enabled": True},
++        },
+         "update": {"checkOnStart": False},
+         # Disable bundled plugins/channels that hit the L7 proxy at startup
+         # and either crash or hang the gateway:
+@@ -297,15 +402,13 @@ def build_config(env: dict | None = None) -> dict:
+     }
+ 
+     if env.get("NEMOCLAW_WEB_SEARCH_ENABLED", "") == "1":
+-        config["tools"] = {
+-            "web": {
+-                "search": {
+-                    "enabled": True,
+-                    "provider": "brave",
+-                    "apiKey": "openshell:resolve:env:BRAVE_API_KEY",
+-                },
+-                "fetch": {"enabled": True},
+-            }
++        config["tools"]["web"] = {
++            "search": {
++                "enabled": True,
++                "provider": "brave",
++                "apiKey": "openshell:resolve:env:BRAVE_API_KEY",
++            },
++            "fetch": {"enabled": True},
+         }
+ 
+     return config
+diff --git a/scripts/nemoclaw-start.sh b/scripts/nemoclaw-start.sh
+index 1ce0f4c..8076b4f 100755
+--- a/scripts/nemoclaw-start.sh
++++ b/scripts/nemoclaw-start.sh
+@@ -198,6 +198,20 @@ fi
+ PUBLIC_PORT="$_DASHBOARD_PORT"
+ OPENCLAW="$(command -v openclaw)" # Resolve once, use absolute path everywhere
+ _SANDBOX_HOME="/sandbox"          # Home dir for the sandbox user (useradd -d /sandbox in Dockerfile.base)
++DB_API_DIR="${_SANDBOX_HOME}/.openclaw/services/db_api"
++DB_API_PORT="${DB_API_PORT:-8765}"
++
++start_db_api() {
++  if [ ! -f "${DB_API_DIR}/app.py" ]; then
++    echo "[db-api] skipped: ${DB_API_DIR}/app.py not found" >&2
++    return 0
++  fi
++
++  nohup python3 -m uvicorn app:app --host 0.0.0.0 --port "${DB_API_PORT}" \
++    --app-dir "${DB_API_DIR}" >/tmp/db-api.log 2>&1 &
++  DB_API_PID=$!
++  echo "[db-api] launched on :${DB_API_PORT} (pid $DB_API_PID)" >&2
++}
+ 
+ # ── Config integrity check (delegates to shared library) ────────
+ # verify_config_integrity_if_locked is provided by sandbox-init.sh. OpenClaw
+@@ -2550,6 +2564,7 @@ if [ "$(id -u)" -ne 0 ]; then
+   validate_tmp_permissions "$_SANDBOX_SAFETY_NET" "$_PROXY_FIX_SCRIPT" "$_NEMOTRON_FIX_SCRIPT" "$_WS_FIX_SCRIPT" "$_SECCOMP_GUARD_SCRIPT" "$_CIAO_GUARD_SCRIPT" "$_TELEGRAM_DIAGNOSTICS_SCRIPT" "$_SLACK_GUARD_SCRIPT" "$_SLACK_REWRITER_SCRIPT"
+ 
+   # Start gateway in background, auto-pair, then wait
++  start_db_api
+   nohup "$OPENCLAW" gateway run --port "${_DASHBOARD_PORT}" >/tmp/gateway.log 2>&1 &
+   GATEWAY_PID=$!
+   echo "[gateway] openclaw gateway launched (pid $GATEWAY_PID)" >&2
+@@ -2564,6 +2579,7 @@ if [ "$(id -u)" -ne 0 ]; then
+   # registration and the final append is a small race window (same as before
+   # the shared-library refactor). Acceptable for entrypoint-level cleanup.
+   SANDBOX_CHILD_PIDS=("$GATEWAY_PID")
++  [ -n "${DB_API_PID:-}" ] && SANDBOX_CHILD_PIDS+=("$DB_API_PID")
+   [ -n "${AUTO_PAIR_PID:-}" ] && SANDBOX_CHILD_PIDS+=("$AUTO_PAIR_PID")
+   [ -n "${GATEWAY_LOG_TAIL_PID:-}" ] && SANDBOX_CHILD_PIDS+=("$GATEWAY_LOG_TAIL_PID")
+   [ -n "${GATEWAY_LOG_PERSIST_PID:-}" ] && SANDBOX_CHILD_PIDS+=("$GATEWAY_LOG_PERSIST_PID")
+@@ -2710,6 +2726,7 @@ validate_tmp_permissions "$_SANDBOX_SAFETY_NET" "$_PROXY_FIX_SCRIPT" "$_NEMOTRON
+ # SECURITY: The sandbox user cannot kill this process because it runs
+ # under a different UID. The fake-HOME attack no longer works because
+ # the agent cannot restart the gateway with a tampered config.
++start_db_api
+ nohup gosu gateway "$OPENCLAW" gateway run --port "${_DASHBOARD_PORT}" >/tmp/gateway.log 2>&1 &
+ GATEWAY_PID=$!
+ echo "[gateway] openclaw gateway launched as 'gateway' user (pid $GATEWAY_PID)" >&2
+@@ -2737,6 +2754,7 @@ start_auto_pair
+ # registration and the final append is a small race window (same as before
+ # the shared-library refactor). Acceptable for entrypoint-level cleanup.
+ SANDBOX_CHILD_PIDS=("$GATEWAY_PID")
++[ -n "${DB_API_PID:-}" ] && SANDBOX_CHILD_PIDS+=("$DB_API_PID")
+ [ -n "${AUTO_PAIR_PID:-}" ] && SANDBOX_CHILD_PIDS+=("$AUTO_PAIR_PID")
+ [ -n "${GATEWAY_LOG_TAIL_PID:-}" ] && SANDBOX_CHILD_PIDS+=("$GATEWAY_LOG_TAIL_PID")
+ [ -n "${GATEWAY_LOG_PERSIST_PID:-}" ] && SANDBOX_CHILD_PIDS+=("$GATEWAY_LOG_PERSIST_PID")

@@ -5,7 +5,7 @@ This directory contains the assets used to prepare a remote NemoClaw checkout fo
 Files:
 
 - `install_nemoclaw_remote.sh`: clones NemoClaw on a remote host, checks out a fixed tag, applies the local patch, copies `sample-MAS/sre-triage` into the remote repo, and runs `nemoclaw onboard`.
-- `nemoclaw-nuc-v0.0.20.diff`: local patch applied to the upstream NemoClaw checkout before onboarding.
+- `nemoclaw-nuc-v0.0.33.diff`: local patch applied to the upstream NemoClaw checkout before onboarding.
 
 ## Prerequisites
 
@@ -16,23 +16,35 @@ Files:
   - this repository checked out with `sample-MAS/sre-triage` present
 - Remote machine:
   - `git`
-  - `nemoclaw`
+  - `curl`
+  - Docker running and healthy
   - SSH access from the local machine
+
+`nemoclaw` does not need to be preinstalled on the remote host; this flow builds
+and links it from the checked-out NemoClaw source.
 
 ## Usage
 
 Run the installer against a remote host in `user@host` form:
 
 ```bash
+NEMOCLAW_ENDPOINT_URL=https://litellm.prod.outshift.ai \
+NEMOCLAW_MODEL=vertex_ai/gemini-2.5-pro \
 COMPATIBLE_API_KEY=your-key \
 ./sample-MAS/sre-triage/nemoclaw/install_nemoclaw_remote.sh user@host
 ```
 
+For non-interactive onboarding, these values must be valid and resolvable:
+
+- `COMPATIBLE_API_KEY`
+- `NEMOCLAW_ENDPOINT_URL`
+- `NEMOCLAW_MODEL`
+
 What the script does:
 
 1. Validates local assets and remote connectivity.
-2. Clones the NemoClaw repository on the remote host and checks out `v0.0.20` by default.
-3. Applies `nemoclaw-nuc-v0.0.20.diff` on the remote checkout.
+2. Clones the NemoClaw repository on the remote host and checks out `v0.0.33` by default.
+3. Applies `nemoclaw-nuc-v0.0.33.diff` on the remote checkout.
 4. Copies `sample-MAS/sre-triage` into the remote repo as `sre-triage/openclaw`.
 5. Runs `nemoclaw onboard` non-interactively with the configured model settings.
 
@@ -107,8 +119,8 @@ CLEAN=1 ./sample-MAS/sre-triage/nemoclaw/install_nemoclaw_remote.sh user@host
 
 This removes:
 
-- `TARGET_DIR` (default `~/NemoClaw`)
-- `REMOTE_TRIAGE_DIR` (default `~/NemoClaw/sre-triage`)
+- `TARGET_DIR` (default `/home/ubuntu/NemoClaw`)
+- `REMOTE_TRIAGE_DIR` (default `${TARGET_DIR}/sre-triage`)
 
 You can combine it with `DRY_RUN=1` to preview the clean commands:
 
@@ -118,16 +130,17 @@ CLEAN=1 DRY_RUN=1 ./sample-MAS/sre-triage/nemoclaw/install_nemoclaw_remote.sh us
 
 ## Environment Variables
 
-- `TARGET_DIR`: remote path for the NemoClaw checkout. Default: `~/NemoClaw`
+- `TARGET_DIR`: remote path for the NemoClaw checkout. Default: `/home/ubuntu/NemoClaw`
 - `NEMOCLAW_REPO_URL`: upstream NemoClaw git URL. Default: `https://github.com/NVIDIA/NemoClaw.git`
-- `NEMOCLAW_TAG`: git tag checked out on the remote host. Default: `v0.0.20`
-- `DIFF_FILE`: local patch file to apply remotely. Default: `sample-MAS/sre-triage/nemoclaw/nemoclaw-nuc-v0.0.20.diff`
+- `NEMOCLAW_TAG`: git tag checked out on the remote host. Default: `v0.0.33`
+- `DIFF_FILE`: local patch file to apply remotely. Default: `sample-MAS/sre-triage/nemoclaw/nemoclaw-nuc-v0.0.33.diff`
 - `LOCAL_TRIAGE_DIR`: local source directory copied to the remote repo. Default: `sample-MAS/sre-triage`
-- `REMOTE_TRIAGE_DIR`: remote directory used to stage the sample. Default: `~/NemoClaw/sre-triage`
+- `REMOTE_TRIAGE_DIR`: remote directory used to stage the sample. Default: `${TARGET_DIR}/sre-triage`
 - `NEMOCLAW_PROVIDER`: provider passed to onboarding. Default: `custom`
 - `NEMOCLAW_ENDPOINT_URL`: endpoint passed to onboarding. Default: `https://your-endpoint.example.com`
 - `NEMOCLAW_MODEL`: model passed to onboarding. Default: `vertex_ai/gemini-2.5-pro`
-- `NEMOCLAW_ONBOARD_FROM`: Dockerfile path passed to `nemoclaw onboard --from`. Default: `~/NemoClaw/Dockerfile`
+- `NEMOCLAW_SANDBOX_NAME`: sandbox name passed to onboarding. Default: `my-assistant`
+- `NEMOCLAW_ONBOARD_FROM`: Dockerfile path passed to `nemoclaw onboard --from`. Default: `${TARGET_DIR}/Dockerfile`
 - `COMPATIBLE_API_KEY`: required for a real onboarding run
 - `DRY_RUN`: set to `1` to print planned actions only
 - `CLEAN`: set to `1` to remove remote install directories and exit
@@ -136,3 +149,4 @@ CLEAN=1 DRY_RUN=1 ./sample-MAS/sre-triage/nemoclaw/install_nemoclaw_remote.sh us
 
 - The remote sample is copied under `sre-triage/openclaw` because the patch expects Docker build paths rooted there.
 - The script uses `git clean -fdx` on the remote NemoClaw checkout before applying the patch, so local changes inside the remote checkout will be removed.
+- The patch targets NemoClaw `v0.0.33` runtime paths under `/sandbox/.openclaw` (workspaces, agents, and `services/db_api`).

@@ -146,8 +146,7 @@ function removeDate(str: string): string {
 
 // This section implements an alternative function based on embeddings.
 // Optional: npm install @xenova/transformers (only needed for getNoveltyScoreEmbedding)
-// It enabled text processing based on embeddings i.e. noveltyScore based on it,
-// or string similarity based on embeddings instead of using Jaccard similarity on n-grams. 
+// It enables text processing based on embeddings i.e. noveltyScore, string similarity based on embeddings instead of using Jaccard similarity on n-grams. 
 // This can help better capture semantic similarity, even when there is little word overlap (e.g. due to paraphrasing).
 // Note: the embedding-based approach is more computationally expensive, so it's not enabled by default.
 // The cost is not negligible in the methods that consider not only the prompt, but also the history and/or full context.
@@ -256,14 +255,14 @@ async function getEmbeddings(text: string): Promise<Float32Array | null> {
     try {
         if (!embedder) {
             // Dynamic import - only loads @xenova/transformers if getNoveltyScoreEmbedding is called
-            // @ts-ignore
+            // @ts-expect-error - optional dependency, may not be installed
             const { pipeline } = await import('@xenova/transformers');
             embedder = await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2');
         }
         // Returns [1, N] shape, flatten to 1D
         const output = await embedder(text, { pooling: 'mean', normalize: true });
         return output.data;
-    } catch (e) {
+    } catch {
         // Library not installed or other error - return null
         return null;
     }

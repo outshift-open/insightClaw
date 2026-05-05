@@ -99,6 +99,19 @@ test("calculateGroundness - stop words should be ignored", () => {
   assert.equal(groundness, 1.0);
 });
 
+test("computeStringSimilarity - wrong method", () => {
+  const str1 = "the quick brown fox";
+  const str2 = "the quick brown fox";
+  
+  // Passing invalid method should raise an exception
+  assert.throws(() => {
+    // @ts-ignore - intentionally testing invalid method
+    computeStringSimilarity(str1, str2, "invalid_method");
+  }, {
+    message: "Unknown similarity method: invalid_method"
+  });
+});
+
 test("computeStringSimilarity - identical strings should have 100% similarity", () => {
   const text = "the quick brown fox jumps";
   const similarity = computeStringSimilarity(text, text);

@@ -48,6 +48,14 @@
     "resourceAttributes": {
       "label": "Extra Resource Attributes",
       "advanced": true
+    },
+    "experimentalMetrics": {
+      "label": "Enable Experimental Metrics",
+      "help": "Enables experimental OpenClaw metrics that are not yet fully vetted for production use. These may be noisy or have performance implications."
+    },
+    "embeddingsProcessing": {
+      "label": "Use Embeddings for Session Similarity",
+      "help": "When enabled, uses text embeddings and cosine similarity instead of Jaccard similarity for agent call sessionization. This may increase CPU usage but can improve session grouping accuracy for semantically similar but lexically different prompts."
     }
   },
   "configSchema": {
@@ -109,6 +117,14 @@
           "type": "string"
         },
         "description": "Additional OTel resource attributes"
+      },
+      "experimentalMetrics": {
+        "type": "boolean",
+        "description": "Enable experimental OpenClaw metrics that are not yet fully vetted for production use. These may be noisy or have performance implications."
+      },
+      "embeddingsProcessing": {
+        "type": "boolean",
+        "description": "When enabled, uses text embeddings and cosine similarity instead of Jaccard similarity for agent call sessionization. This may increase CPU usage but can improve session grouping accuracy for semantically similar but lexically different prompts."
       }
     }
   }

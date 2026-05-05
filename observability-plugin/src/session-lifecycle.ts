@@ -49,6 +49,9 @@ let tracerRef: Tracer | null = null;
 let loggerRef: any = null;
 let idleTimeoutMs = DEFAULT_IDLE_TIMEOUT_MS;
 
+// ── Other configuration ──────────────────────────────────────────────────────────
+let embeddingsProcessing = false;
+
 function getUniqueSessions(): SessionActivity[] {
   return [...new Set(sessions.values())];
 }
@@ -83,12 +86,15 @@ export function startSessionWatcher(
   histograms: any,
   logger: any,
   idleTimeout?: number,
-  options?: { enableSpanCache?: boolean; spanCacheVerboseLogs?: boolean }
+  options?: { enableSpanCache?: boolean; spanCacheVerboseLogs?: boolean, embeddingsProcessing?: boolean }
 ): void {
   tracerRef = tracer;
   loggerRef = logger;
   if (idleTimeout && idleTimeout >= 10_000) {
     idleTimeoutMs = idleTimeout;
+  }
+  if (options?.embeddingsProcessing === true) {
+    embeddingsProcessing = true;
   }
 
   if (watcherTimer) {
@@ -274,7 +280,7 @@ export function endSession(runtimeSessionKey: string, histograms?: any): void {
   }
   //computing end of session scores 
   if (histograms) {
-    recordEndOfSessionMetrics(runtimeSessionKey, histograms);
+    recordEndOfSessionMetrics(runtimeSessionKey, histograms, embeddingsProcessing);
   }
 
   detachRuntimeSessionKey(runtimeSessionKey, session);
@@ -306,7 +312,7 @@ export function removeSession(runtimeSessionKey: string, histograms?: any): void
 
   if (histograms) {
     //computing end of session scores
-    recordEndOfSessionMetrics(runtimeSessionKey, histograms);
+    recordEndOfSessionMetrics(runtimeSessionKey, histograms, embeddingsProcessing);
   }
   detachRuntimeSessionKey(runtimeSessionKey, session);
   if (session.runtimeSessionKeys.size === 0) {
@@ -329,18 +335,18 @@ export function activeSessionCount(): number {
 /**
  * Compute all the derived metrics on the session that just terminated 
  */
-export function recordEndOfSessionMetrics(runtimeSessionKey: string, histograms: any): void {
+export function recordEndOfSessionMetrics(runtimeSessionKey: string, histograms: any, embeddingsProcessing?: boolean): void {
   recordParallelisationScore(runtimeSessionKey, histograms);
-  recordRepetitionScore(runtimeSessionKey, histograms);
+  recordRepetitionScore(runtimeSessionKey, histograms, embeddingsProcessing);
 }
 
 
 /**
  * Computes the repetition score: given all the LLM calls (openclaw.llm.call) in a session (including sub-agents and other top-level agents),
- * we compute the Jaccard similarity of the prompts between each pair of calls for the same agent
+ * we compute the Jaccard similarity of the prompts between each pair of calls for the same agent (or embedding based similarity if embeddingsProcessing)
  * The final score reflects the presence of repetition in the prompts for the same agent
  */
-function recordRepetitionScore(runtimeSessionKey: string, histograms: any): void {
+function recordRepetitionScore(runtimeSessionKey: string, histograms: any, embeddingsProcessing?: boolean): void {
   const sessionId = getSessionId(runtimeSessionKey);
   if (!sessionId) {
     loggerRef?.warn?.(`[otel:session] Cannot record repetition score, session not found for runtimeSessionKey=${runtimeSessionKey}`);
@@ -386,35 +392,46 @@ function recordRepetitionScore(runtimeSessionKey: string, histograms: any): void
   }
   loggerRef?.debug?.(`[otel:session] Computing repetition score for session ${sessionId}-${runtimeSessionKey} (rootAgent=${rootAgent})`);
 
-  const scores = new Array<number>();
+  // Wrap async computation to avoid blocking
+  (async () => {
+    const scores = new Array<number>();
 
-  for (const [agentId, agentCalls] of callsByAgent) {
-    if (agentId === rootAgent) {
-      loggerRef?.debug?.(`[otel:session] Skipping repetition score for root agent ${agentId}`);
-      continue;
-    }
-    if (agentCalls.length < 2) continue;
-    
-    //for each pair of call, compute the getJaccardSimilarity of the prompt
-    const agentScores = new Array<number>();
-    for (let i = 0; i < agentCalls.length; i++) {
-      for (let j = i + 1; j < agentCalls.length; j++) {
-        const similarity = computeStringSimilarity(agentCalls[i].prompt, agentCalls[j].prompt, "jaccard");
-        loggerRef?.debug?.(`[otel:session] Jaccard similarity: session=${sessionId}, agent=${agentId}, similarity=${similarity}`);
-        loggerRef?.debug?.(`[otel:session] Jaccard A=${agentCalls[i].prompt} B=${agentCalls[j].prompt}`);
-        agentScores.push(similarity);
+    for (const [agentId, agentCalls] of callsByAgent) {
+      if (agentId === rootAgent) {
+        loggerRef?.debug?.(`[otel:session] Skipping repetition score for root agent ${agentId}`);
+        continue;
       }
+      if (agentCalls.length < 2) continue;
+      
+      //for each pair of call, compute the getJaccardSimilarity of the prompt
+
+      const agentScores = new Array<number>();
+      for (let i = 0; i < agentCalls.length; i++) {
+        for (let j = i + 1; j < agentCalls.length; j++) {
+          let similarity = 0;
+          if (embeddingsProcessing) {
+            similarity = await computeStringSimilarity(agentCalls[i].prompt, agentCalls[j].prompt, "embedding");
+          } else {
+            similarity = computeStringSimilarity(agentCalls[i].prompt, agentCalls[j].prompt, "jaccard");
+          }
+          loggerRef?.info?.(`[otel:session] ${embeddingsProcessing ? "embeddings" : "jaccard"} similarity: session=${sessionId}, agent=${agentId}, similarity=${similarity}`);
+          loggerRef?.info?.(`[otel:session] ${embeddingsProcessing ? "embeddings" : "jaccard"} A=${agentCalls[i].prompt} B=${agentCalls[j].prompt}`);
+          agentScores.push(similarity);
+        }
+      }
+      scores.push(Math.max(...agentScores));
     }
-    scores.push(Math.max(...agentScores));
-  }
 
-  let finalScore = 0;
-  if (scores.length > 0) {
-    finalScore = scores.reduce((a, b) => a + b, 0) / scores.length;
-  }
-  loggerRef?.info?.(`[otel:session] Final repetition score for session ${sessionId}-${runtimeSessionKey}: ${finalScore}`);
+    let finalScore = 0;
+    if (scores.length > 0) {
+      finalScore = scores.reduce((a, b) => a + b, 0) / scores.length;
+    }
+    loggerRef?.info?.(`[otel:session] Final repetition score for session ${sessionId}-${runtimeSessionKey}: ${finalScore}`);
 
-  histograms.repetitionScore.record(finalScore, { "openclaw.session.key": runtimeSessionKey });
+    histograms.repetitionScore.record(finalScore, { "openclaw.session.key": runtimeSessionKey });
+  })().catch((err) => {
+    loggerRef?.warn?.(`[otel:session] Error computing repetition score: ${err instanceof Error ? err.message : String(err)}`);
+  });
 }
 
 /** 
@@ -499,7 +516,7 @@ function checkIdleSessions(histograms?: any): void {
       );
       if(histograms) {
         //computing end of session scores
-        recordEndOfSessionMetrics(session.primaryRuntimeSessionKey,histograms);
+        recordEndOfSessionMetrics(session.primaryRuntimeSessionKey,histograms, embeddingsProcessing);
       }
       emitSessionEnd(session);
       for (const runtimeSessionKey of session.runtimeSessionKeys) {

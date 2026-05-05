@@ -15,6 +15,8 @@ export interface OtelObservabilityConfig {
   traces: boolean;
   /** Enable metrics export */
   metrics: boolean;
+  /** Enable experimental metrics */
+  experimentalMetrics: boolean;
   /** Enable log export */
   logs: boolean;
   /** Capture prompt/completion content in spans (disable for privacy) */
@@ -27,6 +29,8 @@ export interface OtelObservabilityConfig {
   metricsIntervalMs: number;
   /** Additional OTel resource attributes */
   resourceAttributes: Record<string, string>;
+  /** Enable processing of embeddings for context analysis (novelty, similarity) */
+  embeddingsProcessing: boolean;
 }
 
 const DEFAULTS: OtelObservabilityConfig = {
@@ -36,12 +40,14 @@ const DEFAULTS: OtelObservabilityConfig = {
   headers: {},
   traces: true,
   metrics: true,
+  experimentalMetrics: false,
   logs: true,
   captureContent: false,
   spanCache: false,
   spanCacheVerboseLogs: false,
   metricsIntervalMs: 30_000,
   resourceAttributes: {},
+  embeddingsProcessing: false,
 };
 
 export function parseConfig(raw: unknown): OtelObservabilityConfig {
@@ -61,6 +67,8 @@ export function parseConfig(raw: unknown): OtelObservabilityConfig {
         : DEFAULTS.headers,
     traces: typeof obj.traces === "boolean" ? obj.traces : DEFAULTS.traces,
     metrics: typeof obj.metrics === "boolean" ? obj.metrics : DEFAULTS.metrics,
+    experimentalMetrics:
+      typeof obj.experimentalMetrics === "boolean" ? obj.experimentalMetrics : DEFAULTS.experimentalMetrics,
     logs: typeof obj.logs === "boolean" ? obj.logs : DEFAULTS.logs,
     captureContent:
       typeof obj.captureContent === "boolean" ? obj.captureContent : DEFAULTS.captureContent,
@@ -79,5 +87,9 @@ export function parseConfig(raw: unknown): OtelObservabilityConfig {
       !Array.isArray(obj.resourceAttributes)
         ? (obj.resourceAttributes as Record<string, string>)
         : DEFAULTS.resourceAttributes,
+    embeddingsProcessing:
+      typeof obj.embeddingsProcessing === "boolean"
+        ? obj.embeddingsProcessing
+        : DEFAULTS.embeddingsProcessing,
   };
 }

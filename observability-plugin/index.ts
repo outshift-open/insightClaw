@@ -23,7 +23,9 @@
  *             "metrics": true,
  *             "captureContent": false,
  *             "spanCache": false,
- *             "spanCacheVerboseLogs": false
+ *             "spanCacheVerboseLogs": false,
+ *             "experimentalMetrics": false,
+ *             "embeddingsProcessing": false,
  *           }
  *         }
  *       }
@@ -83,6 +85,8 @@ const otelObservabilityPlugin = {
             captureContent: config.captureContent,
             spanCache: config.spanCache,
             spanCacheVerboseLogs: config.spanCacheVerboseLogs,
+            experimentalMetrics: config.experimentalMetrics,
+            embeddingsProcessing: config.embeddingsProcessing,
           },
         });
       }
@@ -108,6 +112,8 @@ const otelObservabilityPlugin = {
             console.log(`  Span cache:      ${config.spanCache ? "✅" : "❌"}`);
             console.log(`  Cache verbose logs: ${config.spanCacheVerboseLogs ? "✅" : "❌"}`);
             console.log(`  Initialized:     ${telemetry ? "✅" : "❌"}`);
+            console.log(`  Experimental metrics: ${config.experimentalMetrics ? "✅" : "❌"}`);
+            console.log(`  Embeddings processing: ${config.embeddingsProcessing ? "✅" : "❌"}`);
             console.log(`  Cost tracking:   ${hasDiagnosticsSupport() ? "✅ (via diagnostics API)" : "❌"}`);
             console.log(`  Agent handoff:   ✅ (span links)`);
             console.log(`  Fork/join:       ✅ (parallel tool detection)`);
@@ -207,6 +213,8 @@ const otelObservabilityPlugin = {
             captureContent: config.captureContent,
             spanCache: config.spanCache,
             spanCacheVerboseLogs: config.spanCacheVerboseLogs,
+            experimentalMetrics: config.experimentalMetrics,
+            embeddingsProcessing: config.embeddingsProcessing,
           };
           return {
             content: [

@@ -14,7 +14,7 @@ import {
   ObserveSpanKind,
 } from "./observe-attributes.js";
 import { flushBySessionKey, getSessionEndTime, getSessionStartTime, getSpansByType, startSpanCache, stopSpanCache } from "./span-cache.js";
-import { getJaccardSimilarity } from "./context-analysis.js";
+import { computeStringSimilarity } from "./context-analysis.js";
 
 // ── Configuration ──────────────────────────────────────────────────
 
@@ -355,7 +355,7 @@ function recordRepetitionScore(runtimeSessionKey: string, histograms: any): void
 
   if (!session.channel || session.channel === "heartbeat") {
     // we do not compute the score for heartbeat sessions
-    loggerRef?.info?.(`[otel:session] Skipping repetition score for heartbeat session: session=${sessionId}`);
+    loggerRef?.debug?.(`[otel:session] Skipping repetition score for heartbeat session: session=${sessionId}`);
     return;
   }
 
@@ -399,7 +399,7 @@ function recordRepetitionScore(runtimeSessionKey: string, histograms: any): void
     const agentScores = new Array<number>();
     for (let i = 0; i < agentCalls.length; i++) {
       for (let j = i + 1; j < agentCalls.length; j++) {
-        const similarity = getJaccardSimilarity(agentCalls[i].prompt, agentCalls[j].prompt);
+        const similarity = computeStringSimilarity(agentCalls[i].prompt, agentCalls[j].prompt, "jaccard");
         loggerRef?.debug?.(`[otel:session] Jaccard similarity: session=${sessionId}, agent=${agentId}, similarity=${similarity}`);
         loggerRef?.debug?.(`[otel:session] Jaccard A=${agentCalls[i].prompt} B=${agentCalls[j].prompt}`);
         agentScores.push(similarity);

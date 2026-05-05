@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import {
   calculateCoverage,
   calculateGroundness,
-  getJaccardSimilarity,
+  computeStringSimilarity,
   getNoveltyScore
 } from "../src/context-analysis.js";
 
@@ -99,67 +99,67 @@ test("calculateGroundness - stop words should be ignored", () => {
   assert.equal(groundness, 1.0);
 });
 
-test("getJaccardSimilarity - identical strings should have 100% similarity", () => {
+test("computeStringSimilarity - identical strings should have 100% similarity", () => {
   const text = "the quick brown fox jumps";
-  const similarity = getJaccardSimilarity(text, text);
+  const similarity = computeStringSimilarity(text, text);
   assert.equal(similarity, 1.0);
 });
 
-test("getJaccardSimilarity - empty strings should return NaN handled as 1", () => {
-  const similarity = getJaccardSimilarity("", "");
+test("computeStringSimilarity - empty strings should return NaN handled as 1", () => {
+  const similarity = computeStringSimilarity("", "");
   // When both sets are empty, intersection/union = 0/0 = NaN, which becomes 1
   // This is expected behavior: two empty contexts are identical
   assert.ok(isNaN(similarity) || similarity === 0 || similarity === 1);
 });
 
-test("getJaccardSimilarity - one empty string should return 0", () => {
-  const similarity = getJaccardSimilarity("some text", "");
+test("computeStringSimilarity - one empty string should return 0", () => {
+  const similarity = computeStringSimilarity("some text", "");
   assert.equal(similarity, 0);
 });
 
-test("getJaccardSimilarity - same words different order should have 100% similarity", () => {
+test("computeStringSimilarity - same words different order should have 100% similarity", () => {
   const str1 = "the quick brown fox";
   const str2 = "fox brown quick the";
-  const similarity = getJaccardSimilarity(str1, str2);
+  const similarity = computeStringSimilarity(str1, str2);
   assert.equal(similarity, 1.0);
 });
 
-test("getJaccardSimilarity - partial overlap should return fractional similarity", () => {
+test("computeStringSimilarity - partial overlap should return fractional similarity", () => {
   const str1 = "quick brown fox";
   const str2 = "quick brown cat";
-  const similarity = getJaccardSimilarity(str1, str2);
+  const similarity = computeStringSimilarity(str1, str2);
   // Union: {quick, brown, fox, cat} = 4
   // Intersection: {quick, brown} = 2
   // Similarity: 2/4 = 0.5
   assert.equal(similarity, 0.5);
 });
 
-test("getJaccardSimilarity - no overlap should return 0", () => {
+test("computeStringSimilarity - no overlap should return 0", () => {
   const str1 = "quick brown fox";
   const str2 = "elephant giraffe zebra";
-  const similarity = getJaccardSimilarity(str1, str2);
+  const similarity = computeStringSimilarity(str1, str2);
   assert.equal(similarity, 0);
 });
 
-test("getJaccardSimilarity - stop words should be ignored", () => {
+test("computeStringSimilarity - stop words should be ignored", () => {
   const str1 = "the quick brown fox and the";
   const str2 = "quick brown fox";
-  const similarity = getJaccardSimilarity(str1, str2);
+  const similarity = computeStringSimilarity(str1, str2);
   // Both should have the same set: {quick, brown, fox}
   assert.equal(similarity, 1.0);
 });
 
-test("getJaccardSimilarity - case insensitive comparison", () => {
+test("computeStringSimilarity - case insensitive comparison", () => {
   const str1 = "Quick BROWN fox";
   const str2 = "quick brown FOX";
-  const similarity = getJaccardSimilarity(str1, str2);
+  const similarity = computeStringSimilarity(str1, str2);
   assert.equal(similarity, 1.0);
 });
 
-test("getJaccardSimilarity - punctuation should be removed", () => {
+test("computeStringSimilarity - punctuation should be removed", () => {
   const str1 = "quick, brown: fox!";
   const str2 = "quick brown fox";
-  const similarity = getJaccardSimilarity(str1, str2);
+  const similarity = computeStringSimilarity(str1, str2);
   assert.equal(similarity, 1.0);
 });
 
@@ -188,7 +188,7 @@ test("context analysis - similarity between iterations of same agent", () => {
   const iteration1 = "Analyzing payment service latency metrics for checkout flow";
   const iteration2 = "Analyzing checkout flow payment service latency metrics";
   
-  const similarity = getJaccardSimilarity(iteration1, iteration2);
+  const similarity = computeStringSimilarity(iteration1, iteration2);
   
   // Should be very similar since they contain the same key terms
   // 7 unique words, all match = 0.875 or higher depending on stop words
@@ -199,7 +199,7 @@ test("context analysis - low similarity between different agent contexts", () =>
   const telemetryAgent = "Analyzing latency metrics error rates and resource utilization";
   const databaseAgent = "Investigating connection pools query performance and deadlocks";
   
-  const similarity = getJaccardSimilarity(telemetryAgent, databaseAgent);
+  const similarity = computeStringSimilarity(telemetryAgent, databaseAgent);
   
   // Should have low similarity since they focus on different aspects
   assert.ok(similarity < 0.3, `Expected similarity < 0.3, got ${similarity}`);
@@ -208,7 +208,7 @@ test("context analysis - low similarity between different agent contexts", () =>
 test("edge case - single word strings", () => {
   const coverage = calculateCoverage("word", "word", 1);
   const groundness = calculateGroundness("word", "word");
-  const similarity = getJaccardSimilarity("word", "word");
+  const similarity = computeStringSimilarity("word", "word");
   
   assert.equal(coverage, 1.0);
   assert.equal(groundness, 1.0);
@@ -219,7 +219,7 @@ test("edge case - strings with multiple spaces", () => {
   const str1 = "quick   brown    fox";
   const str2 = "quick brown fox";
   
-  const similarity = getJaccardSimilarity(str1, str2);
+  const similarity = computeStringSimilarity(str1, str2);
   assert.equal(similarity, 1.0);
 });
 
@@ -227,7 +227,7 @@ test("edge case - strings with newlines and tabs", () => {
   const str1 = "quick\nbrown\tfox";
   const str2 = "quick brown fox";
   
-  const similarity = getJaccardSimilarity(str1, str2);
+  const similarity = computeStringSimilarity(str1, str2);
   assert.equal(similarity, 1.0);
 });
 

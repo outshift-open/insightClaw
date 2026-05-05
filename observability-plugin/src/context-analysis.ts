@@ -1,13 +1,3 @@
-// Embedding-based novelty score using cosine similarity
-// Optional: npm install @xenova/transformers (only needed for getNoveltyScoreEmbedding)
-// It enabled text processing based on embeddings i.e. noveltyScore based on it,
-// or string similarity based on embeddings instead of using Jaccard similarity on n-grams. 
-// This can help better capture semantic similarity, even when there is little word overlap (e.g. due to paraphrasing).
-// Note: the embedding-based approach is more computationally expensive, so it's not enabled by default.
-// The cost is not negligible in the methods that consider not only the prompt, but also the history and/or full context.
-// In the case of novelty scoring and groundness indeed, we compare the answer against the full context, and we need to 
-// apply sliding window to deal with the difference in length. 
-
 const TOKENS = [
   // Pronouns
   "i", "you", "he", "she", "it", "we", "they", "them", "their", "this", "that", "these", "those",
@@ -82,6 +72,20 @@ export function calculateGroundness(context: string, ground: string): number {
 }
 
 
+
+// Function overloads: return type depends on method parameter
+export function computeStringSimilarity(str1: string, str2: string, method?: "jaccard"): number;
+export function computeStringSimilarity(str1: string, str2: string, method: "embedding"): Promise<number>;
+export function computeStringSimilarity(str1: string, str2: string, method?: string): number | Promise<number> {
+    if (method === "jaccard" || !method) {
+        return getJaccardSimilarity(str1, str2);
+    } else if (method === "embedding") {
+        return getEmbeddingsSimilarity(str1, str2);
+    } else {
+        throw new Error(`Unknown similarity method: ${method}`);
+    }
+}
+
 // similarity between contexts using Jaccard similarity on token sets, ignoring common stop words
 // Example: similarity of context between two iterations of the same agent, or between multiple sub-agents working on the same task
 export function getJaccardSimilarity(str1: string, str2: string): number {
@@ -139,6 +143,18 @@ function removeDate(str: string): string {
     return str.replace(/\[\w{3} \d{4}-\d{2}-\d{2} \d{2}:\d{2} GMT[+-]\d{1,2}\]/g, '').trim();
 }
 
+
+// This section implements an alternative function based on embeddings.
+// Optional: npm install @xenova/transformers (only needed for getNoveltyScoreEmbedding)
+// It enabled text processing based on embeddings i.e. noveltyScore based on it,
+// or string similarity based on embeddings instead of using Jaccard similarity on n-grams. 
+// This can help better capture semantic similarity, even when there is little word overlap (e.g. due to paraphrasing).
+// Note: the embedding-based approach is more computationally expensive, so it's not enabled by default.
+// The cost is not negligible in the methods that consider not only the prompt, but also the history and/or full context.
+// In the case of novelty scoring and groundness for instance, we compare the answer or prompt against the full context, and we need to 
+// apply sliding window to deal with the difference in length. This leads to multiple embedding calls and similarity calculations, which can add up in terms of latency.
+
+
 // Returns a Promise<number> (async)
 // Uses sliding window approach: chunks ground text and finds maximum similarity
 // Novelty = 1 - max(similarity with any chunk)
@@ -174,6 +190,34 @@ export async function getNoveltyScoreEmbedding(
     
     // Novelty is 1 - max_similarity (clamped to [0,1])
     return Math.max(0, Math.min(1, 1 - maxSimilarity));
+}
+
+async function getEmbeddingsSimilarity(str1: string, str2: string): Promise<number> {
+    const subagentTaskIndex = str1.indexOf("[Subagent Task]:");
+    if (subagentTaskIndex !== -1) {
+        str1 = str1.slice(subagentTaskIndex + "[Subagent Task]:".length);
+    }
+    const subagentTaskIndex2 = str2.indexOf("[Subagent Task]:");
+    if (subagentTaskIndex2 !== -1) {
+        str2 = str2.slice(subagentTaskIndex2 + "[Subagent Task]:".length);
+    }
+
+    // if one of the two strings contains any of the IGNORE_MESSAGE, we return 0
+    if (IGNORE_MESSAGE.some(msg => str1.includes(msg) || str2.includes(msg))) {
+        return 0;
+    }
+
+    str1 = removeDate(str1);
+    str2 = removeDate(str2);    
+    
+
+    const emb1 = await getEmbeddings(str1);
+    if (!emb1) return 0;
+
+    const emb2 = await getEmbeddings(str2);
+    if (!emb2) return 0;
+
+    return cosineSimilarity(emb1, emb2);
 }
 
 // Split text into chunks with sliding window

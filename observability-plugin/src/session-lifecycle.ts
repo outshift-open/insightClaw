@@ -370,18 +370,18 @@ function recordRepetitionScore(runtimeSessionKey: string, histograms: any): void
   for (const call of calls) {
     const agentId = call.attributes["gen_ai.agent.id"] as string | undefined;
     const prompt = call.attributes["openclaw.entity.input"] as string | undefined;
-    const startTIme = call.startAt //|| call.recordedAt;
+    const startTime = call.startAt //|| call.recordedAt;
     if (!agentId || !prompt) continue;
       
     if (!callsByAgent.has(agentId)) {
       callsByAgent.set(agentId, []);
     }
-    if (startTIme && (rootStartTime === -1 || startTIme < rootStartTime)) {
-      rootStartTime = startTIme;
+    if (startTime && (rootStartTime === -1 || startTime < rootStartTime)) {
+      rootStartTime = startTime;
       rootAgent = agentId;
     }
 
-    loggerRef?.debug?.(`[otel:session] Recording call for agent ${agentId} with prompt: ${prompt} startTime: ${startTIme} rootAgent: ${rootAgent} rootStartTime: ${rootStartTime}`);
+    loggerRef?.debug?.(`[otel:session] Recording call for agent ${agentId} with prompt: ${prompt} startTime: ${startTime} rootAgent: ${rootAgent} rootStartTime: ${rootStartTime}`);
     callsByAgent.get(agentId)!.push({ prompt });
   }
   loggerRef?.debug?.(`[otel:session] Computing repetition score for session ${sessionId}-${runtimeSessionKey} (rootAgent=${rootAgent})`);

@@ -14,7 +14,7 @@ import {
   ObserveSpanKind,
 } from "./observe-attributes.js";
 import { flushBySessionKey, getSessionEndTime, getSessionStartTime, getSpansByType, startSpanCache, stopSpanCache } from "./span-cache.js";
-import { getJaccardSimilarity } from "./context-analysis.js";
+import { computeStringSimilarity } from "./context-analysis.js";
 
 // ── Configuration ──────────────────────────────────────────────────
 
@@ -355,7 +355,7 @@ function recordRepetitionScore(runtimeSessionKey: string, histograms: any): void
 
   if (!session.channel || session.channel === "heartbeat") {
     // we do not compute the score for heartbeat sessions
-    loggerRef?.info?.(`[otel:session] Skipping repetition score for heartbeat session: session=${sessionId}`);
+    loggerRef?.debug?.(`[otel:session] Skipping repetition score for heartbeat session: session=${sessionId}`);
     return;
   }
 
@@ -363,28 +363,45 @@ function recordRepetitionScore(runtimeSessionKey: string, histograms: any): void
   const calls = getSpansByType("openclaw.llm.call", undefined, undefined, sessionId);
 
   const callsByAgent = new Map<string, Array<{ prompt: string }>>();    
+  
+  let rootAgent = "unknown"; // we filter outs calls performed direclty by the root agent, as they are not repetitions but rather the main driver of the session
+  let rootStartTime = -1;
+
   for (const call of calls) {
     const agentId = call.attributes["gen_ai.agent.id"] as string | undefined;
-    const prompt = call.attributes["openclaw.entity.input"] as string | undefined;      
+    const prompt = call.attributes["openclaw.entity.input"] as string | undefined;
+    const startTime = call.startAt //|| call.recordedAt;
     if (!agentId || !prompt) continue;
       
     if (!callsByAgent.has(agentId)) {
       callsByAgent.set(agentId, []);
     }
-    loggerRef?.debug?.(`[otel:session] Recording call for agent ${agentId} with prompt: ${prompt}`);
+    if (startTime && (rootStartTime === -1 || startTime < rootStartTime)) {
+      rootStartTime = startTime;
+      rootAgent = agentId;
+    }
+
+    loggerRef?.debug?.(`[otel:session] Recording call for agent ${agentId} with prompt: ${prompt} startTime: ${startTime} rootAgent: ${rootAgent} rootStartTime: ${rootStartTime}`);
     callsByAgent.get(agentId)!.push({ prompt });
   }
+  loggerRef?.debug?.(`[otel:session] Computing repetition score for session ${sessionId}-${runtimeSessionKey} (rootAgent=${rootAgent})`);
 
   const scores = new Array<number>();
 
   for (const [agentId, agentCalls] of callsByAgent) {
+    if (agentId === rootAgent) {
+      loggerRef?.debug?.(`[otel:session] Skipping repetition score for root agent ${agentId}`);
+      continue;
+    }
     if (agentCalls.length < 2) continue;
+    
     //for each pair of call, compute the getJaccardSimilarity of the prompt
     const agentScores = new Array<number>();
     for (let i = 0; i < agentCalls.length; i++) {
       for (let j = i + 1; j < agentCalls.length; j++) {
-        const similarity = getJaccardSimilarity(agentCalls[i].prompt, agentCalls[j].prompt);
+        const similarity = computeStringSimilarity(agentCalls[i].prompt, agentCalls[j].prompt, "jaccard");
         loggerRef?.debug?.(`[otel:session] Jaccard similarity: session=${sessionId}, agent=${agentId}, similarity=${similarity}`);
+        loggerRef?.debug?.(`[otel:session] Jaccard A=${agentCalls[i].prompt} B=${agentCalls[j].prompt}`);
         agentScores.push(similarity);
       }
     }
@@ -423,7 +440,7 @@ export function recordParallelisationScore(runtimeSessionKey: string, histograms
 
   if (!session.channel || session.channel === "heartbeat") {
     // we do not compute the score for heartbeat sessions
-    loggerRef?.info?.(`[otel:session] Skipping parallelisation score for heartbeat session: session=${sessionId}`);
+    loggerRef?.debug?.(`[otel:session] Skipping parallelisation score for heartbeat session: session=${sessionId}`);
     return;
   }
 
@@ -449,15 +466,21 @@ export function recordParallelisationScore(runtimeSessionKey: string, histograms
   
   let spansDuration = 0
   for (const r of spans) {
+    let found = false;
     for (const key of durationKeys) {
       const duration = r.attributes[key];
       if (typeof duration === "number") {
         spansDuration += duration;
+        found = true;
         break;
       }
     }
+    if (!found) {
+      loggerRef?.warn?.(`[otel:session] Span without duration attribute: session=${sessionId}, span=${r.spanId}, attributes=${JSON.stringify(r.attributes)}`);
+    }
   }
   const score = spansDuration / sessionDurationTillNow; 
+  loggerRef?.info?.(`[otel:session] Parallelisation score for session ${sessionId}-${runtimeSessionKey}: ${score} (spansDuration=${spansDuration}ms, sessionDuration=${sessionDurationTillNow}ms)`);
   histograms.parallelisationScore.record(score, { "openclaw.session.key": runtimeSessionKey });
 }
 

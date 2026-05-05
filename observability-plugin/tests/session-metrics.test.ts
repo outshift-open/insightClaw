@@ -178,6 +178,19 @@ test("session loop score", () => {
     spanKind,
     sessionKey,
     sessionId,
+    attributes: {"gen_ai.agent.id": "agent00", "openclaw.entity.input": "The payment service is experiencing a critical incident with p99 latency at 4200ms and an error rate of 0.12. The checkout flow is impacted. This suggests database pressure. Investigate for lock contention, slow queries, connection pool saturation, or other database-level issues."},
+    statusCode: 0,
+    recordedAt: baseTime,
+  });
+
+
+  recordSpan({
+    traceId,
+    spanId:"span-id-000",
+    spanName: "openclaw.llm.call",
+    spanKind,
+    sessionKey,
+    sessionId,
     attributes: {"gen_ai.agent.id": "agent01", "openclaw.entity.input": "The payment service is experiencing a critical incident with p99 latency at 4200ms and an error rate of 0.12. The checkout flow is impacted. This suggests database pressure. Investigate for lock contention, slow queries, connection pool saturation, or other database-level issues."},
     statusCode: 0,
     recordedAt: baseTime,

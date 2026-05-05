@@ -670,11 +670,17 @@ function handleToolOutput(
           span.setStatus({ code: SpanStatusCode.OK });
         } else {
           span.setStatus({ code: SpanStatusCode.ERROR, message: `Tool exited with code ${toolStatus.exitCode}` });
-          config.counters.toolErrors.add(1, { "tool.name": toolName });
+          config.counters.toolErrors.add(1, {
+              "tool.name": toolName,
+              "gen_ai.agent.id": agentId,
+          });
         }
       } else if (toolStatus.status.toLowerCase() === "failed" || toolStatus.status.toLowerCase() === "error") {
         span.setStatus({ code: SpanStatusCode.ERROR, message: `Tool execution failed with status ${toolStatus.status}` });
-        config.counters.toolErrors.add(1, { "tool.name": toolName });
+        config.counters.toolErrors.add(1, {
+              "tool.name": toolName,
+              "gen_ai.agent.id": agentId,
+          });
       }
     }
   }

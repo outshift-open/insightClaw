@@ -157,6 +157,7 @@ const otelObservabilityPlugin = {
         startSessionWatcher(telemetry!.tracer, telemetry!.histograms, logger, undefined, {
           enableSpanCache: config.spanCache,
           spanCacheVerboseLogs: config.spanCacheVerboseLogs,
+          embeddingsProcessing: config.embeddingsProcessing,
         });
 
         // Subscribe to OpenClaw diagnostic events (model.usage, etc.)

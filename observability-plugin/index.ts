@@ -62,7 +62,7 @@ const otelObservabilityPlugin = {
     },
   },
 
-  async register(api: any) {
+  register(api: any) {
     const config = parseConfig(api.pluginConfig);
     const logger = api.logger;
 

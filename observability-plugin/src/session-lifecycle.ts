@@ -367,6 +367,10 @@ function recordRepetitionScore(runtimeSessionKey: string, histograms: any, embed
 
   // Getting all spans of type llm call
   const calls = getSpansByType("openclaw.llm.call", undefined, undefined, sessionId);
+  if (calls.length === 0) {
+    loggerRef?.info?.(`[otel:session] No LLM calls found for session ${sessionId}, skipping repetition score (this is fine if cache is disabled)`);
+    return;
+  }
 
   const callsByAgent = new Map<string, Array<{ prompt: string }>>();    
   
@@ -392,7 +396,7 @@ function recordRepetitionScore(runtimeSessionKey: string, histograms: any, embed
   }
   loggerRef?.debug?.(`[otel:session] Computing repetition score for session ${sessionId}-${runtimeSessionKey} (rootAgent=${rootAgent})`);
 
-  // Wrap async computation to avoid blocking
+  // Wrap async computation to avoid blocking - all the required state has been retrieved at this point
   (async () => {
     const scores = new Array<number>();
 

@@ -26,7 +26,8 @@
  *   - api.on()           -> typed plugin hooks (tool_result_persist, agent_end)
  */
 
-import { SpanKind, SpanStatusCode, context, trace, type Span, type SpanContext, type Context, type Link } from "@opentelemetry/api";
+import { SpanKind, SpanStatusCode, context, trace, ROOT_CONTEXT, TraceFlags, type Span, type SpanContext, type Context, type Link } from "@opentelemetry/api";
+import { readFileSync, writeFileSync } from "node:fs";
 import type { TelemetryRuntime } from "./telemetry.js";
 import type { OtelObservabilityConfig } from "./config.js";
 import {
@@ -201,6 +202,17 @@ const contextPrepTimers = new Map<string, number>();
 const pendingAgentContextsMap = new Map<string, any>(); //Note: this should be moved to the plugin cache once it will support the feature
 const targetAgentsMap = new Map<string, string>(); //Note: this should be moved to the plugin cache once it will support the feature
 const PENDING_SPAWN_TTL_MS = 60_000;
+
+// Tracks the orchestrator session key for the most recently started sessions_spawn
+// call so that subagent lifecycle hooks can resolve the correct parent session context.
+let activeSpawnOrchestratorSessionKey: string | undefined;
+// Maps child session key -> orchestrator session key, populated in subagent_spawned.
+// Used by later lifecycle hooks to find the right parent span context.
+const childSessionToOrchestratorKey = new Map<string, string>();
+// Maps child session key -> OTel Context saved at spawn time.
+// subagent_delivery_target can fire between orchestrator turns when the
+// in-memory session context is already gone.
+const childSessionToSpawnContext = new Map<string, Context>();
 const ROOT_COMPLETION_GRACE_MS = 30_000;
 const MAX_CAPTURE_CONTENT_CHARS = 4_096;
 
@@ -405,6 +417,33 @@ function getSessionTraceContextByIdentities(runtimeSessionIdentities: string[]):
   }
 
   return undefined;
+}
+
+// Recover the most recently active matching agent session by numeric suffix.
+function findRelatedSessionContext(runtimeSessionKey: string): SessionTraceContext | undefined {
+  const stripped = runtimeSessionKey.replace(/^[a-z]+:/i, "");
+  if (!stripped || !/^\d+$/.test(stripped)) {
+    return undefined;
+  }
+
+  let best: SessionTraceContext | undefined;
+  let bestActivity = -1;
+
+  for (const [key, ctx] of sessionContextMap) {
+    if (!key.startsWith("agent:")) {
+      continue;
+    }
+    if (!key.includes(stripped)) {
+      continue;
+    }
+    const activity = ctx.lastLifecycleAt ?? ctx.startTime ?? 0;
+    if (activity > bestActivity) {
+      bestActivity = activity;
+      best = ctx;
+    }
+  }
+
+  return best;
 }
 
 function setSessionTraceContext(sessionCtx: SessionTraceContext, event?: any, ctx?: any): void {
@@ -734,6 +773,17 @@ function handleSessionHandoffCall(
     );
     for (const targetAgentId of targetAgentIds) {
       targetAgentsMap.set(targetAgentId, agentId + "-" + runtimeSessionKey); //TODO merge with current pendingSpawn struct
+    }
+    if (toolName === "sessions_spawn") {
+      const sessionCtx = getSessionTraceContext(event)
+        ?? (runtimeSessionKey !== "unknown" ? sessionContextMap.get(runtimeSessionKey) : undefined);
+      const agentSpan = sessionCtx?.agentSpan ?? sessionCtx?.rootSpan;
+      for (const targetAgentId of targetAgentIds) {
+        agentSpan?.addEvent("openclaw.subagent.spawned", {
+          "openclaw.subagent.target_agent_id": targetAgentId,
+          "openclaw.session.key": runtimeSessionKey,
+        });
+      }
     }
   } else {
     logger.debug(
@@ -1550,7 +1600,16 @@ export function registerHooks(
       try {
         ensureRuntime();
         const runtimeSessionKey = resolveRuntimeSessionKey(event, ctx);
-        const sessionCtx = getSessionTraceContext(event, ctx);
+        let sessionCtx = getSessionTraceContext(event, ctx);
+        if (!sessionCtx) {
+          sessionCtx = findRelatedSessionContext(runtimeSessionKey);
+          if (sessionCtx) {
+            logger.info(
+              `[otel] message_sent: recovered trace context from related agent session ` +
+              `for runtimeSession=${runtimeSessionKey} -> ${sessionCtx.runtimeSessionKey}`
+            );
+          }
+        }
         const parentContext = sessionCtx?.rootContext || context.active();
         const channel = event?.channel || ctx?.channelId || event?.metadata?.channelId || "unknown";
         const messageText = extractMessageText(event);
@@ -2104,6 +2163,44 @@ export function registerHooks(
           span.end();
         }
 
+        if (toolName === "sessions_spawn" && runtimeSessionKey !== "unknown") {
+          activeSpawnOrchestratorSessionKey = runtimeSessionKey;
+          logger.info?.(
+            `[otel] sessions_spawn before_tool_call: runtimeSession=${runtimeSessionKey}, ` +
+            `hasSessionCtx=${!!sessionCtx}, hasAgentSpan=${!!sessionCtx?.agentSpan}, ` +
+            `hasRootSpan=${!!sessionCtx?.rootSpan}, sessionMapSize=${sessionContextMap.size}`
+          );
+
+          const spawnTargetIds = extractSpawnTargetAgentIds(toolInput, {});
+          const agentSpan = sessionCtx?.agentSpan ?? sessionCtx?.rootSpan;
+          for (const targetAgentId of spawnTargetIds) {
+            agentSpan?.addEvent("openclaw.subagent.spawning", {
+              "openclaw.subagent.target_agent_id": targetAgentId,
+              "openclaw.session.key": runtimeSessionKey,
+            });
+          }
+
+          const spawnCtxToSave = sessionCtx?.agentContext ?? sessionCtx?.rootContext;
+          if (spawnCtxToSave) {
+            const spawnSpanCtx = trace.getSpanContext(spawnCtxToSave);
+            if (spawnSpanCtx?.traceId && spawnSpanCtx.traceId !== "0".repeat(32)) {
+              try {
+                const sanitized = runtimeSessionKey.replace(/[^a-zA-Z0-9._-]/g, "_");
+                writeFileSync(
+                  `/tmp/openclaw/spawn-ctx-${sanitized}.json`,
+                  JSON.stringify({
+                    traceId: spawnSpanCtx.traceId,
+                    spanId: spawnSpanCtx.spanId,
+                    traceFlags: spawnSpanCtx.traceFlags,
+                  })
+                );
+              } catch {
+                // Best effort only.
+              }
+            }
+          }
+        }
+
         // For sessions_send, pre-queue the handoff NOW (before the tool executes and
         // the target agent's message_received fires) so the root span can be correctly
         // parented under this tool span. sessions_spawn is handled post-result in
@@ -2287,6 +2384,334 @@ export function registerHooks(
   );
 
   logger.info("[otel] Registered agent_end hook (via api.on)");
+
+  // Reply dispatch chain
+  // Each hook adds a timestamped event to the root request span so the
+  // reply path is visible in the trace timeline.
+
+  api.on("before_agent_reply", (event: any, ctx: any) => {
+    try {
+      ensureRuntime();
+      const runtimeSessionKey = resolveRuntimeSessionKey(event, ctx);
+      const sessionCtx = getSessionTraceContext(event, ctx);
+      markLifecycleEvent(sessionCtx, "before_agent_reply");
+      sessionCtx?.rootSpan?.addEvent("openclaw.reply.before_agent_reply", {
+        "openclaw.session.key": runtimeSessionKey,
+        ...(ctx?.agentId ? { "openclaw.agent.sender_id": String(ctx.agentId) } : {}),
+        ...(event?.cleanedBody && config.captureContent
+          ? { "openclaw.message.content": String(event.cleanedBody).slice(0, MAX_CAPTURE_CONTENT_CHARS) }
+          : {}),
+      });
+    } catch {
+      // Never block flow.
+    }
+    return undefined;
+  });
+  logger.info("[otel] Registered before_agent_reply hook (via api.on)");
+
+  api.on("before_message_write", (event: any, ctx: any) => {
+    try {
+      ensureRuntime();
+      const runtimeSessionKey = resolveRuntimeSessionKey(event, ctx);
+      const sessionCtx = getSessionTraceContext(event, ctx);
+      markLifecycleEvent(sessionCtx, "before_message_write");
+      const senderAgentId = event?.agentId || ctx?.agentId;
+      const msg = event?.message;
+      let contentStr: string | undefined;
+      if (msg != null && config.captureContent) {
+        if (typeof msg === "string") {
+          contentStr = msg;
+        } else if (Array.isArray(msg?.content)) {
+          contentStr = msg.content
+            .filter((entry: any) => entry?.type === "text" || typeof entry === "string")
+            .map((entry: any) => (typeof entry === "string" ? entry : entry?.text ?? ""))
+            .join("\n");
+        } else if (typeof msg?.content === "string") {
+          contentStr = msg.content;
+        } else {
+          contentStr = JSON.stringify(msg);
+        }
+      }
+      sessionCtx?.rootSpan?.addEvent("openclaw.reply.before_message_write", {
+        "openclaw.session.key": runtimeSessionKey,
+        ...(senderAgentId ? { "openclaw.agent.sender_id": String(senderAgentId) } : {}),
+        ...(msg?.role ? { "openclaw.message.role": String(msg.role) } : {}),
+        ...(contentStr ? { "openclaw.message.content": contentStr.slice(0, MAX_CAPTURE_CONTENT_CHARS) } : {}),
+      });
+    } catch {
+      // Never block flow.
+    }
+    return undefined;
+  });
+  logger.info("[otel] Registered before_message_write hook (via api.on)");
+
+  api.on("message_sending", (event: any, ctx: any) => {
+    try {
+      ensureRuntime();
+      const runtimeSessionKey = resolveRuntimeSessionKey(event, ctx);
+      const sessionCtx = getSessionTraceContext(event, ctx);
+      markLifecycleEvent(sessionCtx, "message_sending");
+      sessionCtx?.rootSpan?.addEvent("openclaw.reply.message_sending", {
+        "openclaw.session.key": runtimeSessionKey,
+        ...(ctx?.senderId ? { "openclaw.agent.sender_id": String(ctx.senderId) } : {}),
+        ...(event?.to ? { "openclaw.agent.recipient_id": String(event.to) } : {}),
+        ...(ctx?.channelId ? { "openclaw.message.channel": String(ctx.channelId) } : {}),
+        ...(event?.threadId != null ? { "openclaw.message.thread_id": String(event.threadId) } : {}),
+        ...(event?.content && config.captureContent
+          ? { "openclaw.message.content": String(event.content).slice(0, MAX_CAPTURE_CONTENT_CHARS) }
+          : {}),
+      });
+    } catch {
+      // Never block flow.
+    }
+    return undefined;
+  });
+  logger.info("[otel] Registered message_sending hook (via api.on)");
+
+  api.on("reply_dispatch", (event: any, ctx: any) => {
+    try {
+      ensureRuntime();
+      const runtimeSessionKey = resolveRuntimeSessionKey(event, ctx);
+      const sessionCtx = getSessionTraceContext(event, ctx);
+      markLifecycleEvent(sessionCtx, "reply_dispatch");
+      sessionCtx?.rootSpan?.addEvent("openclaw.reply.reply_dispatch", {
+        "openclaw.session.key": runtimeSessionKey,
+        ...(event?.runId ? { "openclaw.run.id": String(event.runId) } : {}),
+        ...(event?.originatingChannel ? { "openclaw.reply.originating_channel": String(event.originatingChannel) } : {}),
+        ...(event?.originatingTo ? { "openclaw.agent.recipient_id": String(event.originatingTo) } : {}),
+        ...(event?.sendPolicy ? { "openclaw.reply.send_policy": String(event.sendPolicy) } : {}),
+        ...(event?.isTailDispatch != null ? { "openclaw.reply.is_tail_dispatch": String(event.isTailDispatch) } : {}),
+        ...(event?.shouldRouteToOriginating != null ? { "openclaw.reply.route_to_originating": String(event.shouldRouteToOriginating) } : {}),
+        ...(event?.suppressUserDelivery != null ? { "openclaw.reply.suppress_delivery": String(event.suppressUserDelivery) } : {}),
+      });
+    } catch {
+      // Never block flow.
+    }
+    return undefined;
+  });
+  logger.info("[otel] Registered reply_dispatch hook (via api.on)");
+
+  api.on("before_dispatch", (event: any, ctx: any) => {
+    try {
+      ensureRuntime();
+      const runtimeSessionKey = resolveRuntimeSessionKey(event, ctx);
+      const sessionCtx = getSessionTraceContext(event, ctx);
+      markLifecycleEvent(sessionCtx, "before_dispatch");
+      const senderId = event?.senderId || ctx?.senderId;
+      sessionCtx?.rootSpan?.addEvent("openclaw.reply.before_dispatch", {
+        "openclaw.session.key": runtimeSessionKey,
+        ...(senderId ? { "openclaw.agent.sender_id": String(senderId) } : {}),
+        ...(event?.channel ? { "openclaw.message.channel": String(event.channel) } : {}),
+        ...(ctx?.conversationId ? { "openclaw.message.thread_id": String(ctx.conversationId) } : {}),
+        ...(event?.isGroup != null ? { "openclaw.message.is_group": String(event.isGroup) } : {}),
+        ...(event?.content && config.captureContent
+          ? { "openclaw.message.content": String(event.content).slice(0, MAX_CAPTURE_CONTENT_CHARS) }
+          : {}),
+      });
+    } catch {
+      // Never block flow.
+    }
+    return undefined;
+  });
+  logger.info("[otel] Registered before_dispatch hook (via api.on)");
+
+  api.on("subagent_spawning", (event: any, ctx: any) => {
+    try {
+      ensureRuntime();
+      const resolved = resolveRuntimeSessionKey(event, ctx);
+      const runtimeSessionKey = resolved !== "unknown" ? resolved : (activeSpawnOrchestratorSessionKey ?? "unknown");
+      const sessionCtx = getSessionTraceContext(event, ctx)
+        ?? (activeSpawnOrchestratorSessionKey ? sessionContextMap.get(activeSpawnOrchestratorSessionKey) : undefined);
+      markLifecycleEvent(sessionCtx, "subagent_spawning");
+      const targetAgentId = event?.agentId || "unknown";
+      const childSessionKey = event?.childSessionKey;
+      const requesterSessionKey = ctx?.requesterSessionKey;
+      if (childSessionKey && runtimeSessionKey !== "unknown") {
+        const spawnContext = sessionCtx?.agentContext ?? sessionCtx?.rootContext ?? context.active();
+        childSessionToSpawnContext.set(String(childSessionKey), spawnContext);
+      }
+      const spawningSpan = sessionCtx?.agentSpan ?? sessionCtx?.rootSpan;
+      spawningSpan?.addEvent("openclaw.subagent.spawning", {
+        "openclaw.subagent.target_agent_id": targetAgentId,
+        "openclaw.session.key": runtimeSessionKey,
+        ...(requesterSessionKey ? { "openclaw.subagent.requester_session_key": String(requesterSessionKey) } : {}),
+        ...(childSessionKey ? { "openclaw.subagent.child_session_key": String(childSessionKey) } : {}),
+        ...(event?.mode ? { "openclaw.subagent.mode": String(event.mode) } : {}),
+        ...(event?.label ? { "openclaw.subagent.label": String(event.label) } : {}),
+        ...(event?.requester?.channel ? { "openclaw.subagent.requester_channel": String(event.requester.channel) } : {}),
+        ...(event?.requester?.threadId != null ? { "openclaw.subagent.requester_thread_id": String(event.requester.threadId) } : {}),
+      });
+    } catch {
+      // Never block flow.
+    }
+    return undefined;
+  });
+  logger.info("[otel] Registered subagent_spawning hook (via api.on)");
+
+  api.on("subagent_spawned", (event: any, ctx: any) => {
+    try {
+      ensureRuntime();
+      const resolved = resolveRuntimeSessionKey(event, ctx);
+      const runtimeSessionKey = resolved !== "unknown" ? resolved : (activeSpawnOrchestratorSessionKey ?? "unknown");
+      const sessionCtx = getSessionTraceContext(event, ctx)
+        ?? (activeSpawnOrchestratorSessionKey ? sessionContextMap.get(activeSpawnOrchestratorSessionKey) : undefined);
+      markLifecycleEvent(sessionCtx, "subagent_spawned");
+      const childSessionKey = event?.childSessionKey || "unknown";
+      const targetAgentId = event?.agentId || "unknown";
+      const requesterSessionKey = ctx?.requesterSessionKey;
+      if (childSessionKey !== "unknown" && runtimeSessionKey !== "unknown") {
+        childSessionToOrchestratorKey.set(childSessionKey, runtimeSessionKey);
+        const spawnContext = sessionCtx?.agentContext ?? sessionCtx?.rootContext ?? context.active();
+        childSessionToSpawnContext.set(childSessionKey, spawnContext);
+      }
+      const spawnedSpan = sessionCtx?.agentSpan ?? sessionCtx?.rootSpan;
+      spawnedSpan?.addEvent("openclaw.subagent.spawned", {
+        "openclaw.subagent.target_agent_id": targetAgentId,
+        "openclaw.subagent.child_session_key": childSessionKey,
+        "openclaw.session.key": runtimeSessionKey,
+        ...(requesterSessionKey ? { "openclaw.subagent.requester_session_key": String(requesterSessionKey) } : {}),
+        ...(event?.runId ? { "openclaw.run.id": String(event.runId) } : {}),
+        ...(event?.mode ? { "openclaw.subagent.mode": String(event.mode) } : {}),
+        ...(event?.label ? { "openclaw.subagent.label": String(event.label) } : {}),
+        ...(event?.requester?.channel ? { "openclaw.subagent.requester_channel": String(event.requester.channel) } : {}),
+        ...(event?.requester?.threadId != null ? { "openclaw.subagent.requester_thread_id": String(event.requester.threadId) } : {}),
+      });
+    } catch {
+      // Never block flow.
+    }
+    return undefined;
+  });
+  logger.info("[otel] Registered subagent_spawned hook (via api.on)");
+
+  api.on("subagent_delivery_target", (event: any, ctx: any) => {
+    try {
+      ensureRuntime();
+      const resolved = resolveRuntimeSessionKey(event, ctx);
+      const requesterKey = event?.requesterSessionKey ? String(event.requesterSessionKey) : undefined;
+      const runtimeSessionKey = resolved !== "unknown" ? resolved
+        : (requesterKey ?? activeSpawnOrchestratorSessionKey ?? "unknown");
+      const sessionCtx = getSessionTraceContext(event, ctx)
+        ?? (requesterKey ? sessionContextMap.get(requesterKey) : undefined)
+        ?? (activeSpawnOrchestratorSessionKey ? sessionContextMap.get(activeSpawnOrchestratorSessionKey) : undefined);
+      markLifecycleEvent(sessionCtx, "subagent_delivery_target");
+      const savedSpawnContext = event?.childSessionKey
+        ? childSessionToSpawnContext.get(String(event.childSessionKey))
+        : undefined;
+      let parentContext = sessionCtx?.agentContext ?? sessionCtx?.rootContext ?? savedSpawnContext ?? context.active();
+      const effectiveSpanCtx = trace.getSpanContext(parentContext);
+      if ((!effectiveSpanCtx?.traceId || effectiveSpanCtx.traceId === "0".repeat(32)) && requesterKey) {
+        try {
+          const sanitized = requesterKey.replace(/[^a-zA-Z0-9._-]/g, "_");
+          const diskData = JSON.parse(readFileSync(`/tmp/openclaw/spawn-ctx-${sanitized}.json`, "utf8"));
+          parentContext = trace.setSpanContext(ROOT_CONTEXT, {
+            traceId: diskData.traceId,
+            spanId: diskData.spanId,
+            traceFlags: diskData.traceFlags ?? TraceFlags.SAMPLED,
+            isRemote: true,
+          });
+        } catch {
+          // File may not exist yet.
+        }
+      }
+      const sessionId = runtimeSessionKey !== "unknown"
+        ? touchSession(runtimeSessionKey, parentContext)
+        : undefined;
+
+      const span = tracer.startSpan(
+        "subagent.delivery_target",
+        {
+          kind: SpanKind.INTERNAL,
+          attributes: {
+            [ATTR_OBSERVE_SPAN_KIND]: ObserveSpanKind.TOOL,
+            [ATTR_OBSERVE_ENTITY_NAME]: "subagent_delivery_target",
+            "openclaw.session.key": runtimeSessionKey,
+            ...(sessionId ? { "session.id": sessionId } : {}),
+            ...(event?.childSessionKey ? { "openclaw.subagent.child_session_key": String(event.childSessionKey) } : {}),
+            ...(event?.requesterSessionKey ? { "openclaw.subagent.requester_session_key": String(event.requesterSessionKey) } : {}),
+            ...(event?.spawnMode ? { "openclaw.subagent.mode": String(event.spawnMode) } : {}),
+            ...(event?.expectsCompletionMessage != null ? { "openclaw.subagent.expects_completion": String(event.expectsCompletionMessage) } : {}),
+            ...(event?.childRunId ? { "openclaw.subagent.child_run_id": String(event.childRunId) } : {}),
+            ...(event?.requesterOrigin?.channel ? { "openclaw.subagent.requester_channel": String(event.requesterOrigin.channel) } : {}),
+            ...(event?.requesterOrigin?.to ? { "openclaw.subagent.requester_to": String(event.requesterOrigin.to) } : {}),
+            ...(event?.requesterOrigin?.threadId != null ? { "openclaw.subagent.requester_thread_id": String(event.requesterOrigin.threadId) } : {}),
+          },
+        },
+        parentContext
+      );
+      span.setStatus({ code: SpanStatusCode.OK });
+      span.end();
+    } catch {
+      // Never block flow.
+    }
+    return undefined;
+  });
+  logger.info("[otel] Registered subagent_delivery_target hook (via api.on)");
+
+  api.on("subagent_ended", (event: any, ctx: any) => {
+    try {
+      ensureRuntime();
+      const resolved = resolveRuntimeSessionKey(event, ctx);
+      const childKey = event?.targetSessionKey || ctx?.childSessionKey;
+      const orchestratorKey = childKey ? childSessionToOrchestratorKey.get(childKey) : undefined;
+      const runtimeSessionKey = resolved !== "unknown" ? resolved
+        : (orchestratorKey ?? ctx?.requesterSessionKey ?? activeSpawnOrchestratorSessionKey ?? "unknown");
+      const sessionCtx = getSessionTraceContext(event, ctx)
+        ?? (orchestratorKey ? sessionContextMap.get(orchestratorKey) : undefined)
+        ?? (ctx?.requesterSessionKey ? sessionContextMap.get(String(ctx.requesterSessionKey)) : undefined)
+        ?? (event?.requesterSessionKey ? sessionContextMap.get(String(event.requesterSessionKey)) : undefined)
+        ?? (activeSpawnOrchestratorSessionKey ? sessionContextMap.get(activeSpawnOrchestratorSessionKey) : undefined);
+      markLifecycleEvent(sessionCtx, "subagent_ended");
+      const parentContext = sessionCtx?.agentContext || sessionCtx?.rootContext || context.active();
+      const sessionId = runtimeSessionKey !== "unknown"
+        ? touchSession(runtimeSessionKey, parentContext)
+        : undefined;
+
+      const outcome = event?.outcome ?? "ok";
+      const errorText = event?.error;
+      const hasError = errorText != null || outcome === "error" || outcome === "timeout" || outcome === "killed";
+
+      const span = tracer.startSpan(
+        "tool.sessions_yield",
+        {
+          kind: SpanKind.INTERNAL,
+          attributes: {
+            [ATTR_OBSERVE_SPAN_KIND]: ObserveSpanKind.TOOL,
+            [ATTR_OBSERVE_ENTITY_NAME]: "sessions_yield",
+            [GEN_AI_OPERATION_NAME_ATTR]: GEN_AI_OPERATION.EXECUTE_TOOL,
+            [GEN_AI_TOOL_NAME_ATTR]: "sessions_yield",
+            "openclaw.tool.name": "sessions_yield",
+            "openclaw.session.key": runtimeSessionKey,
+            ...(sessionId ? { "session.id": sessionId } : {}),
+            ...(childKey ? { "openclaw.subagent.child_session_key": String(childKey) } : {}),
+            ...(ctx?.requesterSessionKey ? { "openclaw.subagent.requester_session_key": String(ctx.requesterSessionKey) } : {}),
+            "openclaw.subagent.outcome": outcome,
+            ...(event?.targetKind ? { "openclaw.subagent.target_kind": String(event.targetKind) } : {}),
+            ...(event?.reason ? { "openclaw.subagent.end_reason": String(event.reason) } : {}),
+            ...(event?.runId ? { "openclaw.run.id": String(event.runId) } : {}),
+            ...(event?.endedAt != null ? { "openclaw.subagent.ended_at_ms": event.endedAt } : {}),
+            ...(errorText ? { "openclaw.subagent.error": String(errorText).slice(0, 500) } : {}),
+          },
+        },
+        parentContext
+      );
+
+      captureSpanToCache(span, "tool.sessions_yield", "tool", runtimeSessionKey, sessionId);
+      span.setStatus(
+        hasError
+          ? { code: SpanStatusCode.ERROR, message: String(errorText || outcome) }
+          : { code: SpanStatusCode.OK }
+      );
+      span.end();
+      if (childKey) {
+        childSessionToSpawnContext.delete(String(childKey));
+      }
+      logger.info(`[otel] subagent_ended: emitted tool.sessions_yield span, runtimeSession=${runtimeSessionKey}`);
+    } catch {
+      // Never block flow.
+    }
+    return undefined;
+  });
+  logger.info("[otel] Registered subagent_ended hook (via api.on)");
 
   // ==================================================================
   // EVENT-STREAM HOOKS - registered via api.registerHook()

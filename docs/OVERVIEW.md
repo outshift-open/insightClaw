@@ -19,23 +19,6 @@ This plugin closes that gap by combining three telemetry paths:
 
 The result is a unified observability layer with connected traces for request forensics, metrics for dashboards and alerts, and optional provider SDK auto-instrumentation for GenAI calls.
 
-## Problem We Are Solving
-
-Five operational questions:
-
-1. What happened to a specific request from the time it arrived until a response was sent?
-2. Which agent, tool, or subagent caused latency or failure?
-3. What did the request cost in tokens and dollars?
-4. Is the gateway healthy, backlogged, or stuck?
-5. Are there unsafe or abnormal execution patterns happening inside the control plane?
-
-
-Using only disconnected diagnostic events is not enough for these questions because the events tell us that something happened, but not always how the work was connected across agent turns, tools, and outbound delivery.
-
-Using only provider SDK auto-instrumentation is also not enough because SDK spans do not understand OpenClaw concepts such as session keys, agent turns, tool calls, handoffs, fork/join behavior, or control-plane commands.
-
-The plugin therefore treats OpenClaw itself as the source of truth for workflow structure and uses diagnostics as the source of truth for usage accounting and gateway health.
-
 ## Solution Approach
 
 The implementation is intentionally split into two layers plus an optional third:

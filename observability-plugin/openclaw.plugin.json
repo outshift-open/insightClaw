@@ -55,7 +55,7 @@
     },
     "embeddingsProcessing": {
       "label": "Use Embeddings for Session Similarity",
-      "help": "When enabled, uses text embeddings and cosine similarity instead of Jaccard similarity for agent call sessionization. This may increase CPU usage but can improve text-based metrics accuracy for semantically similar but lexically different prompts."
+      "help": "When enabled, uses text embeddings and cosine similarity instead of Jaccard similarity for agent call sessionization. This may increase CPU usage but can improve text-based metrics accuracy for semantically similar but lexically different prompts. Note: it requires the installation of @xenova/transformers."
     }
   },
   "configSchema": {
@@ -124,7 +124,7 @@
       },
       "embeddingsProcessing": {
         "type": "boolean",
-        "description": "When enabled, uses text embeddings and cosine similarity instead of Jaccard similarity for agent call sessionization. This may increase CPU usage but can improve text-based metrics accuracy for semantically similar but lexically different prompts."
+        "description": "When enabled, uses text embeddings and cosine similarity instead of Jaccard similarity for agent call sessionization. This may increase CPU usage but can improve text-based metrics accuracy for semantically similar but lexically different prompts. Note: it requires the installation of @xenova/transformers."
       }
     }
   }

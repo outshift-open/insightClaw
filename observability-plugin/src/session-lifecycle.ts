@@ -408,7 +408,7 @@ function recordRepetitionScore(runtimeSessionKey: string, histograms: any, embed
       const agentScores = new Array<number>();
       for (let i = 0; i < agentCalls.length; i++) {
         for (let j = i + 1; j < agentCalls.length; j++) {
-          let similarity = 0;
+          let similarity: number;
           if (embeddingsProcessing) {
             similarity = await computeStringSimilarity(agentCalls[i].prompt, agentCalls[j].prompt, "embedding");
           } else {

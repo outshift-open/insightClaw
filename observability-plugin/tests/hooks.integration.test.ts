@@ -115,6 +115,8 @@ test("registerHooks wires lifecycle hooks that create and complete request spans
       spanCacheVerboseLogs: false,
       metricsIntervalMs: 30_000,
       resourceAttributes: {},
+      experimentalMetrics: false,
+      embeddingsProcessing: false,
     });
 
     assert.deepEqual([...typedHooks.keys()].sort(), [
@@ -306,6 +308,8 @@ test("registerHooks completes a pending request root when message_sent arrives a
       spanCacheVerboseLogs: false,
       metricsIntervalMs: 30_000,
       resourceAttributes: {},
+      experimentalMetrics: false,
+      embeddingsProcessing: false,
     });
 
     const sessionKey = "agent:planner:message-sent-after-agent-end";
@@ -384,6 +388,8 @@ test("registerHooks infers outbound completion from agent_end for webchat when n
       spanCacheVerboseLogs: false,
       metricsIntervalMs: 30_000,
       resourceAttributes: {},
+      experimentalMetrics: false,
+      embeddingsProcessing: false,
     });
 
     const sessionKey = "agent:planner:webchat-inferred-outbound";
@@ -539,6 +545,8 @@ test("registerHooks links sessions_send target turns back to the sending tool sp
       spanCacheVerboseLogs: false,
       metricsIntervalMs: 30_000,
       resourceAttributes: {},
+      experimentalMetrics: false,
+      embeddingsProcessing: false,
     });
   } finally {
     globalThis.setInterval = originalSetInterval;
@@ -677,6 +685,8 @@ test("registerHooks records span-cache-backed memory failure rate and logs its i
       spanCacheVerboseLogs: false,
       metricsIntervalMs: 30_000,
       resourceAttributes: {},
+      experimentalMetrics: false,
+      embeddingsProcessing: false,
     });
 
     const sessionKey = "agent:memory:failure-rate";
@@ -765,6 +775,8 @@ test("registerHooks recovers Vertex usage fields from agent_end fallback payload
       spanCacheVerboseLogs: false,
       metricsIntervalMs: 30_000,
       resourceAttributes: {},
+      experimentalMetrics: false,
+      embeddingsProcessing: false,
     });
 
     const sessionKey = "agent:planner:vertex-usage-fallback";

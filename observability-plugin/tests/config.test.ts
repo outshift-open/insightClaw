@@ -19,6 +19,8 @@ test("parseConfig returns documented defaults for missing values", () => {
     spanCacheVerboseLogs: false,
     metricsIntervalMs: 30_000,
     resourceAttributes: {},
+    experimentalMetrics: false,
+    embeddingsProcessing: false,
   });
 });
 
@@ -39,6 +41,8 @@ test("parseConfig preserves supported overrides and rejects invalid shapes", () 
     spanCacheVerboseLogs: true,
     metricsIntervalMs: 1500,
     resourceAttributes,
+    experimentalMetrics: false,
+    embeddingsProcessing: false,
   });
 
   assert.equal(config.endpoint, "http://collector:4317");
@@ -53,6 +57,8 @@ test("parseConfig preserves supported overrides and rejects invalid shapes", () 
   assert.equal(config.spanCacheVerboseLogs, true);
   assert.equal(config.metricsIntervalMs, 1500);
   assert.equal(config.resourceAttributes, resourceAttributes);
+  assert.equal(config.experimentalMetrics, false);
+  assert.equal(config.embeddingsProcessing, false);
 });
 
 test("parseConfig falls back when values are unsupported", () => {
@@ -69,6 +75,8 @@ test("parseConfig falls back when values are unsupported", () => {
     spanCacheVerboseLogs: "no",
     metricsIntervalMs: 999,
     resourceAttributes: [],
+    experimentalMetrics: false,
+    embeddingsProcessing: false,
   });
 
   assert.equal(config.endpoint, "http://localhost:4318");
@@ -83,4 +91,6 @@ test("parseConfig falls back when values are unsupported", () => {
   assert.equal(config.spanCacheVerboseLogs, false);
   assert.equal(config.metricsIntervalMs, 30_000);
   assert.deepEqual(config.resourceAttributes, {});
+  assert.equal(config.experimentalMetrics, false);
+  assert.equal(config.embeddingsProcessing, false);
 });

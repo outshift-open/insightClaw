@@ -103,14 +103,17 @@ export interface OtelHistograms {
   //contextOtherSize: Histogram; not available at the moment
   /** Duration of context preparation in ms */
   contextPreparationDuration: Histogram;
-  /** Novelty score of sub-agent output compared to parent context */
-  noveltyScore: Histogram;
-  /** Downstream context sharing score */
-  downstreamContextSharing: Histogram;
-  /** Parallelisation score */
-  parallelisationScore: Histogram;
   /** Repetition score */
   repetitionScore: Histogram;
+  /** Parallelisation score */
+  parallelisationScore: Histogram;
+
+  /** Experimental metrics - disabled by default */
+
+  /** Novelty score of sub-agent output compared to parent context */
+  noveltyScore?: Histogram;
+  /** Downstream context sharing score */
+  downstreamContextSharing?: Histogram;
 }
 
 export interface OtelGauges {
@@ -317,14 +320,6 @@ export function initTelemetry(config: OtelObservabilityConfig, logger: any): Tel
         description: "Duration of context preparation in ms",
         unit: "ms",
     }),
-    noveltyScore: meter.createHistogram("openclaw.agent.novelty_score", {
-        description: "Novelty score of sub-agent output compared to parent context",
-        unit: "1",
-    }),
-    downstreamContextSharing: meter.createHistogram("openclaw.agent.downstream_context_sharing", {
-        description: "Downstream context sharing score",
-        unit: "1",
-    }),
     parallelisationScore: meter.createHistogram("openclaw.session.parallelisation_score", {
         description: "Parallelisation score",
         unit: "1",
@@ -332,8 +327,21 @@ export function initTelemetry(config: OtelObservabilityConfig, logger: any): Tel
     repetitionScore: meter.createHistogram("openclaw.session.repetition_score", {
         description: "Repetition score",
         unit: "1",
-    }),
+    })
   };
+  
+  if (config.experimentalMetrics) {
+      histograms.noveltyScore = meter.createHistogram("openclaw.agent.novelty_score", {
+          description: "Novelty score of sub-agent output compared to parent context",
+          unit: "1",
+      });
+      histograms.downstreamContextSharing = meter.createHistogram("openclaw.agent.downstream_context_sharing", {
+          description: "Downstream context sharing score",
+          unit: "1",
+      });
+    }
+    
+
 
   const gauges: OtelGauges = {
     activeSessions: meter.createUpDownCounter("openclaw.sessions.active", {

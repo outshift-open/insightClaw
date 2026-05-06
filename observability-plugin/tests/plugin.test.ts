@@ -93,6 +93,8 @@ test("plugin register wires the gateway method, cli command, tool, and service",
       captureContent: true,
       spanCache: false,
       spanCacheVerboseLogs: true,
+      experimentalMetrics: false,
+      embeddingsProcessing: false,
     },
   });
 

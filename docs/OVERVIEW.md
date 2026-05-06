@@ -338,9 +338,9 @@ Note that some additional counters/duration relative to memory\_search and memor
 | Metric | Type | Description | Notes |
 | :-- | :-- | :-- | :-- |
 | Context Source Composition Ratio | Histogram | Fraction of final context contributed by user prompt, system prompt, agent soul, memory (short/long‑term), tools | Heuristics could be applied to determine the source of data. Not all the sources may be supported |
-| Context Assembly Latency | TBD | Time to collect, filter, prioritize, and assemble context | Based on context preparation span |
-| Downstream Context Disclosure Ratio | TBD | % of parent context passed to sub‑agents | Based on heuristics to approximate context-reuse |
-| Context Sharing | TBD | How many agent turns reuse identical or near‑identical context | Based on heuristics to approximate content-reuse |
+| Context Assembly Latency | Histogram | Time to collect, filter, prioritize, and assemble context | Based on context preparation span |
+| Downstream Context Disclosure Ratio | Histogram | % of parent context passed to sub‑agents | Based on heuristics to approximate context-reuse |
+| Context Sharing | Histogram | How many agent turns reuse identical or near‑identical context | Based on heuristics to approximate content-reuse |
 
 ### Memory Lifecycle
 
@@ -353,7 +353,7 @@ Note that some additional counters/duration relative to memory\_search and memor
 
 | Metric | Type | Description | Notes |
 | :-- | :-- | :-- | :-- |
-| Parallelisation Score | TBD | Ratio processing time of all the agents and the session duration |  |
+| Parallelisation Score | Histogram | Ratio processing time of all the agents and the session duration |  |
 
 Additional derived metrics could be available, but they require more investigation.
 

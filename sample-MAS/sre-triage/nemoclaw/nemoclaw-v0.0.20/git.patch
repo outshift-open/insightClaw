@@ -1,5 +1,5 @@
 diff --git a/Dockerfile b/Dockerfile
-index af0918bd302f74dee9271af3c4f427979c40efbd..ee2055fa299a92d9a79b13596a40e7a6a9f548a4 100644
+index af0918bd..a8351f9f 100644
 --- a/Dockerfile
 +++ b/Dockerfile
 @@ -30,12 +30,18 @@ RUN (apt-get remove --purge -y gcc gcc-12 g++ g++-12 cpp cpp-12 make \
@@ -21,7 +21,7 @@ index af0918bd302f74dee9271af3c4f427979c40efbd..ee2055fa299a92d9a79b13596a40e7a6
  
  # Install runtime dependencies only (no devDependencies, no build step)
  WORKDIR /opt/nemoclaw
-@@ -153,6 +159,28 @@ RUN mkdir -p /sandbox/.nemoclaw/blueprints/0.1.0 \
+@@ -153,6 +159,42 @@ RUN mkdir -p /sandbox/.nemoclaw/blueprints/0.1.0 \
  COPY scripts/nemoclaw-start.sh /usr/local/bin/nemoclaw-start
  RUN chmod 755 /usr/local/bin/nemoclaw-start
  
@@ -47,10 +47,32 @@ index af0918bd302f74dee9271af3c4f427979c40efbd..ee2055fa299a92d9a79b13596a40e7a6
 +    /sandbox/.openclaw-data/agents/comms \
 +    /sandbox/.openclaw-data/services/db_api
 +
++# Add scripts
++RUN mkdir -p /sandbox/.openclaw-data/scripts/
++COPY ${OPENCLAW_REPO_DIR}/scripts/change-scenario.sh /sandbox/.openclaw-data/scripts/change-scenario.sh
++COPY ${OPENCLAW_REPO_DIR}/scripts/reset-sessions.sh /sandbox/.openclaw-data/scripts/reset-sessions.sh
++RUN chmod +x /sandbox/.openclaw-data/scripts/change-scenario.sh /sandbox/.openclaw-data/scripts/reset-sessions.sh
++
++# Install plugin
++ARG OPENCLAW_DEEP_OBS_DIR=observability-plugin
++COPY ${OPENCLAW_DEEP_OBS_DIR}/ /sandbox/.openclaw-data/plugins/observability/
++RUN cd /sandbox/.openclaw-data/plugins/observability && npm install --no-audit --no-fund --no-progress
++
++# Traceloop workaround
++COPY ${OPENCLAW_DEEP_OBS_DIR}/openllmetry-patch-index.js /sandbox/.openclaw-data/plugins/observability/node_modules/@traceloop/instrumentation-openai/dist/index.js
++
  # Build args for config that varies per deployment.
  # nemoclaw onboard passes these at image build time.
  ARG NEMOCLAW_MODEL=nvidia/nemotron-3-super-120b-a12b
-@@ -261,7 +289,18 @@ providers = { \
+@@ -239,6 +281,7 @@ context_window = int(os.environ.get('NEMOCLAW_CONTEXT_WINDOW', '131072')); \
+ max_tokens = int(os.environ.get('NEMOCLAW_MAX_TOKENS', '4096')); \
+ reasoning = os.environ.get('NEMOCLAW_REASONING', 'false') == 'true'; \
+ inference_compat = json.loads(base64.b64decode(os.environ['NEMOCLAW_INFERENCE_COMPAT_B64']).decode('utf-8')); \
++inference_compat = { 'supportsUsageInStreaming': True } \
+ msg_channels = json.loads(base64.b64decode(os.environ.get('NEMOCLAW_MESSAGING_CHANNELS_B64', 'W10=') or 'W10=').decode('utf-8')); \
+ _allowed_ids = json.loads(base64.b64decode(os.environ.get('NEMOCLAW_MESSAGING_ALLOWED_IDS_B64', 'e30=') or 'e30=').decode('utf-8')); \
+ _discord_guilds = json.loads(base64.b64decode(os.environ.get('NEMOCLAW_DISCORD_GUILDS_B64', 'e30=') or 'e30=').decode('utf-8')); \
+@@ -261,10 +304,41 @@ providers = { \
      } \
  }; \
  config = { \
@@ -59,9 +81,9 @@ index af0918bd302f74dee9271af3c4f427979c40efbd..ee2055fa299a92d9a79b13596a40e7a6
 +        'defaults': {'model': {'primary': primary_model_ref}}, \
 +        'list': [ \
 +            {'id': 'sre', 'name': 'sre', 'identity': {'name': 'sre'}, 'workspace': '/sandbox/.openclaw-data/workspaces/sre', 'agentDir': '/sandbox/.openclaw-data/agents/sre/agent', 'subagents': {'allowAgents': ['telemetry', 'backend', 'db']}, 'tools': {'allow': ['sessions_spawn', 'sessions_list', 'sessions_send']}}, \
-+            {'id': 'telemetry', 'name': 'telemetry', 'identity': {'name': 'telemetry'}, 'workspace': '/sandbox/.openclaw-data/workspaces/telemetry', 'agentDir': '/sandbox/.openclaw-data/agents/telemetry/agent', 'tools': {'allow': ['get_metrics', 'list_services', 'get_service_health', 'get_logs', 'query_db']}}, \
-+            {'id': 'backend', 'name': 'backend', 'identity': {'name': 'backend'}, 'workspace': '/sandbox/.openclaw-data/workspaces/backend', 'agentDir': '/sandbox/.openclaw-data/agents/backend/agent', 'tools': {'allow': ['get_deployments', 'get_logs', 'get_metrics', 'run_action', 'query_db']}}, \
-+            {'id': 'db', 'name': 'db', 'identity': {'name': 'db'}, 'workspace': '/sandbox/.openclaw-data/workspaces/db', 'agentDir': '/sandbox/.openclaw-data/agents/db/agent', 'tools': {'allow': ['query_db']}}, \
++            {'id': 'telemetry', 'name': 'telemetry', 'identity': {'name': 'telemetry'}, 'workspace': '/sandbox/.openclaw-data/workspaces/telemetry', 'agentDir': '/sandbox/.openclaw-data/agents/telemetry/agent', 'tools': {'allow': ['exec']}}, \
++            {'id': 'backend', 'name': 'backend', 'identity': {'name': 'backend'}, 'workspace': '/sandbox/.openclaw-data/workspaces/backend', 'agentDir': '/sandbox/.openclaw-data/agents/backend/agent', 'tools': {'allow': ['exec']}}, \
++            {'id': 'db', 'name': 'db', 'identity': {'name': 'db'}, 'workspace': '/sandbox/.openclaw-data/workspaces/db', 'agentDir': '/sandbox/.openclaw-data/agents/db/agent', 'tools': {'allow': ['exec']}}, \
 +            {'id': 'verifier', 'name': 'verifier', 'identity': {'name': 'verifier'}, 'workspace': '/sandbox/.openclaw-data/workspaces/verifier', 'agentDir': '/sandbox/.openclaw-data/agents/verifier/agent'}, \
 +            {'id': 'comms', 'name': 'Communications', 'identity': {'name': 'Communications'}, 'workspace': '/sandbox/.openclaw-data/workspaces/comms', 'agentDir': '/sandbox/.openclaw-data/agents/comms/agent'}, \
 +            {'id': 'main', 'workspace': '/sandbox/.openclaw-data/workspaces/sre', 'subagents': {'allowAgents': ['telemetry', 'backend', 'db']}} \
@@ -70,7 +92,30 @@ index af0918bd302f74dee9271af3c4f427979c40efbd..ee2055fa299a92d9a79b13596a40e7a6
      'models': {'mode': 'merge', 'providers': providers}, \
      'channels': dict({'defaults': {'configWrites': False}}, **_ch_cfg), \
      'update': {'checkOnStart': False}, \
-@@ -288,7 +327,7 @@ config.update({ \
++    'plugins': { \
++      'load': { \
++        'paths': ['/sandbox/.openclaw-data/plugins/observability/'] \
++      }, \
++      'entries': { \
++        'openclaw-deep-observability': { \
++          'enabled': True, \
++          'config': { \
++            'endpoint': 'http://127.0.0.1:4318', \
++            'serviceName': 'nemoclaw-openclaw-gateway', \
++            'protocol': 'http', \
++            'traces': True, \
++            'metrics': True, \
++            'captureContent': True, \
++            'spanCache': False, \
++            'spanCacheVerboseLogs': False \
++          } \
++        } \
++      } \
++    }, \
+     'gateway': { \
+         'mode': 'local', \
+         'controlUi': { \
+@@ -288,7 +362,7 @@ config.update({ \
          } \
      } \
  }) if os.environ.get('NEMOCLAW_WEB_SEARCH_ENABLED', '') == '1' else None; \
@@ -79,7 +124,7 @@ index af0918bd302f74dee9271af3c4f427979c40efbd..ee2055fa299a92d9a79b13596a40e7a6
  json.dump(config, open(path, 'w'), indent=2); \
  os.chmod(path, 0o600)"
  
-@@ -296,6 +335,166 @@ os.chmod(path, 0o600)"
+@@ -296,6 +370,166 @@ os.chmod(path, 0o600)"
  RUN openclaw doctor --fix > /dev/null 2>&1 || true \
      && openclaw plugins install /opt/nemoclaw > /dev/null 2>&1 || true
  
@@ -119,17 +164,17 @@ index af0918bd302f74dee9271af3c4f427979c40efbd..ee2055fa299a92d9a79b13596a40e7a6
 +    'telemetry': {
 +        'name': 'telemetry',
 +        'identity': {'name': 'telemetry'},
-+        'tools': {'allow': ['get_metrics', 'list_services', 'get_service_health', 'get_logs', 'query_db']},
++        'tools': {'allow': ['exec']},
 +    },
 +    'backend': {
 +        'name': 'backend',
 +        'identity': {'name': 'backend'},
-+        'tools': {'allow': ['get_deployments', 'get_logs', 'get_metrics', 'run_action', 'query_db']},
++        'tools': {'allow': ['exec']},
 +    },
 +    'db': {
 +        'name': 'db',
 +        'identity': {'name': 'db'},
-+        'tools': {'allow': ['query_db']},
++        'tools': {'allow': ['exec']},
 +    },
 +    'verifier': {
 +        'name': 'verifier',
@@ -196,17 +241,17 @@ index af0918bd302f74dee9271af3c4f427979c40efbd..ee2055fa299a92d9a79b13596a40e7a6
 +        'telemetry': {
 +            'name': 'telemetry',
 +            'identity': {'name': 'telemetry'},
-+            'tools': {'allow': ['get_metrics', 'list_services', 'get_service_health', 'get_logs', 'query_db']},
++            'tools': {'allow': ['exec']},
 +        },
 +        'backend': {
 +            'name': 'backend',
 +            'identity': {'name': 'backend'},
-+            'tools': {'allow': ['get_deployments', 'get_logs', 'get_metrics', 'run_action', 'query_db']},
++            'tools': {'allow': ['exec']},
 +        },
 +        'db': {
 +            'name': 'db',
 +            'identity': {'name': 'db'},
-+            'tools': {'allow': ['query_db']},
++            'tools': {'allow': ['exec']},
 +        },
 +        'verifier': {
 +            'name': 'verifier',
@@ -246,7 +291,7 @@ index af0918bd302f74dee9271af3c4f427979c40efbd..ee2055fa299a92d9a79b13596a40e7a6
  # Lock openclaw.json via DAC: chown to root so the sandbox user cannot modify
  # it at runtime.  This works regardless of Landlock enforcement status.
  # The Landlock policy (/sandbox/.openclaw in read_only) provides defense-in-depth
-@@ -371,6 +570,76 @@ RUN chown root:root /sandbox/.openclaw \
+@@ -371,6 +605,76 @@ RUN chown root:root /sandbox/.openclaw \
      && chmod 755 /sandbox/.openclaw \
      && chmod 444 /sandbox/.openclaw/openclaw.json
  
@@ -277,7 +322,7 @@ index af0918bd302f74dee9271af3c4f427979c40efbd..ee2055fa299a92d9a79b13596a40e7a6
 +        'identity': {'name': 'telemetry'},
 +        'workspace': f'{workspace_root}/telemetry',
 +        'agentDir': f'{agent_root}/telemetry/agent',
-+        'tools': {'allow': ['get_metrics', 'list_services', 'get_service_health', 'get_logs', 'query_db']},
++        'tools': {'allow': ['exec']},
 +    },
 +    {
 +        'id': 'backend',
@@ -285,7 +330,7 @@ index af0918bd302f74dee9271af3c4f427979c40efbd..ee2055fa299a92d9a79b13596a40e7a6
 +        'identity': {'name': 'backend'},
 +        'workspace': f'{workspace_root}/backend',
 +        'agentDir': f'{agent_root}/backend/agent',
-+        'tools': {'allow': ['get_deployments', 'get_logs', 'get_metrics', 'run_action', 'query_db']},
++        'tools': {'allow': ['exec']},
 +    },
 +    {
 +        'id': 'db',
@@ -293,7 +338,7 @@ index af0918bd302f74dee9271af3c4f427979c40efbd..ee2055fa299a92d9a79b13596a40e7a6
 +        'identity': {'name': 'db'},
 +        'workspace': f'{workspace_root}/db',
 +        'agentDir': f'{agent_root}/db/agent',
-+        'tools': {'allow': ['query_db']},
++        'tools': {'allow': ['exec']},
 +    },
 +    {
 +        'id': 'verifier',
@@ -324,7 +369,7 @@ index af0918bd302f74dee9271af3c4f427979c40efbd..ee2055fa299a92d9a79b13596a40e7a6
  # Prevents the agent from creating a copy with a tampered config and
  # restarting the gateway pointing at it.
 diff --git a/scripts/nemoclaw-start.sh b/scripts/nemoclaw-start.sh
-index 296948d13e88e384084ba02a53475caf7747bf0c..56d5898c82195c15575c302c4f3704ce611a675e 100755
+index 296948d1..922bdca1 100755
 --- a/scripts/nemoclaw-start.sh
 +++ b/scripts/nemoclaw-start.sh
 @@ -185,6 +185,20 @@ fi
@@ -404,7 +449,7 @@ index 296948d13e88e384084ba02a53475caf7747bf0c..56d5898c82195c15575c302c4f3704ce
 +        'identity': {'name': 'telemetry'},
 +        'workspace': f'{workspace_root}/telemetry',
 +        'agentDir': f'{agent_root}/telemetry/agent',
-+        'tools': {'allow': ['get_metrics', 'list_services', 'get_service_health', 'get_logs', 'query_db']},
++        'tools': {'allow': ['exec']},
 +    },
 +    {
 +        'id': 'backend',
@@ -412,7 +457,7 @@ index 296948d13e88e384084ba02a53475caf7747bf0c..56d5898c82195c15575c302c4f3704ce
 +        'identity': {'name': 'backend'},
 +        'workspace': f'{workspace_root}/backend',
 +        'agentDir': f'{agent_root}/backend/agent',
-+        'tools': {'allow': ['get_deployments', 'get_logs', 'get_metrics', 'run_action', 'query_db']},
++        'tools': {'allow': ['exec']},
 +    },
 +    {
 +        'id': 'db',
@@ -420,7 +465,7 @@ index 296948d13e88e384084ba02a53475caf7747bf0c..56d5898c82195c15575c302c4f3704ce
 +        'identity': {'name': 'db'},
 +        'workspace': f'{workspace_root}/db',
 +        'agentDir': f'{agent_root}/db/agent',
-+        'tools': {'allow': ['query_db']},
++        'tools': {'allow': ['exec']},
 +    },
 +    {
 +        'id': 'verifier',
@@ -456,7 +501,66 @@ index 296948d13e88e384084ba02a53475caf7747bf0c..56d5898c82195c15575c302c4f3704ce
  _read_gateway_token() {
    python3 - <<'PYTOKEN'
  import json
-@@ -790,10 +905,16 @@ cleanup() {
+@@ -722,6 +837,48 @@ PYAUTOPAIR
+   echo "[gateway] auto-pair watcher launched (pid $AUTO_PAIR_PID)" >&2
+ }
+ 
++# Observability plugin preload (optional — only active when plugin is installed).
++# Injects OpenTelemetry instrumentation into the gateway process when the
++# observability plugin is present in the sandbox image.
++_OBS_PRELOAD="/sandbox/.openclaw-data/plugins/observability/instrumentation/preload.mjs"
++if [ -f "$_OBS_PRELOAD" ]; then
++  export NODE_OPTIONS="${NODE_OPTIONS:+$NODE_OPTIONS }--import $_OBS_PRELOAD"
++  echo "[observability] preload injected: $_OBS_PRELOAD" >&2
++fi
++
++# Observability proxy
++_OTLP_PROXY_SCRIPT="/tmp/nemoclaw-otlp-proxy.js"
++cat > _OTLP_PROXY_SCRIPT <<'OTLP_PROXY_EOF'
++const http = require("http");
++const PROXY = { host: "10.200.0.1", port: 3128 };
++const TARGET = "http://2.13.195.139:4318"; // Otel collector endpoint
++
++const server = http.createServer((clientReq, clientRes) => {
++  const targetUrl = TARGET + clientReq.url;
++  const opts = {
++    hostname: PROXY.host,
++    port: PROXY.port,
++    path: targetUrl,
++    method: clientReq.method,
++    headers: { ...clientReq.headers, host: "2.13.195.139:4318" }
++  };
++  const proxyReq = http.request(opts, (proxyRes) => {
++    clientRes.writeHead(proxyRes.statusCode, proxyRes.headers);
++    proxyRes.pipe(clientRes);
++  });
++  proxyReq.on("error", (e) => {
++    clientRes.writeHead(502);
++    clientRes.end("proxy error: " + e.message);
++  });
++  clientReq.pipe(proxyReq);
++});
++server.listen(4318, "127.0.0.1", () => {
++  console.log("forwarder on 127.0.0.1:4318 -> " + TARGET + " via proxy");
++});
++OTLP_PROXY_EOF
++# Now, the OTLEL exporter can be configured to send to localhost:4318, and the above proxy will forward to the real collector endpoint.
++export OTEL_EXPORTER_OTLP_ENDPOINT="http://127.0.0.1:4318"
++
+ # ── Proxy environment ────────────────────────────────────────────
+ # OpenShell injects HTTP_PROXY/HTTPS_PROXY/NO_PROXY into the sandbox, but its
+ # NO_PROXY is limited to 127.0.0.1,localhost,::1 — missing the gateway IP.
+@@ -780,6 +937,9 @@ PROXYEOF
+   for _redir in "${_TOOL_REDIRECTS[@]}"; do
+     echo "export ${_redir?}"
+   done
++  echo "export OTEL_EXPORTER_OTLP_ENDPOINT=\"http://127.0.0.1:4318\""
++  echo "export OTEL_SERVICE_NAME=\"nemoclaw-openclaw-gateway\""
++  echo "[ -f \"$_OBS_PRELOAD\" ] && export NODE_OPTIONS=\"\${NODE_OPTIONS:+\$NODE_OPTIONS }--import $_OBS_PRELOAD\""
+ } >"$_PROXY_ENV_FILE"
+ chmod 644 "$_PROXY_ENV_FILE"
+ 
+@@ -790,10 +950,16 @@ cleanup() {
    echo "[gateway] received signal, forwarding to children..." >&2
    local gateway_status=0
    kill -TERM "$GATEWAY_PID" 2>/dev/null || true
@@ -473,7 +577,7 @@ index 296948d13e88e384084ba02a53475caf7747bf0c..56d5898c82195c15575c302c4f3704ce
    if [ -n "${AUTO_PAIR_PID:-}" ]; then
      wait "$AUTO_PAIR_PID" 2>/dev/null || true
    fi
-@@ -823,6 +944,7 @@ if [ "$(id -u)" -ne 0 ]; then
+@@ -823,6 +989,7 @@ if [ "$(id -u)" -ne 0 ]; then
    fi
    apply_model_override
    apply_cors_override
@@ -481,7 +585,7 @@ index 296948d13e88e384084ba02a53475caf7747bf0c..56d5898c82195c15575c302c4f3704ce
    export_gateway_token
    install_configure_guard
    configure_messaging_channels
-@@ -904,6 +1026,12 @@ if [ "$(id -u)" -ne 0 ]; then
+@@ -904,6 +1071,21 @@ if [ "$(id -u)" -ne 0 ]; then
    touch /tmp/auto-pair.log
    chmod 600 /tmp/auto-pair.log
  
@@ -491,10 +595,19 @@ index 296948d13e88e384084ba02a53475caf7747bf0c..56d5898c82195c15575c302c4f3704ce
 +
 +  start_db_api
 +
++  # Start custom otel proxy server for OTLPExporter (see _OTLP_PROXY_SCRIPT above)
++  if [ -f "$_OTLP_PROXY_SCRIPT" ]; then
++    touch /tmp/otlp-proxy.log
++    chown sandbox:sandbox /tmp/otlp-proxy.log
++    chmod 600 /tmp/otlp-proxy.log
++    nohup node "$_OTLP_PROXY_SCRIPT" >/tmp/otlp-proxy.log 2>&1 &
++    OTLP_PROXY_PID=$!
++  fi
++
    # Start gateway in background, auto-pair, then wait
    nohup "$OPENCLAW" gateway run --port "${_DASHBOARD_PORT}" >/tmp/gateway.log 2>&1 &
    GATEWAY_PID=$!
-@@ -922,6 +1050,7 @@ fi
+@@ -922,6 +1104,7 @@ fi
  verify_config_integrity
  apply_model_override
  apply_cors_override
@@ -502,7 +615,7 @@ index 296948d13e88e384084ba02a53475caf7747bf0c..56d5898c82195c15575c302c4f3704ce
  export_gateway_token
  install_configure_guard
  
-@@ -949,6 +1078,20 @@ touch /tmp/auto-pair.log
+@@ -949,6 +1132,29 @@ touch /tmp/auto-pair.log
  chown sandbox:sandbox /tmp/auto-pair.log
  chmod 600 /tmp/auto-pair.log
  
@@ -518,6 +631,15 @@ index 296948d13e88e384084ba02a53475caf7747bf0c..56d5898c82195c15575c302c4f3704ce
 +  echo "[db-api] launched on :${DB_API_PORT} as 'sandbox' user (pid $DB_API_PID)" >&2
 +else
 +  echo "[db-api] skipped: ${DB_API_DIR}/app.py not found" >&2
++fi
++
++# Start OTLP proxy
++if [ -f "$_OTLP_PROXY_SCRIPT" ]; then
++  touch /tmp/otlp-proxy.log
++  chown sandbox:sandbox /tmp/otlp-proxy.log
++  chmod 600 /tmp/otlp-proxy.log
++  nohup gosu sandbox node "$_OTLP_PROXY_SCRIPT" >/tmp/otlp-proxy.log 2>&1 &
++  OTLP_PROXY_PID=$!
 +fi
 +
  # Verify ALL symlinks in .openclaw point to expected .openclaw-data targets.

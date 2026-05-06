@@ -1324,11 +1324,13 @@ export function registerHooks(
                 ).join(" ")
               : "";
 
-            const noveltyScore = getNoveltyScore(output, parentContext?.systemPrompt + parentContext?.prompt + historyString);
-            histograms.noveltyScore.record(noveltyScore, {
-              "gen_ai.agent.id": agentId,
-              "session.id":  getSessionId(runtimeSessionKey),
-            });
+            if (histograms.noveltyScore) {
+              const noveltyScore = getNoveltyScore(output, parentContext?.systemPrompt + parentContext?.prompt + historyString);
+              histograms.noveltyScore.record(noveltyScore, {
+                "gen_ai.agent.id": agentId,
+                "session.id":  getSessionId(runtimeSessionKey),
+              });
+            }
           } else {
             logger.warn(`[otel] Unable to compute novelty score for agent=${agentId} due to non-string output`);
           }
@@ -1906,10 +1908,12 @@ export function registerHooks(
               ).join(" ")
               : "";
             const noveltyScore = calculateCoverage(event.prompt, parentContext?.systemPrompt + parentContext?.prompt + historyString);
-            histograms.downstreamContextSharing.record(noveltyScore, {
-              "gen_ai.agent.id": agentId,
-              "session.id": sessionId,
-            });
+            if (histograms.downstreamContextSharing) {
+              histograms.downstreamContextSharing.record(noveltyScore, {
+                "gen_ai.agent.id": agentId,
+                "session.id": sessionId,
+              });
+            }
           } else {
             logger.warn(`[otel] Unable to compute downstreamContextSharing for agent=${agentId} because parent context is missing for parentCaller=${parentCaller}`);
           }

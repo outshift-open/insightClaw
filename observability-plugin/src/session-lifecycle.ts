@@ -414,8 +414,8 @@ function recordRepetitionScore(runtimeSessionKey: string, histograms: any, embed
           } else {
             similarity = computeStringSimilarity(agentCalls[i].prompt, agentCalls[j].prompt, "jaccard");
           }
-          loggerRef?.info?.(`[otel:session] ${embeddingsProcessing ? "embeddings" : "jaccard"} similarity: session=${sessionId}, agent=${agentId}, similarity=${similarity}`);
-          loggerRef?.info?.(`[otel:session] ${embeddingsProcessing ? "embeddings" : "jaccard"} A=${agentCalls[i].prompt} B=${agentCalls[j].prompt}`);
+          loggerRef?.debug?.(`[otel:session] ${embeddingsProcessing ? "embeddings" : "jaccard"} similarity: session=${sessionId}, agent=${agentId}, similarity=${similarity}`);
+          loggerRef?.debug?.(`[otel:session] ${embeddingsProcessing ? "embeddings" : "jaccard"} A=${agentCalls[i].prompt} B=${agentCalls[j].prompt}`);
           agentScores.push(similarity);
         }
       }

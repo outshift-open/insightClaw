@@ -144,6 +144,7 @@ $ systemctl --user daemon-reload
 ```
 Make sure that the path is the absolute path to the preload.mjs file.
 
+In addition to that, there is a small patch that can be applied to fix a known issue in openllmetry. See in the caveats section for more information.
 
 ### Supported Provider SDKs
 
@@ -210,5 +211,10 @@ For example, when using liteLLM:
 
 By default, OpenClaw is using streaming mode from LLM providers, and the token report from the provider is not taken into account by openLLMetry auto-instrumentation. A [PR](https://github.com/traceloop/openllmetry-js/pull/941) is addressing this issue. Till this PR is merged, the best we can have (without installing openllmetry from source) is to enable the current approach of openLLMetry, that is, relying on estimating the tokens usage via tiktoken. This is done by setting this env variable `TRACELOOP_ENRICH_TOKENS=true`.
 
----
+We provide a small patch to apply the content of the PR directly in the code. To enable it:
+once you have built the plugin (`npm install`), you can apply the patch (from the `observability-plugin/` folder):
+```
+$ cp openllmetry-patch-index.js node_modules/@traceloop/instrumentation-openai/dist/index.js
+```
 
+---

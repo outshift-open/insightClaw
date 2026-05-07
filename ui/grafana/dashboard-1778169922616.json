@@ -1,0 +1,4572 @@
+{
+  "apiVersion": "dashboard.grafana.app/v2",
+  "kind": "Dashboard",
+  "metadata": {
+    "name": "ad5zktn",
+    "namespace": "default",
+    "uid": "a343b267-05fd-4dda-bc1c-c36570e4eeb9",
+    "resourceVersion": "1778169912747998",
+    "generation": 68,
+    "creationTimestamp": "2026-04-14T07:58:25Z",
+    "labels": {
+      "grafana.app/deprecatedInternalID": "3831433932652544"
+    },
+    "annotations": {
+      "grafana.app/createdBy": "user:cfj1mqfycjaioc",
+      "grafana.app/folder": "",
+      "grafana.app/saved-from-ui": "Grafana v13.0.0 (e9de482b51)",
+      "grafana.app/updatedBy": "user:cfj1mqfycjaioc",
+      "grafana.app/updatedTimestamp": "2026-05-07T16:05:12Z"
+    }
+  },
+  "spec": {
+    "annotations": [
+      {
+        "kind": "AnnotationQuery",
+        "spec": {
+          "query": {
+            "kind": "DataQuery",
+            "group": "grafana",
+            "version": "v0",
+            "datasource": {
+              "name": "-- Grafana --"
+            },
+            "spec": {}
+          },
+          "enable": true,
+          "hide": true,
+          "iconColor": "rgba(0, 211, 255, 1)",
+          "name": "Annotations & Alerts",
+          "builtIn": true
+        }
+      }
+    ],
+    "cursorSync": "Off",
+    "description": "Edit events",
+    "editable": true,
+    "elements": {
+      "panel-1": {
+        "kind": "Panel",
+        "spec": {
+          "id": 1,
+          "title": "Read events",
+          "description": "",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "grafana-clickhouse-datasource",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "ffj1myq8fjeo0f"
+                      },
+                      "spec": {
+                        "builderOptions": {
+                          "aggregates": [],
+                          "columns": [
+                            {
+                              "alias": "Value",
+                              "custom": false,
+                              "name": "Value",
+                              "type": "Float64"
+                            },
+                            {
+                              "alias": "TimeUnix",
+                              "hint": "time",
+                              "name": "TimeUnix",
+                              "type": "DateTime64(9)"
+                            }
+                          ],
+                          "database": "otel",
+                          "filters": [
+                            {
+                              "condition": "AND",
+                              "filterType": "custom",
+                              "hint": "time",
+                              "key": "",
+                              "operator": "WITH IN DASHBOARD TIME RANGE",
+                              "type": "datetime"
+                            },
+                            {
+                              "condition": "AND",
+                              "filterType": "custom",
+                              "key": "MetricName",
+                              "label": "MetricName",
+                              "operator": "=",
+                              "type": "String",
+                              "value": "openclaw.memory.read_events"
+                            }
+                          ],
+                          "groupBy": [],
+                          "limit": 1000,
+                          "meta": {},
+                          "mode": "aggregate",
+                          "orderBy": [
+                            {
+                              "default": true,
+                              "dir": "ASC",
+                              "hint": "time",
+                              "name": ""
+                            }
+                          ],
+                          "queryType": "timeseries",
+                          "table": "otel_metrics_sum"
+                        },
+                        "editorType": "sql",
+                        "format": 0,
+                        "meta": {
+                          "builderOptions": {
+                            "aggregates": [],
+                            "columns": [
+                              {
+                                "alias": "Value",
+                                "custom": false,
+                                "name": "Value",
+                                "type": "Float64"
+                              },
+                              {
+                                "alias": "TimeUnix",
+                                "hint": "time",
+                                "name": "TimeUnix",
+                                "type": "DateTime64(9)"
+                              }
+                            ],
+                            "database": "otel",
+                            "filters": [
+                              {
+                                "condition": "AND",
+                                "filterType": "custom",
+                                "hint": "time",
+                                "key": "",
+                                "operator": "WITH IN DASHBOARD TIME RANGE",
+                                "type": "datetime"
+                              },
+                              {
+                                "condition": "AND",
+                                "filterType": "custom",
+                                "key": "MetricName",
+                                "label": "MetricName",
+                                "operator": "=",
+                                "type": "String",
+                                "value": "openclaw.memory.read_events"
+                              }
+                            ],
+                            "groupBy": [],
+                            "limit": 1000,
+                            "meta": {},
+                            "mode": "aggregate",
+                            "orderBy": [
+                              {
+                                "default": true,
+                                "dir": "ASC",
+                                "hint": "time",
+                                "name": ""
+                              }
+                            ],
+                            "queryType": "timeseries",
+                            "table": "otel_metrics_sum"
+                          }
+                        },
+                        "pluginVersion": "4.15.0",
+                        "queryType": "timeseries",
+                        "rawSql": "SELECT $__timeInterval(TimeUnix) as \"time\", Attributes[${groupby:singlequote}] AS ses, avg(Value) FROM \"otel\".\"otel_metrics_sum\" WHERE (Attributes['session.id'] != '' ) AND ( time >= $__fromTime AND time <= $__toTime ) AND ( MetricName = 'openclaw.memory.read_events' ) GROUP BY ses, time ORDER BY time ASC LIMIT 1000"
+                      }
+                    },
+                    "refId": "Metric Read",
+                    "hidden": false
+                  }
+                }
+              ],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "timeseries",
+            "version": "13.0.0",
+            "spec": {
+              "options": {
+                "annotations": {
+                  "clustering": -1,
+                  "multiLane": false
+                },
+                "legend": {
+                  "calcs": [],
+                  "displayMode": "list",
+                  "placement": "bottom",
+                  "showLegend": true
+                },
+                "tooltip": {
+                  "hideZeros": false,
+                  "mode": "single",
+                  "sort": "none"
+                }
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "displayName": "${__field.labels.ses}",
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "value": 0,
+                        "color": "green"
+                      },
+                      {
+                        "value": 80,
+                        "color": "red"
+                      }
+                    ]
+                  },
+                  "color": {
+                    "mode": "palette-classic"
+                  },
+                  "custom": {
+                    "axisBorderShow": false,
+                    "axisCenteredZero": false,
+                    "axisColorMode": "text",
+                    "axisLabel": "",
+                    "axisPlacement": "auto",
+                    "barAlignment": 0,
+                    "barWidthFactor": 0.6,
+                    "drawStyle": "line",
+                    "fillOpacity": 0,
+                    "gradientMode": "none",
+                    "hideFrom": {
+                      "legend": false,
+                      "tooltip": false,
+                      "viz": false
+                    },
+                    "insertNulls": false,
+                    "lineInterpolation": "linear",
+                    "lineWidth": 1,
+                    "pointSize": 5,
+                    "scaleDistribution": {
+                      "type": "linear"
+                    },
+                    "showPoints": "auto",
+                    "showValues": false,
+                    "spanNulls": false,
+                    "stacking": {
+                      "group": "A",
+                      "mode": "none"
+                    },
+                    "thresholdsStyle": {
+                      "mode": "off"
+                    }
+                  }
+                },
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "panel-10": {
+        "kind": "Panel",
+        "spec": {
+          "id": 10,
+          "title": "Memory read duration",
+          "description": "",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "grafana-clickhouse-datasource",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "ffj1myq8fjeo0f"
+                      },
+                      "spec": {
+                        "builderOptions": {
+                          "aggregates": [],
+                          "columns": [
+                            {
+                              "alias": "TimeUnix",
+                              "hint": "time",
+                              "name": "TimeUnix",
+                              "type": "DateTime64(9)"
+                            }
+                          ],
+                          "database": "otel",
+                          "filters": [
+                            {
+                              "condition": "AND",
+                              "filterType": "custom",
+                              "hint": "time",
+                              "key": "",
+                              "operator": "WITH IN DASHBOARD TIME RANGE",
+                              "type": "datetime"
+                            },
+                            {
+                              "condition": "AND",
+                              "filterType": "custom",
+                              "key": "MetricName",
+                              "label": "MetricName",
+                              "operator": "=",
+                              "type": "String",
+                              "value": "openclaw.memory.search_miss"
+                            }
+                          ],
+                          "groupBy": [
+                            "Attributes"
+                          ],
+                          "limit": 1000,
+                          "meta": {},
+                          "mode": "trend",
+                          "orderBy": [
+                            {
+                              "default": true,
+                              "dir": "ASC",
+                              "hint": "time",
+                              "name": ""
+                            }
+                          ],
+                          "queryType": "timeseries",
+                          "table": "otel_metrics_sum"
+                        },
+                        "editorType": "sql",
+                        "format": 0,
+                        "meta": {
+                          "builderOptions": {
+                            "aggregates": [],
+                            "columns": [
+                              {
+                                "alias": "TimeUnix",
+                                "hint": "time",
+                                "name": "TimeUnix",
+                                "type": "DateTime64(9)"
+                              }
+                            ],
+                            "database": "otel",
+                            "filters": [
+                              {
+                                "condition": "AND",
+                                "filterType": "custom",
+                                "hint": "time",
+                                "key": "",
+                                "operator": "WITH IN DASHBOARD TIME RANGE",
+                                "type": "datetime"
+                              },
+                              {
+                                "condition": "AND",
+                                "filterType": "custom",
+                                "key": "MetricName",
+                                "label": "MetricName",
+                                "operator": "=",
+                                "type": "String",
+                                "value": "openclaw.memory.search_miss"
+                              }
+                            ],
+                            "groupBy": [
+                              "Attributes"
+                            ],
+                            "limit": 1000,
+                            "meta": {},
+                            "mode": "trend",
+                            "orderBy": [
+                              {
+                                "default": true,
+                                "dir": "ASC",
+                                "hint": "time",
+                                "name": ""
+                              }
+                            ],
+                            "queryType": "timeseries",
+                            "table": "otel_metrics_sum"
+                          }
+                        },
+                        "pluginVersion": "4.15.0",
+                        "queryType": "timeseries",
+                        "rawSql": "SELECT $__timeInterval(TimeUnix) as \"time\", Attributes[${groupby:singlequote}] AS ses, sum(Sum)/sum(Count) FROM \"otel\".\"otel_metrics_histogram\" \nWHERE ( time >= $__fromTime AND time <= $__toTime ) AND (Attributes[${groupby:singlequote}] != '' ) AND ( MetricName = 'openclaw.memory.read_duration' ) \nGROUP BY ses, time ORDER BY time ASC LIMIT 1000"
+                      }
+                    },
+                    "refId": "Memory fragmentation",
+                    "hidden": false
+                  }
+                }
+              ],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "timeseries",
+            "version": "13.0.0",
+            "spec": {
+              "options": {
+                "annotations": {
+                  "clustering": -1,
+                  "multiLane": false
+                },
+                "legend": {
+                  "calcs": [],
+                  "displayMode": "list",
+                  "placement": "bottom",
+                  "showLegend": true
+                },
+                "tooltip": {
+                  "hideZeros": false,
+                  "mode": "single",
+                  "sort": "none"
+                }
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "displayName": "${__field.labels.ses}",
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "value": 0,
+                        "color": "green"
+                      },
+                      {
+                        "value": 80,
+                        "color": "red"
+                      }
+                    ]
+                  },
+                  "color": {
+                    "mode": "thresholds"
+                  },
+                  "custom": {
+                    "axisBorderShow": false,
+                    "axisCenteredZero": false,
+                    "axisColorMode": "text",
+                    "axisLabel": "",
+                    "axisPlacement": "auto",
+                    "barAlignment": 0,
+                    "barWidthFactor": 0.6,
+                    "drawStyle": "line",
+                    "fillOpacity": 0,
+                    "gradientMode": "none",
+                    "hideFrom": {
+                      "legend": false,
+                      "tooltip": false,
+                      "viz": false
+                    },
+                    "insertNulls": false,
+                    "lineInterpolation": "linear",
+                    "lineWidth": 1,
+                    "pointSize": 5,
+                    "scaleDistribution": {
+                      "type": "linear"
+                    },
+                    "showPoints": "auto",
+                    "showValues": false,
+                    "spanNulls": false,
+                    "stacking": {
+                      "group": "A",
+                      "mode": "none"
+                    },
+                    "thresholdsStyle": {
+                      "mode": "off"
+                    }
+                  }
+                },
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "panel-11": {
+        "kind": "Panel",
+        "spec": {
+          "id": 11,
+          "title": "Memory search duration",
+          "description": "",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "grafana-clickhouse-datasource",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "ffj1myq8fjeo0f"
+                      },
+                      "spec": {
+                        "builderOptions": {
+                          "aggregates": [],
+                          "columns": [
+                            {
+                              "alias": "TimeUnix",
+                              "hint": "time",
+                              "name": "TimeUnix",
+                              "type": "DateTime64(9)"
+                            }
+                          ],
+                          "database": "otel",
+                          "filters": [
+                            {
+                              "condition": "AND",
+                              "filterType": "custom",
+                              "hint": "time",
+                              "key": "",
+                              "operator": "WITH IN DASHBOARD TIME RANGE",
+                              "type": "datetime"
+                            },
+                            {
+                              "condition": "AND",
+                              "filterType": "custom",
+                              "key": "MetricName",
+                              "label": "MetricName",
+                              "operator": "=",
+                              "type": "String",
+                              "value": "openclaw.memory.search_miss"
+                            }
+                          ],
+                          "groupBy": [
+                            "Attributes"
+                          ],
+                          "limit": 1000,
+                          "meta": {},
+                          "mode": "trend",
+                          "orderBy": [
+                            {
+                              "default": true,
+                              "dir": "ASC",
+                              "hint": "time",
+                              "name": ""
+                            }
+                          ],
+                          "queryType": "timeseries",
+                          "table": "otel_metrics_sum"
+                        },
+                        "editorType": "sql",
+                        "format": 0,
+                        "meta": {
+                          "builderOptions": {
+                            "aggregates": [],
+                            "columns": [
+                              {
+                                "alias": "TimeUnix",
+                                "hint": "time",
+                                "name": "TimeUnix",
+                                "type": "DateTime64(9)"
+                              }
+                            ],
+                            "database": "otel",
+                            "filters": [
+                              {
+                                "condition": "AND",
+                                "filterType": "custom",
+                                "hint": "time",
+                                "key": "",
+                                "operator": "WITH IN DASHBOARD TIME RANGE",
+                                "type": "datetime"
+                              },
+                              {
+                                "condition": "AND",
+                                "filterType": "custom",
+                                "key": "MetricName",
+                                "label": "MetricName",
+                                "operator": "=",
+                                "type": "String",
+                                "value": "openclaw.memory.search_miss"
+                              }
+                            ],
+                            "groupBy": [
+                              "Attributes"
+                            ],
+                            "limit": 1000,
+                            "meta": {},
+                            "mode": "trend",
+                            "orderBy": [
+                              {
+                                "default": true,
+                                "dir": "ASC",
+                                "hint": "time",
+                                "name": ""
+                              }
+                            ],
+                            "queryType": "timeseries",
+                            "table": "otel_metrics_sum"
+                          }
+                        },
+                        "pluginVersion": "4.15.0",
+                        "queryType": "timeseries",
+                        "rawSql": "SELECT $__timeInterval(TimeUnix) as \"time\", Attributes[${groupby:singlequote}] AS ses, sum(Sum)/sum(Count) FROM \"otel\".\"otel_metrics_histogram\" \nWHERE ( time >= $__fromTime AND time <= $__toTime ) AND ( MetricName = 'openclaw.tool.duration' ) AND ( Attributes['tool.name'] = 'memory_search' )\n GROUP BY ses, time ORDER BY time ASC LIMIT 1000"
+                      }
+                    },
+                    "refId": "Memory fragmentation",
+                    "hidden": false
+                  }
+                }
+              ],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "timeseries",
+            "version": "13.0.0",
+            "spec": {
+              "options": {
+                "annotations": {
+                  "clustering": -1,
+                  "multiLane": false
+                },
+                "legend": {
+                  "calcs": [],
+                  "displayMode": "list",
+                  "placement": "bottom",
+                  "showLegend": true
+                },
+                "tooltip": {
+                  "hideZeros": false,
+                  "mode": "single",
+                  "sort": "none"
+                }
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "displayName": "${__field.labels.ses}",
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "value": 0,
+                        "color": "green"
+                      },
+                      {
+                        "value": 80,
+                        "color": "red"
+                      }
+                    ]
+                  },
+                  "color": {
+                    "mode": "palette-classic"
+                  },
+                  "custom": {
+                    "axisBorderShow": false,
+                    "axisCenteredZero": false,
+                    "axisColorMode": "text",
+                    "axisLabel": "",
+                    "axisPlacement": "auto",
+                    "barAlignment": 0,
+                    "barWidthFactor": 0.6,
+                    "drawStyle": "line",
+                    "fillOpacity": 0,
+                    "gradientMode": "none",
+                    "hideFrom": {
+                      "legend": false,
+                      "tooltip": false,
+                      "viz": false
+                    },
+                    "insertNulls": false,
+                    "lineInterpolation": "linear",
+                    "lineWidth": 1,
+                    "pointSize": 5,
+                    "scaleDistribution": {
+                      "type": "linear"
+                    },
+                    "showPoints": "auto",
+                    "showValues": false,
+                    "spanNulls": false,
+                    "stacking": {
+                      "group": "A",
+                      "mode": "none"
+                    },
+                    "thresholdsStyle": {
+                      "mode": "off"
+                    }
+                  }
+                },
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "panel-12": {
+        "kind": "Panel",
+        "spec": {
+          "id": 12,
+          "title": "Context source ",
+          "description": "",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "grafana-clickhouse-datasource",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "ffj1myq8fjeo0f"
+                      },
+                      "spec": {
+                        "builderOptions": {
+                          "aggregates": [],
+                          "columns": [
+                            {
+                              "alias": "TimeUnix",
+                              "hint": "time",
+                              "name": "TimeUnix",
+                              "type": "DateTime64(9)"
+                            }
+                          ],
+                          "database": "otel",
+                          "filters": [
+                            {
+                              "condition": "AND",
+                              "filterType": "custom",
+                              "hint": "time",
+                              "key": "",
+                              "operator": "WITH IN DASHBOARD TIME RANGE",
+                              "type": "datetime"
+                            },
+                            {
+                              "condition": "AND",
+                              "filterType": "custom",
+                              "key": "MetricName",
+                              "label": "MetricName",
+                              "operator": "=",
+                              "type": "String",
+                              "value": "openclaw.memory.search_miss"
+                            }
+                          ],
+                          "groupBy": [
+                            "Attributes"
+                          ],
+                          "limit": 1000,
+                          "meta": {},
+                          "mode": "trend",
+                          "orderBy": [
+                            {
+                              "default": true,
+                              "dir": "ASC",
+                              "hint": "time",
+                              "name": ""
+                            }
+                          ],
+                          "queryType": "timeseries",
+                          "table": "otel_metrics_sum"
+                        },
+                        "editorType": "sql",
+                        "format": 0,
+                        "meta": {
+                          "builderOptions": {
+                            "aggregates": [],
+                            "columns": [
+                              {
+                                "alias": "TimeUnix",
+                                "hint": "time",
+                                "name": "TimeUnix",
+                                "type": "DateTime64(9)"
+                              }
+                            ],
+                            "database": "otel",
+                            "filters": [
+                              {
+                                "condition": "AND",
+                                "filterType": "custom",
+                                "hint": "time",
+                                "key": "",
+                                "operator": "WITH IN DASHBOARD TIME RANGE",
+                                "type": "datetime"
+                              },
+                              {
+                                "condition": "AND",
+                                "filterType": "custom",
+                                "key": "MetricName",
+                                "label": "MetricName",
+                                "operator": "=",
+                                "type": "String",
+                                "value": "openclaw.memory.search_miss"
+                              }
+                            ],
+                            "groupBy": [
+                              "Attributes"
+                            ],
+                            "limit": 1000,
+                            "meta": {},
+                            "mode": "trend",
+                            "orderBy": [
+                              {
+                                "default": true,
+                                "dir": "ASC",
+                                "hint": "time",
+                                "name": ""
+                              }
+                            ],
+                            "queryType": "timeseries",
+                            "table": "otel_metrics_sum"
+                          }
+                        },
+                        "pluginVersion": "4.15.0",
+                        "queryType": "timeseries",
+                        "rawSql": "SELECT $__timeInterval(TimeUnix) as \"time\", Attributes[${groupby:singlequote}] AS ses, sum(Sum)/sum(Count), MetricName  FROM \"otel\".\"otel_metrics_histogram\" \nWHERE ( time >= $__fromTime AND time <= $__toTime ) AND \n( MetricName = 'openclaw.context.history_tool_size' OR  MetricName = 'openclaw.context.history_user_size' OR  MetricName = 'openclaw.context.history_memory_size'\n OR  MetricName = 'openclaw.context.system_size' OR  MetricName = 'openclaw.context.history_other_size'\n OR MetricName = 'openclaw.context.prompt_size')\n\n GROUP BY  ses, MetricName, time ORDER BY time ASC LIMIT 1000\n"
+                      }
+                    },
+                    "refId": "Context source",
+                    "hidden": false
+                  }
+                }
+              ],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "timeseries",
+            "version": "13.0.0",
+            "spec": {
+              "options": {
+                "annotations": {
+                  "clustering": -1,
+                  "multiLane": false
+                },
+                "legend": {
+                  "calcs": [],
+                  "displayMode": "list",
+                  "placement": "bottom",
+                  "showLegend": true
+                },
+                "tooltip": {
+                  "hideZeros": false,
+                  "mode": "single",
+                  "sort": "none"
+                }
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "displayName": "${__field.labels.ses}-${__field.labels.MetricName}",
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "value": 0,
+                        "color": "green"
+                      },
+                      {
+                        "value": 80,
+                        "color": "red"
+                      }
+                    ]
+                  },
+                  "color": {
+                    "mode": "palette-classic"
+                  },
+                  "custom": {
+                    "axisBorderShow": false,
+                    "axisCenteredZero": false,
+                    "axisColorMode": "text",
+                    "axisLabel": "",
+                    "axisPlacement": "auto",
+                    "barAlignment": 0,
+                    "barWidthFactor": 0.6,
+                    "drawStyle": "line",
+                    "fillOpacity": 0,
+                    "gradientMode": "none",
+                    "hideFrom": {
+                      "legend": false,
+                      "tooltip": false,
+                      "viz": false
+                    },
+                    "insertNulls": false,
+                    "lineInterpolation": "linear",
+                    "lineWidth": 1,
+                    "pointSize": 5,
+                    "scaleDistribution": {
+                      "type": "linear"
+                    },
+                    "showPoints": "auto",
+                    "showValues": false,
+                    "spanNulls": false,
+                    "stacking": {
+                      "group": "A",
+                      "mode": "none"
+                    },
+                    "thresholdsStyle": {
+                      "mode": "off"
+                    }
+                  }
+                },
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "panel-13": {
+        "kind": "Panel",
+        "spec": {
+          "id": 13,
+          "title": "Session spawn duration",
+          "description": "",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "grafana-clickhouse-datasource",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "ffj1myq8fjeo0f"
+                      },
+                      "spec": {
+                        "builderOptions": {
+                          "aggregates": [],
+                          "columns": [
+                            {
+                              "alias": "TimeUnix",
+                              "hint": "time",
+                              "name": "TimeUnix",
+                              "type": "DateTime64(9)"
+                            }
+                          ],
+                          "database": "otel",
+                          "filters": [
+                            {
+                              "condition": "AND",
+                              "filterType": "custom",
+                              "hint": "time",
+                              "key": "",
+                              "operator": "WITH IN DASHBOARD TIME RANGE",
+                              "type": "datetime"
+                            },
+                            {
+                              "condition": "AND",
+                              "filterType": "custom",
+                              "key": "MetricName",
+                              "label": "MetricName",
+                              "operator": "=",
+                              "type": "String",
+                              "value": "openclaw.memory.search_miss"
+                            }
+                          ],
+                          "groupBy": [
+                            "Attributes"
+                          ],
+                          "limit": 1000,
+                          "meta": {},
+                          "mode": "trend",
+                          "orderBy": [
+                            {
+                              "default": true,
+                              "dir": "ASC",
+                              "hint": "time",
+                              "name": ""
+                            }
+                          ],
+                          "queryType": "timeseries",
+                          "table": "otel_metrics_sum"
+                        },
+                        "editorType": "sql",
+                        "format": 0,
+                        "meta": {
+                          "builderOptions": {
+                            "aggregates": [],
+                            "columns": [
+                              {
+                                "alias": "TimeUnix",
+                                "hint": "time",
+                                "name": "TimeUnix",
+                                "type": "DateTime64(9)"
+                              }
+                            ],
+                            "database": "otel",
+                            "filters": [
+                              {
+                                "condition": "AND",
+                                "filterType": "custom",
+                                "hint": "time",
+                                "key": "",
+                                "operator": "WITH IN DASHBOARD TIME RANGE",
+                                "type": "datetime"
+                              },
+                              {
+                                "condition": "AND",
+                                "filterType": "custom",
+                                "key": "MetricName",
+                                "label": "MetricName",
+                                "operator": "=",
+                                "type": "String",
+                                "value": "openclaw.memory.search_miss"
+                              }
+                            ],
+                            "groupBy": [
+                              "Attributes"
+                            ],
+                            "limit": 1000,
+                            "meta": {},
+                            "mode": "trend",
+                            "orderBy": [
+                              {
+                                "default": true,
+                                "dir": "ASC",
+                                "hint": "time",
+                                "name": ""
+                              }
+                            ],
+                            "queryType": "timeseries",
+                            "table": "otel_metrics_sum"
+                          }
+                        },
+                        "pluginVersion": "4.15.0",
+                        "queryType": "timeseries",
+                        "rawSql": "SELECT $__timeInterval(TimeUnix) as \"time\", Attributes[${groupby:singlequote}] AS ses, sum(Sum)/sum(Count) FROM \"otel\".\"otel_metrics_histogram\" \nWHERE ( time >= $__fromTime AND time <= $__toTime ) AND ( MetricName = 'openclaw.tool.duration' ) AND ( Attributes['tool.name'] = 'sessions_spawn' ) \nGROUP BY ses, time ORDER BY time ASC LIMIT 1000"
+                      }
+                    },
+                    "refId": "Memory fragmentation",
+                    "hidden": false
+                  }
+                }
+              ],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "timeseries",
+            "version": "13.0.0",
+            "spec": {
+              "options": {
+                "annotations": {
+                  "clustering": -1,
+                  "multiLane": false
+                },
+                "legend": {
+                  "calcs": [],
+                  "displayMode": "list",
+                  "placement": "bottom",
+                  "showLegend": true
+                },
+                "tooltip": {
+                  "hideZeros": false,
+                  "mode": "single",
+                  "sort": "none"
+                }
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "displayName": "${__field.labels.ses}",
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "value": 0,
+                        "color": "green"
+                      },
+                      {
+                        "value": 80,
+                        "color": "red"
+                      }
+                    ]
+                  },
+                  "color": {
+                    "mode": "palette-classic"
+                  },
+                  "custom": {
+                    "axisBorderShow": false,
+                    "axisCenteredZero": false,
+                    "axisColorMode": "text",
+                    "axisLabel": "",
+                    "axisPlacement": "auto",
+                    "barAlignment": 0,
+                    "barWidthFactor": 0.6,
+                    "drawStyle": "line",
+                    "fillOpacity": 0,
+                    "gradientMode": "none",
+                    "hideFrom": {
+                      "legend": false,
+                      "tooltip": false,
+                      "viz": false
+                    },
+                    "insertNulls": false,
+                    "lineInterpolation": "linear",
+                    "lineWidth": 1,
+                    "pointSize": 5,
+                    "scaleDistribution": {
+                      "type": "linear"
+                    },
+                    "showPoints": "auto",
+                    "showValues": false,
+                    "spanNulls": false,
+                    "stacking": {
+                      "group": "A",
+                      "mode": "none"
+                    },
+                    "thresholdsStyle": {
+                      "mode": "off"
+                    }
+                  }
+                },
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "panel-14": {
+        "kind": "Panel",
+        "spec": {
+          "id": 14,
+          "title": "Context preparation duration",
+          "description": "",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "grafana-clickhouse-datasource",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "ffj1myq8fjeo0f"
+                      },
+                      "spec": {
+                        "builderOptions": {
+                          "aggregates": [],
+                          "columns": [
+                            {
+                              "alias": "TimeUnix",
+                              "hint": "time",
+                              "name": "TimeUnix",
+                              "type": "DateTime64(9)"
+                            }
+                          ],
+                          "database": "otel",
+                          "filters": [
+                            {
+                              "condition": "AND",
+                              "filterType": "custom",
+                              "hint": "time",
+                              "key": "",
+                              "operator": "WITH IN DASHBOARD TIME RANGE",
+                              "type": "datetime"
+                            },
+                            {
+                              "condition": "AND",
+                              "filterType": "custom",
+                              "key": "MetricName",
+                              "label": "MetricName",
+                              "operator": "=",
+                              "type": "String",
+                              "value": "openclaw.memory.search_miss"
+                            }
+                          ],
+                          "groupBy": [
+                            "Attributes"
+                          ],
+                          "limit": 1000,
+                          "meta": {},
+                          "mode": "trend",
+                          "orderBy": [
+                            {
+                              "default": true,
+                              "dir": "ASC",
+                              "hint": "time",
+                              "name": ""
+                            }
+                          ],
+                          "queryType": "timeseries",
+                          "table": "otel_metrics_sum"
+                        },
+                        "editorType": "sql",
+                        "format": 0,
+                        "meta": {
+                          "builderOptions": {
+                            "aggregates": [],
+                            "columns": [
+                              {
+                                "alias": "TimeUnix",
+                                "hint": "time",
+                                "name": "TimeUnix",
+                                "type": "DateTime64(9)"
+                              }
+                            ],
+                            "database": "otel",
+                            "filters": [
+                              {
+                                "condition": "AND",
+                                "filterType": "custom",
+                                "hint": "time",
+                                "key": "",
+                                "operator": "WITH IN DASHBOARD TIME RANGE",
+                                "type": "datetime"
+                              },
+                              {
+                                "condition": "AND",
+                                "filterType": "custom",
+                                "key": "MetricName",
+                                "label": "MetricName",
+                                "operator": "=",
+                                "type": "String",
+                                "value": "openclaw.memory.search_miss"
+                              }
+                            ],
+                            "groupBy": [
+                              "Attributes"
+                            ],
+                            "limit": 1000,
+                            "meta": {},
+                            "mode": "trend",
+                            "orderBy": [
+                              {
+                                "default": true,
+                                "dir": "ASC",
+                                "hint": "time",
+                                "name": ""
+                              }
+                            ],
+                            "queryType": "timeseries",
+                            "table": "otel_metrics_sum"
+                          }
+                        },
+                        "pluginVersion": "4.15.0",
+                        "queryType": "timeseries",
+                        "rawSql": "SELECT $__timeInterval(TimeUnix) as \"time\", Attributes[${groupby:singlequote}] AS ses, sum(Sum)/sum(Count) FROM \"otel\".\"otel_metrics_histogram\" \nWHERE ( time >= $__fromTime AND time <= $__toTime ) AND (Attributes[${groupby:singlequote}] != '' ) AND ( MetricName = 'openclaw.context.preparation_duration' ) GROUP BY ses, time ORDER BY time ASC LIMIT 1000"
+                      }
+                    },
+                    "refId": "Memory fragmentation",
+                    "hidden": false
+                  }
+                }
+              ],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "timeseries",
+            "version": "13.0.0",
+            "spec": {
+              "options": {
+                "annotations": {
+                  "clustering": -1,
+                  "multiLane": false
+                },
+                "legend": {
+                  "calcs": [],
+                  "displayMode": "list",
+                  "placement": "bottom",
+                  "showLegend": true
+                },
+                "tooltip": {
+                  "hideZeros": false,
+                  "mode": "single",
+                  "sort": "none"
+                }
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "displayName": "${__field.labels.ses}",
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "value": 0,
+                        "color": "green"
+                      },
+                      {
+                        "value": 80,
+                        "color": "red"
+                      }
+                    ]
+                  },
+                  "color": {
+                    "mode": "palette-classic"
+                  },
+                  "custom": {
+                    "axisBorderShow": false,
+                    "axisCenteredZero": false,
+                    "axisColorMode": "text",
+                    "axisLabel": "",
+                    "axisPlacement": "auto",
+                    "barAlignment": 0,
+                    "barWidthFactor": 0.6,
+                    "drawStyle": "line",
+                    "fillOpacity": 0,
+                    "gradientMode": "none",
+                    "hideFrom": {
+                      "legend": false,
+                      "tooltip": false,
+                      "viz": false
+                    },
+                    "insertNulls": false,
+                    "lineInterpolation": "linear",
+                    "lineWidth": 1,
+                    "pointSize": 5,
+                    "scaleDistribution": {
+                      "type": "linear"
+                    },
+                    "showPoints": "auto",
+                    "showValues": false,
+                    "spanNulls": false,
+                    "stacking": {
+                      "group": "A",
+                      "mode": "none"
+                    },
+                    "thresholdsStyle": {
+                      "mode": "off"
+                    }
+                  }
+                },
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "panel-15": {
+        "kind": "Panel",
+        "spec": {
+          "id": 15,
+          "title": "Agent output novelty",
+          "description": "",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "grafana-clickhouse-datasource",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "ffj1myq8fjeo0f"
+                      },
+                      "spec": {
+                        "builderOptions": {
+                          "aggregates": [],
+                          "columns": [
+                            {
+                              "alias": "TimeUnix",
+                              "hint": "time",
+                              "name": "TimeUnix",
+                              "type": "DateTime64(9)"
+                            }
+                          ],
+                          "database": "otel",
+                          "filters": [
+                            {
+                              "condition": "AND",
+                              "filterType": "custom",
+                              "hint": "time",
+                              "key": "",
+                              "operator": "WITH IN DASHBOARD TIME RANGE",
+                              "type": "datetime"
+                            },
+                            {
+                              "condition": "AND",
+                              "filterType": "custom",
+                              "key": "MetricName",
+                              "label": "MetricName",
+                              "operator": "=",
+                              "type": "String",
+                              "value": "openclaw.memory.search_miss"
+                            }
+                          ],
+                          "groupBy": [
+                            "Attributes"
+                          ],
+                          "limit": 1000,
+                          "meta": {},
+                          "mode": "trend",
+                          "orderBy": [
+                            {
+                              "default": true,
+                              "dir": "ASC",
+                              "hint": "time",
+                              "name": ""
+                            }
+                          ],
+                          "queryType": "timeseries",
+                          "table": "otel_metrics_sum"
+                        },
+                        "editorType": "sql",
+                        "format": 0,
+                        "meta": {
+                          "builderOptions": {
+                            "aggregates": [],
+                            "columns": [
+                              {
+                                "alias": "TimeUnix",
+                                "hint": "time",
+                                "name": "TimeUnix",
+                                "type": "DateTime64(9)"
+                              }
+                            ],
+                            "database": "otel",
+                            "filters": [
+                              {
+                                "condition": "AND",
+                                "filterType": "custom",
+                                "hint": "time",
+                                "key": "",
+                                "operator": "WITH IN DASHBOARD TIME RANGE",
+                                "type": "datetime"
+                              },
+                              {
+                                "condition": "AND",
+                                "filterType": "custom",
+                                "key": "MetricName",
+                                "label": "MetricName",
+                                "operator": "=",
+                                "type": "String",
+                                "value": "openclaw.memory.search_miss"
+                              }
+                            ],
+                            "groupBy": [
+                              "Attributes"
+                            ],
+                            "limit": 1000,
+                            "meta": {},
+                            "mode": "trend",
+                            "orderBy": [
+                              {
+                                "default": true,
+                                "dir": "ASC",
+                                "hint": "time",
+                                "name": ""
+                              }
+                            ],
+                            "queryType": "timeseries",
+                            "table": "otel_metrics_sum"
+                          }
+                        },
+                        "pluginVersion": "4.15.0",
+                        "queryType": "timeseries",
+                        "rawSql": "SELECT $__timeInterval(TimeUnix) as \"time\", Attributes[${groupby:singlequote}] AS ses, sum(Sum)/sum(Count) AS score FROM \"otel\".\"otel_metrics_histogram\" \nWHERE ( time >= $__fromTime AND time <= $__toTime ) AND (Attributes[${groupby:singlequote}] != '' ) AND ( MetricName = 'openclaw.agent.novelty_score' ) GROUP BY ses, time  ORDER BY time ASC  LIMIT 1000"
+                      }
+                    },
+                    "refId": "Memory fragmentation",
+                    "hidden": false
+                  }
+                }
+              ],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "timeseries",
+            "version": "13.0.0",
+            "spec": {
+              "options": {
+                "annotations": {
+                  "clustering": -1,
+                  "multiLane": false
+                },
+                "legend": {
+                  "calcs": [],
+                  "displayMode": "list",
+                  "placement": "bottom",
+                  "showLegend": true
+                },
+                "tooltip": {
+                  "hideZeros": false,
+                  "mode": "single",
+                  "sort": "none"
+                }
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "displayName": "${__field.labels.ses}",
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "value": 0,
+                        "color": "green"
+                      },
+                      {
+                        "value": 80,
+                        "color": "red"
+                      }
+                    ]
+                  },
+                  "color": {
+                    "mode": "palette-classic"
+                  },
+                  "custom": {
+                    "axisBorderShow": false,
+                    "axisCenteredZero": false,
+                    "axisColorMode": "text",
+                    "axisLabel": "",
+                    "axisPlacement": "auto",
+                    "barAlignment": 0,
+                    "barWidthFactor": 0.6,
+                    "drawStyle": "line",
+                    "fillOpacity": 0,
+                    "gradientMode": "none",
+                    "hideFrom": {
+                      "legend": false,
+                      "tooltip": false,
+                      "viz": false
+                    },
+                    "insertNulls": false,
+                    "lineInterpolation": "linear",
+                    "lineWidth": 1,
+                    "pointSize": 5,
+                    "scaleDistribution": {
+                      "type": "linear"
+                    },
+                    "showPoints": "auto",
+                    "showValues": false,
+                    "spanNulls": false,
+                    "stacking": {
+                      "group": "A",
+                      "mode": "none"
+                    },
+                    "thresholdsStyle": {
+                      "mode": "off"
+                    }
+                  }
+                },
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "panel-16": {
+        "kind": "Panel",
+        "spec": {
+          "id": 16,
+          "title": "Downstream context propagation",
+          "description": "",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "grafana-clickhouse-datasource",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "ffj1myq8fjeo0f"
+                      },
+                      "spec": {
+                        "builderOptions": {
+                          "aggregates": [],
+                          "columns": [
+                            {
+                              "alias": "TimeUnix",
+                              "hint": "time",
+                              "name": "TimeUnix",
+                              "type": "DateTime64(9)"
+                            }
+                          ],
+                          "database": "otel",
+                          "filters": [
+                            {
+                              "condition": "AND",
+                              "filterType": "custom",
+                              "hint": "time",
+                              "key": "",
+                              "operator": "WITH IN DASHBOARD TIME RANGE",
+                              "type": "datetime"
+                            },
+                            {
+                              "condition": "AND",
+                              "filterType": "custom",
+                              "key": "MetricName",
+                              "label": "MetricName",
+                              "operator": "=",
+                              "type": "String",
+                              "value": "openclaw.memory.search_miss"
+                            }
+                          ],
+                          "groupBy": [
+                            "Attributes"
+                          ],
+                          "limit": 1000,
+                          "meta": {},
+                          "mode": "trend",
+                          "orderBy": [
+                            {
+                              "default": true,
+                              "dir": "ASC",
+                              "hint": "time",
+                              "name": ""
+                            }
+                          ],
+                          "queryType": "timeseries",
+                          "table": "otel_metrics_sum"
+                        },
+                        "editorType": "sql",
+                        "format": 0,
+                        "meta": {
+                          "builderOptions": {
+                            "aggregates": [],
+                            "columns": [
+                              {
+                                "alias": "TimeUnix",
+                                "hint": "time",
+                                "name": "TimeUnix",
+                                "type": "DateTime64(9)"
+                              }
+                            ],
+                            "database": "otel",
+                            "filters": [
+                              {
+                                "condition": "AND",
+                                "filterType": "custom",
+                                "hint": "time",
+                                "key": "",
+                                "operator": "WITH IN DASHBOARD TIME RANGE",
+                                "type": "datetime"
+                              },
+                              {
+                                "condition": "AND",
+                                "filterType": "custom",
+                                "key": "MetricName",
+                                "label": "MetricName",
+                                "operator": "=",
+                                "type": "String",
+                                "value": "openclaw.memory.search_miss"
+                              }
+                            ],
+                            "groupBy": [
+                              "Attributes"
+                            ],
+                            "limit": 1000,
+                            "meta": {},
+                            "mode": "trend",
+                            "orderBy": [
+                              {
+                                "default": true,
+                                "dir": "ASC",
+                                "hint": "time",
+                                "name": ""
+                              }
+                            ],
+                            "queryType": "timeseries",
+                            "table": "otel_metrics_sum"
+                          }
+                        },
+                        "pluginVersion": "4.15.0",
+                        "queryType": "timeseries",
+                        "rawSql": "SELECT $__timeInterval(TimeUnix) as \"time\", Attributes[${groupby:singlequote}] AS ses, sum(Sum)/sum(Count) FROM \"otel\".\"otel_metrics_histogram\" \nWHERE ( time >= $__fromTime AND time <= $__toTime ) AND (Attributes[${groupby:singlequote}] != '' )  \nAND ( MetricName = 'openclaw.agent.downstream_context_sharing' ) GROUP BY ses, time ORDER BY time ASC LIMIT 1000"
+                      }
+                    },
+                    "refId": "Memory fragmentation",
+                    "hidden": false
+                  }
+                }
+              ],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "timeseries",
+            "version": "13.0.0",
+            "spec": {
+              "options": {
+                "annotations": {
+                  "clustering": -1,
+                  "multiLane": false
+                },
+                "legend": {
+                  "calcs": [],
+                  "displayMode": "list",
+                  "placement": "bottom",
+                  "showLegend": true
+                },
+                "tooltip": {
+                  "hideZeros": false,
+                  "mode": "single",
+                  "sort": "none"
+                }
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "displayName": "${__field.labels.ses}",
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "value": 0,
+                        "color": "green"
+                      },
+                      {
+                        "value": 80,
+                        "color": "red"
+                      }
+                    ]
+                  },
+                  "color": {
+                    "mode": "palette-classic"
+                  },
+                  "custom": {
+                    "axisBorderShow": false,
+                    "axisCenteredZero": false,
+                    "axisColorMode": "text",
+                    "axisLabel": "",
+                    "axisPlacement": "auto",
+                    "barAlignment": 0,
+                    "barWidthFactor": 0.6,
+                    "drawStyle": "line",
+                    "fillOpacity": 0,
+                    "gradientMode": "none",
+                    "hideFrom": {
+                      "legend": false,
+                      "tooltip": false,
+                      "viz": false
+                    },
+                    "insertNulls": false,
+                    "lineInterpolation": "linear",
+                    "lineWidth": 1,
+                    "pointSize": 5,
+                    "scaleDistribution": {
+                      "type": "linear"
+                    },
+                    "showPoints": "auto",
+                    "showValues": false,
+                    "spanNulls": false,
+                    "stacking": {
+                      "group": "A",
+                      "mode": "none"
+                    },
+                    "thresholdsStyle": {
+                      "mode": "off"
+                    }
+                  }
+                },
+                "overrides": [
+                  {
+                    "__systemRef": "hideSeriesFrom",
+                    "matcher": {
+                      "id": "byNames",
+                      "options": {
+                        "mode": "exclude",
+                        "names": [
+                          "09f55743-e621-49c5-8f7f-7e505c9b1dcb"
+                        ],
+                        "prefix": "All except:",
+                        "readOnly": true
+                      }
+                    },
+                    "properties": [
+                      {
+                        "id": "custom.hideFrom",
+                        "value": {
+                          "legend": false,
+                          "tooltip": true,
+                          "viz": false
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          }
+        }
+      },
+      "panel-18": {
+        "kind": "Panel",
+        "spec": {
+          "id": 18,
+          "title": "Parallelisation  score",
+          "description": "",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "grafana-clickhouse-datasource",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "ffj1myq8fjeo0f"
+                      },
+                      "spec": {
+                        "builderOptions": {
+                          "aggregates": [],
+                          "columns": [
+                            {
+                              "alias": "TimeUnix",
+                              "hint": "time",
+                              "name": "TimeUnix",
+                              "type": "DateTime64(9)"
+                            }
+                          ],
+                          "database": "otel",
+                          "filters": [
+                            {
+                              "condition": "AND",
+                              "filterType": "custom",
+                              "hint": "time",
+                              "key": "",
+                              "operator": "WITH IN DASHBOARD TIME RANGE",
+                              "type": "datetime"
+                            },
+                            {
+                              "condition": "AND",
+                              "filterType": "custom",
+                              "key": "MetricName",
+                              "label": "MetricName",
+                              "operator": "=",
+                              "type": "String",
+                              "value": "openclaw.memory.search_miss"
+                            }
+                          ],
+                          "groupBy": [
+                            "Attributes"
+                          ],
+                          "limit": 1000,
+                          "meta": {},
+                          "mode": "trend",
+                          "orderBy": [
+                            {
+                              "default": true,
+                              "dir": "ASC",
+                              "hint": "time",
+                              "name": ""
+                            }
+                          ],
+                          "queryType": "timeseries",
+                          "table": "otel_metrics_sum"
+                        },
+                        "editorType": "sql",
+                        "format": 0,
+                        "meta": {
+                          "builderOptions": {
+                            "aggregates": [],
+                            "columns": [
+                              {
+                                "alias": "TimeUnix",
+                                "hint": "time",
+                                "name": "TimeUnix",
+                                "type": "DateTime64(9)"
+                              }
+                            ],
+                            "database": "otel",
+                            "filters": [
+                              {
+                                "condition": "AND",
+                                "filterType": "custom",
+                                "hint": "time",
+                                "key": "",
+                                "operator": "WITH IN DASHBOARD TIME RANGE",
+                                "type": "datetime"
+                              },
+                              {
+                                "condition": "AND",
+                                "filterType": "custom",
+                                "key": "MetricName",
+                                "label": "MetricName",
+                                "operator": "=",
+                                "type": "String",
+                                "value": "openclaw.memory.search_miss"
+                              }
+                            ],
+                            "groupBy": [
+                              "Attributes"
+                            ],
+                            "limit": 1000,
+                            "meta": {},
+                            "mode": "trend",
+                            "orderBy": [
+                              {
+                                "default": true,
+                                "dir": "ASC",
+                                "hint": "time",
+                                "name": ""
+                              }
+                            ],
+                            "queryType": "timeseries",
+                            "table": "otel_metrics_sum"
+                          }
+                        },
+                        "pluginVersion": "4.15.0",
+                        "queryType": "timeseries",
+                        "rawSql": "SELECT $__timeInterval(TimeUnix) as \"time\", Attributes['openclaw.session.key'] AS ses, sum(Sum)/sum(Count) FROM \"otel\".\"otel_metrics_histogram\" \nWHERE ( time >= $__fromTime AND time <= $__toTime ) AND ( MetricName = 'openclaw.session.parallelisation_score' )\nGROUP BY ses, time ORDER BY time ASC LIMIT 1000"
+                      }
+                    },
+                    "refId": "Memory fragmentation",
+                    "hidden": false
+                  }
+                }
+              ],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "timeseries",
+            "version": "13.0.0",
+            "spec": {
+              "options": {
+                "annotations": {
+                  "clustering": -1,
+                  "multiLane": false
+                },
+                "legend": {
+                  "calcs": [],
+                  "displayMode": "list",
+                  "placement": "bottom",
+                  "showLegend": true
+                },
+                "tooltip": {
+                  "hideZeros": false,
+                  "mode": "single",
+                  "sort": "none"
+                }
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "displayName": "${__field.labels.ses}",
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "value": 0,
+                        "color": "green"
+                      },
+                      {
+                        "value": 80,
+                        "color": "red"
+                      }
+                    ]
+                  },
+                  "color": {
+                    "mode": "palette-classic"
+                  },
+                  "custom": {
+                    "axisBorderShow": false,
+                    "axisCenteredZero": false,
+                    "axisColorMode": "text",
+                    "axisLabel": "",
+                    "axisPlacement": "auto",
+                    "barAlignment": 0,
+                    "barWidthFactor": 0.6,
+                    "drawStyle": "line",
+                    "fillOpacity": 0,
+                    "gradientMode": "none",
+                    "hideFrom": {
+                      "legend": false,
+                      "tooltip": false,
+                      "viz": false
+                    },
+                    "insertNulls": false,
+                    "lineInterpolation": "linear",
+                    "lineWidth": 1,
+                    "pointSize": 5,
+                    "scaleDistribution": {
+                      "type": "linear"
+                    },
+                    "showPoints": "auto",
+                    "showValues": false,
+                    "spanNulls": false,
+                    "stacking": {
+                      "group": "A",
+                      "mode": "none"
+                    },
+                    "thresholdsStyle": {
+                      "mode": "off"
+                    }
+                  }
+                },
+                "overrides": [
+                  {
+                    "__systemRef": "hideSeriesFrom",
+                    "matcher": {
+                      "id": "byNames",
+                      "options": {
+                        "mode": "exclude",
+                        "names": [
+                          "agent:main:discord:channel:1488508227833303051"
+                        ],
+                        "prefix": "All except:",
+                        "readOnly": true
+                      }
+                    },
+                    "properties": [
+                      {
+                        "id": "custom.hideFrom",
+                        "value": {
+                          "legend": false,
+                          "tooltip": true,
+                          "viz": true
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          }
+        }
+      },
+      "panel-19": {
+        "kind": "Panel",
+        "spec": {
+          "id": 19,
+          "title": "Repetition  score",
+          "description": "",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "grafana-clickhouse-datasource",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "ffj1myq8fjeo0f"
+                      },
+                      "spec": {
+                        "builderOptions": {
+                          "aggregates": [],
+                          "columns": [
+                            {
+                              "alias": "TimeUnix",
+                              "hint": "time",
+                              "name": "TimeUnix",
+                              "type": "DateTime64(9)"
+                            }
+                          ],
+                          "database": "otel",
+                          "filters": [
+                            {
+                              "condition": "AND",
+                              "filterType": "custom",
+                              "hint": "time",
+                              "key": "",
+                              "operator": "WITH IN DASHBOARD TIME RANGE",
+                              "type": "datetime"
+                            },
+                            {
+                              "condition": "AND",
+                              "filterType": "custom",
+                              "key": "MetricName",
+                              "label": "MetricName",
+                              "operator": "=",
+                              "type": "String",
+                              "value": "openclaw.memory.search_miss"
+                            }
+                          ],
+                          "groupBy": [
+                            "Attributes"
+                          ],
+                          "limit": 1000,
+                          "meta": {},
+                          "mode": "trend",
+                          "orderBy": [
+                            {
+                              "default": true,
+                              "dir": "ASC",
+                              "hint": "time",
+                              "name": ""
+                            }
+                          ],
+                          "queryType": "timeseries",
+                          "table": "otel_metrics_sum"
+                        },
+                        "editorType": "sql",
+                        "format": 0,
+                        "meta": {
+                          "builderOptions": {
+                            "aggregates": [],
+                            "columns": [
+                              {
+                                "alias": "TimeUnix",
+                                "hint": "time",
+                                "name": "TimeUnix",
+                                "type": "DateTime64(9)"
+                              }
+                            ],
+                            "database": "otel",
+                            "filters": [
+                              {
+                                "condition": "AND",
+                                "filterType": "custom",
+                                "hint": "time",
+                                "key": "",
+                                "operator": "WITH IN DASHBOARD TIME RANGE",
+                                "type": "datetime"
+                              },
+                              {
+                                "condition": "AND",
+                                "filterType": "custom",
+                                "key": "MetricName",
+                                "label": "MetricName",
+                                "operator": "=",
+                                "type": "String",
+                                "value": "openclaw.memory.search_miss"
+                              }
+                            ],
+                            "groupBy": [
+                              "Attributes"
+                            ],
+                            "limit": 1000,
+                            "meta": {},
+                            "mode": "trend",
+                            "orderBy": [
+                              {
+                                "default": true,
+                                "dir": "ASC",
+                                "hint": "time",
+                                "name": ""
+                              }
+                            ],
+                            "queryType": "timeseries",
+                            "table": "otel_metrics_sum"
+                          }
+                        },
+                        "pluginVersion": "4.15.0",
+                        "queryType": "timeseries",
+                        "rawSql": "SELECT $__timeInterval(TimeUnix) as \"time\", Attributes['openclaw.session.key'] AS ses, sum(Sum)/sum(Count) FROM \"otel\".\"otel_metrics_histogram\" \nWHERE ( time >= $__fromTime AND time <= $__toTime ) AND ( MetricName = 'openclaw.session.repetition_score' )\nGROUP BY ses, time ORDER BY time ASC LIMIT 1000"
+                      }
+                    },
+                    "refId": "Memory fragmentation",
+                    "hidden": false
+                  }
+                }
+              ],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "timeseries",
+            "version": "13.0.0",
+            "spec": {
+              "options": {
+                "annotations": {
+                  "clustering": -1,
+                  "multiLane": false
+                },
+                "legend": {
+                  "calcs": [],
+                  "displayMode": "list",
+                  "placement": "bottom",
+                  "showLegend": true
+                },
+                "tooltip": {
+                  "hideZeros": false,
+                  "mode": "single",
+                  "sort": "none"
+                }
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "displayName": "${__field.labels.ses}",
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "value": 0,
+                        "color": "green"
+                      },
+                      {
+                        "value": 80,
+                        "color": "red"
+                      }
+                    ]
+                  },
+                  "color": {
+                    "mode": "palette-classic"
+                  },
+                  "custom": {
+                    "axisBorderShow": false,
+                    "axisCenteredZero": false,
+                    "axisColorMode": "text",
+                    "axisLabel": "",
+                    "axisPlacement": "auto",
+                    "barAlignment": 0,
+                    "barWidthFactor": 0.6,
+                    "drawStyle": "line",
+                    "fillOpacity": 0,
+                    "gradientMode": "none",
+                    "hideFrom": {
+                      "legend": false,
+                      "tooltip": false,
+                      "viz": false
+                    },
+                    "insertNulls": false,
+                    "lineInterpolation": "linear",
+                    "lineWidth": 1,
+                    "pointSize": 5,
+                    "scaleDistribution": {
+                      "type": "linear"
+                    },
+                    "showPoints": "auto",
+                    "showValues": false,
+                    "spanNulls": false,
+                    "stacking": {
+                      "group": "A",
+                      "mode": "none"
+                    },
+                    "thresholdsStyle": {
+                      "mode": "off"
+                    }
+                  }
+                },
+                "overrides": [
+                  {
+                    "__systemRef": "hideSeriesFrom",
+                    "matcher": {
+                      "id": "byNames",
+                      "options": {
+                        "mode": "exclude",
+                        "names": [
+                          "agent:main:discord:channel:1488508227833303051"
+                        ],
+                        "prefix": "All except:",
+                        "readOnly": true
+                      }
+                    },
+                    "properties": [
+                      {
+                        "id": "custom.hideFrom",
+                        "value": {
+                          "legend": false,
+                          "tooltip": true,
+                          "viz": true
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          }
+        }
+      },
+      "panel-2": {
+        "kind": "Panel",
+        "spec": {
+          "id": 2,
+          "title": "Search hit",
+          "description": "",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "grafana-clickhouse-datasource",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "ffj1myq8fjeo0f"
+                      },
+                      "spec": {
+                        "builderOptions": {
+                          "aggregates": [],
+                          "columns": [
+                            {
+                              "alias": "TimeUnix",
+                              "hint": "time",
+                              "name": "TimeUnix",
+                              "type": "DateTime64(9)"
+                            }
+                          ],
+                          "database": "otel",
+                          "filters": [
+                            {
+                              "condition": "AND",
+                              "filterType": "custom",
+                              "hint": "time",
+                              "key": "",
+                              "operator": "WITH IN DASHBOARD TIME RANGE",
+                              "type": "datetime"
+                            },
+                            {
+                              "condition": "AND",
+                              "filterType": "custom",
+                              "key": "MetricName",
+                              "label": "MetricName",
+                              "operator": "=",
+                              "type": "String",
+                              "value": "openclaw.memory.search_hit"
+                            }
+                          ],
+                          "groupBy": [],
+                          "limit": 1000,
+                          "meta": {},
+                          "mode": "trend",
+                          "orderBy": [
+                            {
+                              "default": true,
+                              "dir": "ASC",
+                              "hint": "time",
+                              "name": ""
+                            }
+                          ],
+                          "queryType": "timeseries",
+                          "table": "otel_metrics_sum"
+                        },
+                        "editorType": "sql",
+                        "format": 0,
+                        "meta": {
+                          "builderOptions": {
+                            "aggregates": [],
+                            "columns": [
+                              {
+                                "alias": "TimeUnix",
+                                "hint": "time",
+                                "name": "TimeUnix",
+                                "type": "DateTime64(9)"
+                              }
+                            ],
+                            "database": "otel",
+                            "filters": [
+                              {
+                                "condition": "AND",
+                                "filterType": "custom",
+                                "hint": "time",
+                                "key": "",
+                                "operator": "WITH IN DASHBOARD TIME RANGE",
+                                "type": "datetime"
+                              },
+                              {
+                                "condition": "AND",
+                                "filterType": "custom",
+                                "key": "MetricName",
+                                "label": "MetricName",
+                                "operator": "=",
+                                "type": "String",
+                                "value": "openclaw.memory.search_hit"
+                              }
+                            ],
+                            "groupBy": [],
+                            "limit": 1000,
+                            "meta": {},
+                            "mode": "trend",
+                            "orderBy": [
+                              {
+                                "default": true,
+                                "dir": "ASC",
+                                "hint": "time",
+                                "name": ""
+                              }
+                            ],
+                            "queryType": "timeseries",
+                            "table": "otel_metrics_sum"
+                          }
+                        },
+                        "pluginVersion": "4.15.0",
+                        "queryType": "timeseries",
+                        "rawSql": "SELECT $__timeInterval(TimeUnix) as \"time\", Attributes[${groupby:singlequote}] AS ses, avg(Value) FROM \"otel\".\"otel_metrics_sum\" \nWHERE ( time >= $__fromTime AND time <= $__toTime ) AND (Attributes[${groupby:singlequote}] != '' ) AND ( MetricName = 'openclaw.memory.search_hit' ) GROUP BY ses, time ORDER BY time ASC LIMIT 1000"
+                      }
+                    },
+                    "refId": "search_hit",
+                    "hidden": false
+                  }
+                }
+              ],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "timeseries",
+            "version": "13.0.0",
+            "spec": {
+              "options": {
+                "annotations": {
+                  "clustering": -1,
+                  "multiLane": false
+                },
+                "legend": {
+                  "calcs": [],
+                  "displayMode": "list",
+                  "placement": "bottom",
+                  "showLegend": true
+                },
+                "tooltip": {
+                  "hideZeros": false,
+                  "mode": "single",
+                  "sort": "none"
+                }
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "displayName": "${__field.labels.ses}",
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "value": 0,
+                        "color": "green"
+                      },
+                      {
+                        "value": 80,
+                        "color": "red"
+                      }
+                    ]
+                  },
+                  "color": {
+                    "mode": "palette-classic"
+                  },
+                  "custom": {
+                    "axisBorderShow": false,
+                    "axisCenteredZero": false,
+                    "axisColorMode": "text",
+                    "axisLabel": "",
+                    "axisPlacement": "auto",
+                    "barAlignment": 0,
+                    "barWidthFactor": 0.6,
+                    "drawStyle": "line",
+                    "fillOpacity": 0,
+                    "gradientMode": "none",
+                    "hideFrom": {
+                      "legend": false,
+                      "tooltip": false,
+                      "viz": false
+                    },
+                    "insertNulls": false,
+                    "lineInterpolation": "linear",
+                    "lineWidth": 1,
+                    "pointSize": 5,
+                    "scaleDistribution": {
+                      "type": "linear"
+                    },
+                    "showPoints": "auto",
+                    "showValues": false,
+                    "spanNulls": false,
+                    "stacking": {
+                      "group": "A",
+                      "mode": "none"
+                    },
+                    "thresholdsStyle": {
+                      "mode": "off"
+                    }
+                  }
+                },
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "panel-21": {
+        "kind": "Panel",
+        "spec": {
+          "id": 21,
+          "title": "tool errors",
+          "description": "",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "grafana-clickhouse-datasource",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "ffj1myq8fjeo0f"
+                      },
+                      "spec": {
+                        "builderOptions": {
+                          "aggregates": [],
+                          "columns": [
+                            {
+                              "alias": "Value",
+                              "custom": false,
+                              "name": "Value",
+                              "type": "Float64"
+                            },
+                            {
+                              "alias": "TimeUnix",
+                              "hint": "time",
+                              "name": "TimeUnix",
+                              "type": "DateTime64(9)"
+                            }
+                          ],
+                          "database": "otel",
+                          "filters": [
+                            {
+                              "condition": "AND",
+                              "filterType": "custom",
+                              "hint": "time",
+                              "key": "",
+                              "operator": "WITH IN DASHBOARD TIME RANGE",
+                              "type": "datetime"
+                            },
+                            {
+                              "condition": "AND",
+                              "filterType": "custom",
+                              "key": "MetricName",
+                              "label": "MetricName",
+                              "operator": "=",
+                              "type": "String",
+                              "value": "openclaw.memory.read_events"
+                            }
+                          ],
+                          "groupBy": [],
+                          "limit": 1000,
+                          "meta": {},
+                          "mode": "aggregate",
+                          "orderBy": [
+                            {
+                              "default": true,
+                              "dir": "ASC",
+                              "hint": "time",
+                              "name": ""
+                            }
+                          ],
+                          "queryType": "timeseries",
+                          "table": "otel_metrics_sum"
+                        },
+                        "editorType": "sql",
+                        "format": 0,
+                        "meta": {
+                          "builderOptions": {
+                            "aggregates": [],
+                            "columns": [
+                              {
+                                "alias": "Value",
+                                "custom": false,
+                                "name": "Value",
+                                "type": "Float64"
+                              },
+                              {
+                                "alias": "TimeUnix",
+                                "hint": "time",
+                                "name": "TimeUnix",
+                                "type": "DateTime64(9)"
+                              }
+                            ],
+                            "database": "otel",
+                            "filters": [
+                              {
+                                "condition": "AND",
+                                "filterType": "custom",
+                                "hint": "time",
+                                "key": "",
+                                "operator": "WITH IN DASHBOARD TIME RANGE",
+                                "type": "datetime"
+                              },
+                              {
+                                "condition": "AND",
+                                "filterType": "custom",
+                                "key": "MetricName",
+                                "label": "MetricName",
+                                "operator": "=",
+                                "type": "String",
+                                "value": "openclaw.memory.read_events"
+                              }
+                            ],
+                            "groupBy": [],
+                            "limit": 1000,
+                            "meta": {},
+                            "mode": "aggregate",
+                            "orderBy": [
+                              {
+                                "default": true,
+                                "dir": "ASC",
+                                "hint": "time",
+                                "name": ""
+                              }
+                            ],
+                            "queryType": "timeseries",
+                            "table": "otel_metrics_sum"
+                          }
+                        },
+                        "pluginVersion": "4.15.0",
+                        "queryType": "timeseries",
+                        "rawSql": "SELECT $__timeInterval(TimeUnix) as \"time\", Attributes['tool.name'] AS ses, avg(Value) FROM \"otel\".\"otel_metrics_sum\" \nWHERE ( time >= $__fromTime AND time <= $__toTime ) AND ( MetricName = 'openclaw.tool.errors' ) AND ( ses != '')  GROUP BY ses, time ORDER BY time ASC LIMIT 1000"
+                      }
+                    },
+                    "refId": "Metric Read",
+                    "hidden": false
+                  }
+                }
+              ],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "timeseries",
+            "version": "13.0.0",
+            "spec": {
+              "options": {
+                "annotations": {
+                  "clustering": -1,
+                  "multiLane": false
+                },
+                "legend": {
+                  "calcs": [],
+                  "displayMode": "list",
+                  "placement": "bottom",
+                  "showLegend": true
+                },
+                "tooltip": {
+                  "hideZeros": false,
+                  "mode": "single",
+                  "sort": "none"
+                }
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "displayName": "${__field.labels.ses}",
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "value": 0,
+                        "color": "green"
+                      },
+                      {
+                        "value": 80,
+                        "color": "red"
+                      }
+                    ]
+                  },
+                  "color": {
+                    "mode": "palette-classic"
+                  },
+                  "custom": {
+                    "axisBorderShow": false,
+                    "axisCenteredZero": false,
+                    "axisColorMode": "text",
+                    "axisLabel": "",
+                    "axisPlacement": "auto",
+                    "barAlignment": 0,
+                    "barWidthFactor": 0.6,
+                    "drawStyle": "line",
+                    "fillOpacity": 0,
+                    "gradientMode": "none",
+                    "hideFrom": {
+                      "legend": false,
+                      "tooltip": false,
+                      "viz": false
+                    },
+                    "insertNulls": false,
+                    "lineInterpolation": "linear",
+                    "lineWidth": 1,
+                    "pointSize": 5,
+                    "scaleDistribution": {
+                      "type": "linear"
+                    },
+                    "showPoints": "auto",
+                    "showValues": false,
+                    "spanNulls": false,
+                    "stacking": {
+                      "group": "A",
+                      "mode": "none"
+                    },
+                    "thresholdsStyle": {
+                      "mode": "off"
+                    }
+                  }
+                },
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "panel-3": {
+        "kind": "Panel",
+        "spec": {
+          "id": 3,
+          "title": "Search miss",
+          "description": "",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "grafana-clickhouse-datasource",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "ffj1myq8fjeo0f"
+                      },
+                      "spec": {
+                        "builderOptions": {
+                          "aggregates": [],
+                          "columns": [
+                            {
+                              "alias": "TimeUnix",
+                              "hint": "time",
+                              "name": "TimeUnix",
+                              "type": "DateTime64(9)"
+                            }
+                          ],
+                          "database": "otel",
+                          "filters": [
+                            {
+                              "condition": "AND",
+                              "filterType": "custom",
+                              "hint": "time",
+                              "key": "",
+                              "operator": "WITH IN DASHBOARD TIME RANGE",
+                              "type": "datetime"
+                            },
+                            {
+                              "condition": "AND",
+                              "filterType": "custom",
+                              "key": "MetricName",
+                              "label": "MetricName",
+                              "operator": "=",
+                              "type": "String",
+                              "value": "openclaw.memory.search_miss"
+                            }
+                          ],
+                          "groupBy": [
+                            "Attributes"
+                          ],
+                          "limit": 1000,
+                          "meta": {},
+                          "mode": "trend",
+                          "orderBy": [
+                            {
+                              "default": true,
+                              "dir": "ASC",
+                              "hint": "time",
+                              "name": ""
+                            }
+                          ],
+                          "queryType": "timeseries",
+                          "table": "otel_metrics_sum"
+                        },
+                        "editorType": "sql",
+                        "format": 0,
+                        "meta": {
+                          "builderOptions": {
+                            "aggregates": [],
+                            "columns": [
+                              {
+                                "alias": "TimeUnix",
+                                "hint": "time",
+                                "name": "TimeUnix",
+                                "type": "DateTime64(9)"
+                              }
+                            ],
+                            "database": "otel",
+                            "filters": [
+                              {
+                                "condition": "AND",
+                                "filterType": "custom",
+                                "hint": "time",
+                                "key": "",
+                                "operator": "WITH IN DASHBOARD TIME RANGE",
+                                "type": "datetime"
+                              },
+                              {
+                                "condition": "AND",
+                                "filterType": "custom",
+                                "key": "MetricName",
+                                "label": "MetricName",
+                                "operator": "=",
+                                "type": "String",
+                                "value": "openclaw.memory.search_miss"
+                              }
+                            ],
+                            "groupBy": [
+                              "Attributes"
+                            ],
+                            "limit": 1000,
+                            "meta": {},
+                            "mode": "trend",
+                            "orderBy": [
+                              {
+                                "default": true,
+                                "dir": "ASC",
+                                "hint": "time",
+                                "name": ""
+                              }
+                            ],
+                            "queryType": "timeseries",
+                            "table": "otel_metrics_sum"
+                          }
+                        },
+                        "pluginVersion": "4.15.0",
+                        "queryType": "timeseries",
+                        "rawSql": "SELECT $__timeInterval(TimeUnix) as \"time\", Attributes[${groupby:singlequote}] AS ses, avg(Value) FROM \"otel\".\"otel_metrics_sum\" \nWHERE ( time >= $__fromTime AND time <= $__toTime ) AND (Attributes[${groupby:singlequote}] != '' ) AND ( MetricName = 'openclaw.memory.search_miss' ) \nGROUP BY ses, time ORDER BY time ASC LIMIT 1000"
+                      }
+                    },
+                    "refId": "search_miss",
+                    "hidden": false
+                  }
+                }
+              ],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "timeseries",
+            "version": "13.0.0",
+            "spec": {
+              "options": {
+                "annotations": {
+                  "clustering": -1,
+                  "multiLane": false
+                },
+                "legend": {
+                  "calcs": [],
+                  "displayMode": "list",
+                  "placement": "bottom",
+                  "showLegend": true
+                },
+                "tooltip": {
+                  "hideZeros": false,
+                  "mode": "single",
+                  "sort": "none"
+                }
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "displayName": "${__field.labels.ses}",
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "value": 0,
+                        "color": "green"
+                      },
+                      {
+                        "value": 80,
+                        "color": "red"
+                      }
+                    ]
+                  },
+                  "color": {
+                    "mode": "palette-classic"
+                  },
+                  "custom": {
+                    "axisBorderShow": false,
+                    "axisCenteredZero": false,
+                    "axisColorMode": "text",
+                    "axisLabel": "",
+                    "axisPlacement": "auto",
+                    "barAlignment": 0,
+                    "barWidthFactor": 0.6,
+                    "drawStyle": "line",
+                    "fillOpacity": 0,
+                    "gradientMode": "none",
+                    "hideFrom": {
+                      "legend": false,
+                      "tooltip": false,
+                      "viz": false
+                    },
+                    "insertNulls": false,
+                    "lineInterpolation": "linear",
+                    "lineWidth": 1,
+                    "pointSize": 5,
+                    "scaleDistribution": {
+                      "type": "linear"
+                    },
+                    "showPoints": "auto",
+                    "showValues": false,
+                    "spanNulls": false,
+                    "stacking": {
+                      "group": "A",
+                      "mode": "none"
+                    },
+                    "thresholdsStyle": {
+                      "mode": "off"
+                    }
+                  }
+                },
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "panel-4": {
+        "kind": "Panel",
+        "spec": {
+          "id": 4,
+          "title": "Memory fragmentation",
+          "description": "",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "grafana-clickhouse-datasource",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "ffj1myq8fjeo0f"
+                      },
+                      "spec": {
+                        "builderOptions": {
+                          "aggregates": [],
+                          "columns": [
+                            {
+                              "alias": "TimeUnix",
+                              "hint": "time",
+                              "name": "TimeUnix",
+                              "type": "DateTime64(9)"
+                            }
+                          ],
+                          "database": "otel",
+                          "filters": [
+                            {
+                              "condition": "AND",
+                              "filterType": "custom",
+                              "hint": "time",
+                              "key": "",
+                              "operator": "WITH IN DASHBOARD TIME RANGE",
+                              "type": "datetime"
+                            },
+                            {
+                              "condition": "AND",
+                              "filterType": "custom",
+                              "key": "MetricName",
+                              "label": "MetricName",
+                              "operator": "=",
+                              "type": "String",
+                              "value": "openclaw.memory.search_miss"
+                            }
+                          ],
+                          "groupBy": [
+                            "Attributes"
+                          ],
+                          "limit": 1000,
+                          "meta": {},
+                          "mode": "trend",
+                          "orderBy": [
+                            {
+                              "default": true,
+                              "dir": "ASC",
+                              "hint": "time",
+                              "name": ""
+                            }
+                          ],
+                          "queryType": "timeseries",
+                          "table": "otel_metrics_sum"
+                        },
+                        "editorType": "sql",
+                        "format": 0,
+                        "meta": {
+                          "builderOptions": {
+                            "aggregates": [],
+                            "columns": [
+                              {
+                                "alias": "TimeUnix",
+                                "hint": "time",
+                                "name": "TimeUnix",
+                                "type": "DateTime64(9)"
+                              }
+                            ],
+                            "database": "otel",
+                            "filters": [
+                              {
+                                "condition": "AND",
+                                "filterType": "custom",
+                                "hint": "time",
+                                "key": "",
+                                "operator": "WITH IN DASHBOARD TIME RANGE",
+                                "type": "datetime"
+                              },
+                              {
+                                "condition": "AND",
+                                "filterType": "custom",
+                                "key": "MetricName",
+                                "label": "MetricName",
+                                "operator": "=",
+                                "type": "String",
+                                "value": "openclaw.memory.search_miss"
+                              }
+                            ],
+                            "groupBy": [
+                              "Attributes"
+                            ],
+                            "limit": 1000,
+                            "meta": {},
+                            "mode": "trend",
+                            "orderBy": [
+                              {
+                                "default": true,
+                                "dir": "ASC",
+                                "hint": "time",
+                                "name": ""
+                              }
+                            ],
+                            "queryType": "timeseries",
+                            "table": "otel_metrics_sum"
+                          }
+                        },
+                        "pluginVersion": "4.15.0",
+                        "queryType": "timeseries",
+                        "rawSql": "SELECT $__timeInterval(TimeUnix) as \"time\", Attributes[${groupby:singlequote}] AS ses, sum(Sum)/sum(Count)  FROM \"otel\".\"otel_metrics_histogram\"\n WHERE ( time >= $__fromTime AND time <= $__toTime ) AND (Attributes[${groupby:singlequote}] != '' ) AND ( MetricName = 'openclaw.memory.search_fragmentation' ) GROUP BY ses, time ORDER BY time ASC LIMIT 1000"
+                      }
+                    },
+                    "refId": "Memory fragmentation",
+                    "hidden": false
+                  }
+                }
+              ],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "timeseries",
+            "version": "13.0.0",
+            "spec": {
+              "options": {
+                "annotations": {
+                  "clustering": -1,
+                  "multiLane": false
+                },
+                "legend": {
+                  "calcs": [],
+                  "displayMode": "list",
+                  "placement": "bottom",
+                  "showLegend": true
+                },
+                "tooltip": {
+                  "hideZeros": false,
+                  "mode": "single",
+                  "sort": "none"
+                }
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "displayName": "${__field.labels.ses}",
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "value": 0,
+                        "color": "green"
+                      },
+                      {
+                        "value": 80,
+                        "color": "red"
+                      }
+                    ]
+                  },
+                  "color": {
+                    "mode": "palette-classic"
+                  },
+                  "custom": {
+                    "axisBorderShow": false,
+                    "axisCenteredZero": false,
+                    "axisColorMode": "text",
+                    "axisLabel": "",
+                    "axisPlacement": "auto",
+                    "barAlignment": 0,
+                    "barWidthFactor": 0.6,
+                    "drawStyle": "line",
+                    "fillOpacity": 0,
+                    "gradientMode": "none",
+                    "hideFrom": {
+                      "legend": false,
+                      "tooltip": false,
+                      "viz": false
+                    },
+                    "insertNulls": false,
+                    "lineInterpolation": "linear",
+                    "lineWidth": 1,
+                    "pointSize": 5,
+                    "scaleDistribution": {
+                      "type": "linear"
+                    },
+                    "showPoints": "auto",
+                    "showValues": false,
+                    "spanNulls": false,
+                    "stacking": {
+                      "group": "A",
+                      "mode": "none"
+                    },
+                    "thresholdsStyle": {
+                      "mode": "off"
+                    }
+                  }
+                },
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "panel-5": {
+        "kind": "Panel",
+        "spec": {
+          "id": 5,
+          "title": "Memory edit duration",
+          "description": "",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "grafana-clickhouse-datasource",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "ffj1myq8fjeo0f"
+                      },
+                      "spec": {
+                        "builderOptions": {
+                          "aggregates": [],
+                          "columns": [
+                            {
+                              "alias": "TimeUnix",
+                              "hint": "time",
+                              "name": "TimeUnix",
+                              "type": "DateTime64(9)"
+                            }
+                          ],
+                          "database": "otel",
+                          "filters": [
+                            {
+                              "condition": "AND",
+                              "filterType": "custom",
+                              "hint": "time",
+                              "key": "",
+                              "operator": "WITH IN DASHBOARD TIME RANGE",
+                              "type": "datetime"
+                            },
+                            {
+                              "condition": "AND",
+                              "filterType": "custom",
+                              "key": "MetricName",
+                              "label": "MetricName",
+                              "operator": "=",
+                              "type": "String",
+                              "value": "openclaw.memory.search_miss"
+                            }
+                          ],
+                          "groupBy": [
+                            "Attributes"
+                          ],
+                          "limit": 1000,
+                          "meta": {},
+                          "mode": "trend",
+                          "orderBy": [
+                            {
+                              "default": true,
+                              "dir": "ASC",
+                              "hint": "time",
+                              "name": ""
+                            }
+                          ],
+                          "queryType": "timeseries",
+                          "table": "otel_metrics_sum"
+                        },
+                        "editorType": "sql",
+                        "format": 0,
+                        "meta": {
+                          "builderOptions": {
+                            "aggregates": [],
+                            "columns": [
+                              {
+                                "alias": "TimeUnix",
+                                "hint": "time",
+                                "name": "TimeUnix",
+                                "type": "DateTime64(9)"
+                              }
+                            ],
+                            "database": "otel",
+                            "filters": [
+                              {
+                                "condition": "AND",
+                                "filterType": "custom",
+                                "hint": "time",
+                                "key": "",
+                                "operator": "WITH IN DASHBOARD TIME RANGE",
+                                "type": "datetime"
+                              },
+                              {
+                                "condition": "AND",
+                                "filterType": "custom",
+                                "key": "MetricName",
+                                "label": "MetricName",
+                                "operator": "=",
+                                "type": "String",
+                                "value": "openclaw.memory.search_miss"
+                              }
+                            ],
+                            "groupBy": [
+                              "Attributes"
+                            ],
+                            "limit": 1000,
+                            "meta": {},
+                            "mode": "trend",
+                            "orderBy": [
+                              {
+                                "default": true,
+                                "dir": "ASC",
+                                "hint": "time",
+                                "name": ""
+                              }
+                            ],
+                            "queryType": "timeseries",
+                            "table": "otel_metrics_sum"
+                          }
+                        },
+                        "pluginVersion": "4.15.0",
+                        "queryType": "timeseries",
+                        "rawSql": "SELECT $__timeInterval(TimeUnix) as \"time\", Attributes[${groupby:singlequote}] AS ses, sum(Sum)/sum(Count) FROM \"otel\".\"otel_metrics_histogram\"\nWHERE ( time >= $__fromTime AND time <= $__toTime ) AND ( MetricName = 'openclaw.memory.edit_duration' ) GROUP BY ses, time ORDER BY time ASC LIMIT 1000"
+                      }
+                    },
+                    "refId": "Memory fragmentation",
+                    "hidden": false
+                  }
+                }
+              ],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "timeseries",
+            "version": "13.0.0",
+            "spec": {
+              "options": {
+                "annotations": {
+                  "clustering": -1,
+                  "multiLane": false
+                },
+                "legend": {
+                  "calcs": [],
+                  "displayMode": "list",
+                  "placement": "bottom",
+                  "showLegend": true
+                },
+                "tooltip": {
+                  "hideZeros": false,
+                  "mode": "single",
+                  "sort": "none"
+                }
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "displayName": "${__field.labels.ses}",
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "value": 0,
+                        "color": "green"
+                      },
+                      {
+                        "value": 80,
+                        "color": "red"
+                      }
+                    ]
+                  },
+                  "color": {
+                    "mode": "palette-classic"
+                  },
+                  "custom": {
+                    "axisBorderShow": false,
+                    "axisCenteredZero": false,
+                    "axisColorMode": "text",
+                    "axisLabel": "",
+                    "axisPlacement": "auto",
+                    "barAlignment": 0,
+                    "barWidthFactor": 0.6,
+                    "drawStyle": "line",
+                    "fillOpacity": 0,
+                    "gradientMode": "none",
+                    "hideFrom": {
+                      "legend": false,
+                      "tooltip": false,
+                      "viz": false
+                    },
+                    "insertNulls": false,
+                    "lineInterpolation": "linear",
+                    "lineWidth": 1,
+                    "pointSize": 5,
+                    "scaleDistribution": {
+                      "type": "linear"
+                    },
+                    "showPoints": "auto",
+                    "showValues": false,
+                    "spanNulls": false,
+                    "stacking": {
+                      "group": "A",
+                      "mode": "none"
+                    },
+                    "thresholdsStyle": {
+                      "mode": "off"
+                    }
+                  }
+                },
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "panel-6": {
+        "kind": "Panel",
+        "spec": {
+          "id": 6,
+          "title": "Write events",
+          "description": "",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "grafana-clickhouse-datasource",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "ffj1myq8fjeo0f"
+                      },
+                      "spec": {
+                        "builderOptions": {
+                          "aggregates": [],
+                          "columns": [
+                            {
+                              "alias": "Value",
+                              "custom": false,
+                              "name": "Value",
+                              "type": "Float64"
+                            },
+                            {
+                              "alias": "TimeUnix",
+                              "hint": "time",
+                              "name": "TimeUnix",
+                              "type": "DateTime64(9)"
+                            }
+                          ],
+                          "database": "otel",
+                          "filters": [
+                            {
+                              "condition": "AND",
+                              "filterType": "custom",
+                              "hint": "time",
+                              "key": "",
+                              "operator": "WITH IN DASHBOARD TIME RANGE",
+                              "type": "datetime"
+                            },
+                            {
+                              "condition": "AND",
+                              "filterType": "custom",
+                              "key": "MetricName",
+                              "label": "MetricName",
+                              "operator": "=",
+                              "type": "String",
+                              "value": "openclaw.memory.read_events"
+                            }
+                          ],
+                          "groupBy": [],
+                          "limit": 1000,
+                          "meta": {},
+                          "mode": "aggregate",
+                          "orderBy": [
+                            {
+                              "default": true,
+                              "dir": "ASC",
+                              "hint": "time",
+                              "name": ""
+                            }
+                          ],
+                          "queryType": "timeseries",
+                          "table": "otel_metrics_sum"
+                        },
+                        "editorType": "sql",
+                        "format": 0,
+                        "meta": {
+                          "builderOptions": {
+                            "aggregates": [],
+                            "columns": [
+                              {
+                                "alias": "Value",
+                                "custom": false,
+                                "name": "Value",
+                                "type": "Float64"
+                              },
+                              {
+                                "alias": "TimeUnix",
+                                "hint": "time",
+                                "name": "TimeUnix",
+                                "type": "DateTime64(9)"
+                              }
+                            ],
+                            "database": "otel",
+                            "filters": [
+                              {
+                                "condition": "AND",
+                                "filterType": "custom",
+                                "hint": "time",
+                                "key": "",
+                                "operator": "WITH IN DASHBOARD TIME RANGE",
+                                "type": "datetime"
+                              },
+                              {
+                                "condition": "AND",
+                                "filterType": "custom",
+                                "key": "MetricName",
+                                "label": "MetricName",
+                                "operator": "=",
+                                "type": "String",
+                                "value": "openclaw.memory.read_events"
+                              }
+                            ],
+                            "groupBy": [],
+                            "limit": 1000,
+                            "meta": {},
+                            "mode": "aggregate",
+                            "orderBy": [
+                              {
+                                "default": true,
+                                "dir": "ASC",
+                                "hint": "time",
+                                "name": ""
+                              }
+                            ],
+                            "queryType": "timeseries",
+                            "table": "otel_metrics_sum"
+                          }
+                        },
+                        "pluginVersion": "4.15.0",
+                        "queryType": "timeseries",
+                        "rawSql": "SELECT $__timeInterval(TimeUnix) as \"time\", Attributes[${groupby:singlequote}] AS ses, avg(Value) FROM \"otel\".\"otel_metrics_sum\" \nWHERE (Attributes['session.id'] != '' ) AND ( time >= $__fromTime AND time <= $__toTime ) AND\n( MetricName = 'openclaw.memory.write_events' ) GROUP BY ses, time ORDER BY time ASC LIMIT 1000"
+                      }
+                    },
+                    "refId": "Metric Read",
+                    "hidden": false
+                  }
+                }
+              ],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "timeseries",
+            "version": "13.0.0",
+            "spec": {
+              "options": {
+                "annotations": {
+                  "clustering": -1,
+                  "multiLane": false
+                },
+                "legend": {
+                  "calcs": [],
+                  "displayMode": "list",
+                  "placement": "bottom",
+                  "showLegend": true
+                },
+                "tooltip": {
+                  "hideZeros": false,
+                  "mode": "single",
+                  "sort": "none"
+                }
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "displayName": "${__field.labels.ses}",
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "value": 0,
+                        "color": "green"
+                      },
+                      {
+                        "value": 80,
+                        "color": "red"
+                      }
+                    ]
+                  },
+                  "color": {
+                    "mode": "palette-classic"
+                  },
+                  "custom": {
+                    "axisBorderShow": false,
+                    "axisCenteredZero": false,
+                    "axisColorMode": "text",
+                    "axisLabel": "",
+                    "axisPlacement": "auto",
+                    "barAlignment": 0,
+                    "barWidthFactor": 0.6,
+                    "drawStyle": "line",
+                    "fillOpacity": 0,
+                    "gradientMode": "none",
+                    "hideFrom": {
+                      "legend": false,
+                      "tooltip": false,
+                      "viz": false
+                    },
+                    "insertNulls": false,
+                    "lineInterpolation": "linear",
+                    "lineWidth": 1,
+                    "pointSize": 5,
+                    "scaleDistribution": {
+                      "type": "linear"
+                    },
+                    "showPoints": "auto",
+                    "showValues": false,
+                    "spanNulls": false,
+                    "stacking": {
+                      "group": "A",
+                      "mode": "none"
+                    },
+                    "thresholdsStyle": {
+                      "mode": "off"
+                    }
+                  }
+                },
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "panel-7": {
+        "kind": "Panel",
+        "spec": {
+          "id": 7,
+          "title": "Edit events",
+          "description": "",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "grafana-clickhouse-datasource",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "ffj1myq8fjeo0f"
+                      },
+                      "spec": {
+                        "builderOptions": {
+                          "aggregates": [],
+                          "columns": [
+                            {
+                              "alias": "Value",
+                              "custom": false,
+                              "name": "Value",
+                              "type": "Float64"
+                            },
+                            {
+                              "alias": "TimeUnix",
+                              "hint": "time",
+                              "name": "TimeUnix",
+                              "type": "DateTime64(9)"
+                            }
+                          ],
+                          "database": "otel",
+                          "filters": [
+                            {
+                              "condition": "AND",
+                              "filterType": "custom",
+                              "hint": "time",
+                              "key": "",
+                              "operator": "WITH IN DASHBOARD TIME RANGE",
+                              "type": "datetime"
+                            },
+                            {
+                              "condition": "AND",
+                              "filterType": "custom",
+                              "key": "MetricName",
+                              "label": "MetricName",
+                              "operator": "=",
+                              "type": "String",
+                              "value": "openclaw.memory.read_events"
+                            }
+                          ],
+                          "groupBy": [],
+                          "limit": 1000,
+                          "meta": {},
+                          "mode": "aggregate",
+                          "orderBy": [
+                            {
+                              "default": true,
+                              "dir": "ASC",
+                              "hint": "time",
+                              "name": ""
+                            }
+                          ],
+                          "queryType": "timeseries",
+                          "table": "otel_metrics_sum"
+                        },
+                        "editorType": "sql",
+                        "format": 0,
+                        "meta": {
+                          "builderOptions": {
+                            "aggregates": [],
+                            "columns": [
+                              {
+                                "alias": "Value",
+                                "custom": false,
+                                "name": "Value",
+                                "type": "Float64"
+                              },
+                              {
+                                "alias": "TimeUnix",
+                                "hint": "time",
+                                "name": "TimeUnix",
+                                "type": "DateTime64(9)"
+                              }
+                            ],
+                            "database": "otel",
+                            "filters": [
+                              {
+                                "condition": "AND",
+                                "filterType": "custom",
+                                "hint": "time",
+                                "key": "",
+                                "operator": "WITH IN DASHBOARD TIME RANGE",
+                                "type": "datetime"
+                              },
+                              {
+                                "condition": "AND",
+                                "filterType": "custom",
+                                "key": "MetricName",
+                                "label": "MetricName",
+                                "operator": "=",
+                                "type": "String",
+                                "value": "openclaw.memory.read_events"
+                              }
+                            ],
+                            "groupBy": [],
+                            "limit": 1000,
+                            "meta": {},
+                            "mode": "aggregate",
+                            "orderBy": [
+                              {
+                                "default": true,
+                                "dir": "ASC",
+                                "hint": "time",
+                                "name": ""
+                              }
+                            ],
+                            "queryType": "timeseries",
+                            "table": "otel_metrics_sum"
+                          }
+                        },
+                        "pluginVersion": "4.15.0",
+                        "queryType": "timeseries",
+                        "rawSql": "SELECT $__timeInterval(TimeUnix) as \"time\", Attributes[${groupby:singlequote}] AS ses, avg(Value) \nFROM \"otel\".\"otel_metrics_sum\" WHERE ( time >= $__fromTime AND time <= $__toTime )  \nAND (Attributes[${groupby:singlequote}] != '' ) AND ( MetricName = 'openclaw.memory.edit_events' ) GROUP BY ses, time ORDER BY time ASC LIMIT 1000"
+                      }
+                    },
+                    "refId": "Metric Read",
+                    "hidden": false
+                  }
+                }
+              ],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "timeseries",
+            "version": "13.0.0",
+            "spec": {
+              "options": {
+                "annotations": {
+                  "clustering": -1,
+                  "multiLane": false
+                },
+                "legend": {
+                  "calcs": [],
+                  "displayMode": "list",
+                  "placement": "bottom",
+                  "showLegend": true
+                },
+                "tooltip": {
+                  "hideZeros": false,
+                  "mode": "single",
+                  "sort": "none"
+                }
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "displayName": "${__field.labels.ses}",
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "value": 0,
+                        "color": "green"
+                      },
+                      {
+                        "value": 80,
+                        "color": "red"
+                      }
+                    ]
+                  },
+                  "color": {
+                    "mode": "palette-classic"
+                  },
+                  "custom": {
+                    "axisBorderShow": false,
+                    "axisCenteredZero": false,
+                    "axisColorMode": "text",
+                    "axisLabel": "",
+                    "axisPlacement": "auto",
+                    "barAlignment": 0,
+                    "barWidthFactor": 0.6,
+                    "drawStyle": "line",
+                    "fillOpacity": 0,
+                    "gradientMode": "none",
+                    "hideFrom": {
+                      "legend": false,
+                      "tooltip": false,
+                      "viz": false
+                    },
+                    "insertNulls": false,
+                    "lineInterpolation": "linear",
+                    "lineWidth": 1,
+                    "pointSize": 5,
+                    "scaleDistribution": {
+                      "type": "linear"
+                    },
+                    "showPoints": "auto",
+                    "showValues": false,
+                    "spanNulls": false,
+                    "stacking": {
+                      "group": "A",
+                      "mode": "none"
+                    },
+                    "thresholdsStyle": {
+                      "mode": "off"
+                    }
+                  }
+                },
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "panel-8": {
+        "kind": "Panel",
+        "spec": {
+          "id": 8,
+          "title": "Search events",
+          "description": "",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "grafana-clickhouse-datasource",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "ffj1myq8fjeo0f"
+                      },
+                      "spec": {
+                        "builderOptions": {
+                          "aggregates": [],
+                          "columns": [
+                            {
+                              "alias": "Value",
+                              "custom": false,
+                              "name": "Value",
+                              "type": "Float64"
+                            },
+                            {
+                              "alias": "TimeUnix",
+                              "hint": "time",
+                              "name": "TimeUnix",
+                              "type": "DateTime64(9)"
+                            }
+                          ],
+                          "database": "otel",
+                          "filters": [
+                            {
+                              "condition": "AND",
+                              "filterType": "custom",
+                              "hint": "time",
+                              "key": "",
+                              "operator": "WITH IN DASHBOARD TIME RANGE",
+                              "type": "datetime"
+                            },
+                            {
+                              "condition": "AND",
+                              "filterType": "custom",
+                              "key": "MetricName",
+                              "label": "MetricName",
+                              "operator": "=",
+                              "type": "String",
+                              "value": "openclaw.memory.read_events"
+                            }
+                          ],
+                          "groupBy": [],
+                          "limit": 1000,
+                          "meta": {},
+                          "mode": "aggregate",
+                          "orderBy": [
+                            {
+                              "default": true,
+                              "dir": "ASC",
+                              "hint": "time",
+                              "name": ""
+                            }
+                          ],
+                          "queryType": "timeseries",
+                          "table": "otel_metrics_sum"
+                        },
+                        "editorType": "sql",
+                        "format": 0,
+                        "meta": {
+                          "builderOptions": {
+                            "aggregates": [],
+                            "columns": [
+                              {
+                                "alias": "Value",
+                                "custom": false,
+                                "name": "Value",
+                                "type": "Float64"
+                              },
+                              {
+                                "alias": "TimeUnix",
+                                "hint": "time",
+                                "name": "TimeUnix",
+                                "type": "DateTime64(9)"
+                              }
+                            ],
+                            "database": "otel",
+                            "filters": [
+                              {
+                                "condition": "AND",
+                                "filterType": "custom",
+                                "hint": "time",
+                                "key": "",
+                                "operator": "WITH IN DASHBOARD TIME RANGE",
+                                "type": "datetime"
+                              },
+                              {
+                                "condition": "AND",
+                                "filterType": "custom",
+                                "key": "MetricName",
+                                "label": "MetricName",
+                                "operator": "=",
+                                "type": "String",
+                                "value": "openclaw.memory.read_events"
+                              }
+                            ],
+                            "groupBy": [],
+                            "limit": 1000,
+                            "meta": {},
+                            "mode": "aggregate",
+                            "orderBy": [
+                              {
+                                "default": true,
+                                "dir": "ASC",
+                                "hint": "time",
+                                "name": ""
+                              }
+                            ],
+                            "queryType": "timeseries",
+                            "table": "otel_metrics_sum"
+                          }
+                        },
+                        "pluginVersion": "4.15.0",
+                        "queryType": "timeseries",
+                        "rawSql": "SELECT $__timeInterval(TimeUnix) as \"time\", Attributes[${groupby:singlequote}] AS ses, avg(Value) FROM \"otel\".\"otel_metrics_sum\" \nWHERE ( time >= $__fromTime AND time <= $__toTime ) AND ( MetricName = 'openclaw.tool.calls' ) AND (Attributes[${groupby:singlequote}] != '' ) AND ( Attributes['tool.name'] = 'memory_search' ) GROUP BY ses, time ORDER BY time ASC LIMIT 1000"
+                      }
+                    },
+                    "refId": "Metric Read",
+                    "hidden": false
+                  }
+                }
+              ],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "timeseries",
+            "version": "13.0.0",
+            "spec": {
+              "options": {
+                "annotations": {
+                  "clustering": -1,
+                  "multiLane": false
+                },
+                "legend": {
+                  "calcs": [],
+                  "displayMode": "list",
+                  "placement": "bottom",
+                  "showLegend": true
+                },
+                "tooltip": {
+                  "hideZeros": false,
+                  "mode": "single",
+                  "sort": "none"
+                }
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "displayName": "${__field.labels.ses}",
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "value": 0,
+                        "color": "green"
+                      },
+                      {
+                        "value": 80,
+                        "color": "red"
+                      }
+                    ]
+                  },
+                  "color": {
+                    "mode": "palette-classic"
+                  },
+                  "custom": {
+                    "axisBorderShow": false,
+                    "axisCenteredZero": false,
+                    "axisColorMode": "text",
+                    "axisLabel": "",
+                    "axisPlacement": "auto",
+                    "barAlignment": 0,
+                    "barWidthFactor": 0.6,
+                    "drawStyle": "line",
+                    "fillOpacity": 0,
+                    "gradientMode": "none",
+                    "hideFrom": {
+                      "legend": false,
+                      "tooltip": false,
+                      "viz": false
+                    },
+                    "insertNulls": false,
+                    "lineInterpolation": "linear",
+                    "lineWidth": 1,
+                    "pointSize": 5,
+                    "scaleDistribution": {
+                      "type": "linear"
+                    },
+                    "showPoints": "auto",
+                    "showValues": false,
+                    "spanNulls": false,
+                    "stacking": {
+                      "group": "A",
+                      "mode": "none"
+                    },
+                    "thresholdsStyle": {
+                      "mode": "off"
+                    }
+                  }
+                },
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "panel-9": {
+        "kind": "Panel",
+        "spec": {
+          "id": 9,
+          "title": "Memory write duration",
+          "description": "",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "grafana-clickhouse-datasource",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "ffj1myq8fjeo0f"
+                      },
+                      "spec": {
+                        "builderOptions": {
+                          "aggregates": [],
+                          "columns": [
+                            {
+                              "alias": "TimeUnix",
+                              "hint": "time",
+                              "name": "TimeUnix",
+                              "type": "DateTime64(9)"
+                            }
+                          ],
+                          "database": "otel",
+                          "filters": [
+                            {
+                              "condition": "AND",
+                              "filterType": "custom",
+                              "hint": "time",
+                              "key": "",
+                              "operator": "WITH IN DASHBOARD TIME RANGE",
+                              "type": "datetime"
+                            },
+                            {
+                              "condition": "AND",
+                              "filterType": "custom",
+                              "key": "MetricName",
+                              "label": "MetricName",
+                              "operator": "=",
+                              "type": "String",
+                              "value": "openclaw.memory.search_miss"
+                            }
+                          ],
+                          "groupBy": [
+                            "Attributes"
+                          ],
+                          "limit": 1000,
+                          "meta": {},
+                          "mode": "trend",
+                          "orderBy": [
+                            {
+                              "default": true,
+                              "dir": "ASC",
+                              "hint": "time",
+                              "name": ""
+                            }
+                          ],
+                          "queryType": "timeseries",
+                          "table": "otel_metrics_sum"
+                        },
+                        "editorType": "sql",
+                        "format": 0,
+                        "meta": {
+                          "builderOptions": {
+                            "aggregates": [],
+                            "columns": [
+                              {
+                                "alias": "TimeUnix",
+                                "hint": "time",
+                                "name": "TimeUnix",
+                                "type": "DateTime64(9)"
+                              }
+                            ],
+                            "database": "otel",
+                            "filters": [
+                              {
+                                "condition": "AND",
+                                "filterType": "custom",
+                                "hint": "time",
+                                "key": "",
+                                "operator": "WITH IN DASHBOARD TIME RANGE",
+                                "type": "datetime"
+                              },
+                              {
+                                "condition": "AND",
+                                "filterType": "custom",
+                                "key": "MetricName",
+                                "label": "MetricName",
+                                "operator": "=",
+                                "type": "String",
+                                "value": "openclaw.memory.search_miss"
+                              }
+                            ],
+                            "groupBy": [
+                              "Attributes"
+                            ],
+                            "limit": 1000,
+                            "meta": {},
+                            "mode": "trend",
+                            "orderBy": [
+                              {
+                                "default": true,
+                                "dir": "ASC",
+                                "hint": "time",
+                                "name": ""
+                              }
+                            ],
+                            "queryType": "timeseries",
+                            "table": "otel_metrics_sum"
+                          }
+                        },
+                        "pluginVersion": "4.15.0",
+                        "queryType": "timeseries",
+                        "rawSql": "SELECT $__timeInterval(TimeUnix) as \"time\", Attributes[${groupby:singlequote}] AS ses, sum(Sum)/sum(Count) FROM \"otel\".\"otel_metrics_histogram\" \nWHERE ( time >= $__fromTime AND time <= $__toTime ) AND (Attributes[${groupby:singlequote}] != '' ) AND ( MetricName = 'openclaw.memory.write_duration' ) \nGROUP BY ses, time ORDER BY time ASC LIMIT 1000"
+                      }
+                    },
+                    "refId": "Memory fragmentation",
+                    "hidden": false
+                  }
+                }
+              ],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "timeseries",
+            "version": "13.0.0",
+            "spec": {
+              "options": {
+                "annotations": {
+                  "clustering": -1,
+                  "multiLane": false
+                },
+                "legend": {
+                  "calcs": [],
+                  "displayMode": "list",
+                  "placement": "bottom",
+                  "showLegend": true
+                },
+                "tooltip": {
+                  "hideZeros": false,
+                  "mode": "single",
+                  "sort": "none"
+                }
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "displayName": "${__field.labels.ses}",
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "value": 0,
+                        "color": "green"
+                      },
+                      {
+                        "value": 80,
+                        "color": "red"
+                      }
+                    ]
+                  },
+                  "color": {
+                    "mode": "thresholds"
+                  },
+                  "custom": {
+                    "axisBorderShow": false,
+                    "axisCenteredZero": false,
+                    "axisColorMode": "text",
+                    "axisLabel": "",
+                    "axisPlacement": "auto",
+                    "barAlignment": 0,
+                    "barWidthFactor": 0.6,
+                    "drawStyle": "line",
+                    "fillOpacity": 0,
+                    "gradientMode": "none",
+                    "hideFrom": {
+                      "legend": false,
+                      "tooltip": false,
+                      "viz": false
+                    },
+                    "insertNulls": false,
+                    "lineInterpolation": "linear",
+                    "lineWidth": 1,
+                    "pointSize": 5,
+                    "scaleDistribution": {
+                      "type": "linear"
+                    },
+                    "showPoints": "auto",
+                    "showValues": false,
+                    "spanNulls": false,
+                    "stacking": {
+                      "group": "A",
+                      "mode": "none"
+                    },
+                    "thresholdsStyle": {
+                      "mode": "off"
+                    }
+                  }
+                },
+                "overrides": []
+              }
+            }
+          }
+        }
+      }
+    },
+    "layout": {
+      "kind": "GridLayout",
+      "spec": {
+        "items": [
+          {
+            "kind": "GridLayoutItem",
+            "spec": {
+              "x": 0,
+              "y": 0,
+              "width": 5,
+              "height": 6,
+              "element": {
+                "kind": "ElementReference",
+                "name": "panel-1"
+              }
+            }
+          },
+          {
+            "kind": "GridLayoutItem",
+            "spec": {
+              "x": 5,
+              "y": 0,
+              "width": 5,
+              "height": 6,
+              "element": {
+                "kind": "ElementReference",
+                "name": "panel-6"
+              }
+            }
+          },
+          {
+            "kind": "GridLayoutItem",
+            "spec": {
+              "x": 10,
+              "y": 0,
+              "width": 5,
+              "height": 6,
+              "element": {
+                "kind": "ElementReference",
+                "name": "panel-7"
+              }
+            }
+          },
+          {
+            "kind": "GridLayoutItem",
+            "spec": {
+              "x": 15,
+              "y": 0,
+              "width": 5,
+              "height": 6,
+              "element": {
+                "kind": "ElementReference",
+                "name": "panel-8"
+              }
+            }
+          },
+          {
+            "kind": "GridLayoutItem",
+            "spec": {
+              "x": 0,
+              "y": 6,
+              "width": 5,
+              "height": 6,
+              "element": {
+                "kind": "ElementReference",
+                "name": "panel-10"
+              }
+            }
+          },
+          {
+            "kind": "GridLayoutItem",
+            "spec": {
+              "x": 5,
+              "y": 6,
+              "width": 5,
+              "height": 6,
+              "element": {
+                "kind": "ElementReference",
+                "name": "panel-9"
+              }
+            }
+          },
+          {
+            "kind": "GridLayoutItem",
+            "spec": {
+              "x": 10,
+              "y": 6,
+              "width": 5,
+              "height": 6,
+              "element": {
+                "kind": "ElementReference",
+                "name": "panel-5"
+              }
+            }
+          },
+          {
+            "kind": "GridLayoutItem",
+            "spec": {
+              "x": 15,
+              "y": 6,
+              "width": 5,
+              "height": 6,
+              "element": {
+                "kind": "ElementReference",
+                "name": "panel-11"
+              }
+            }
+          },
+          {
+            "kind": "GridLayoutItem",
+            "spec": {
+              "x": 0,
+              "y": 12,
+              "width": 5,
+              "height": 6,
+              "element": {
+                "kind": "ElementReference",
+                "name": "panel-2"
+              }
+            }
+          },
+          {
+            "kind": "GridLayoutItem",
+            "spec": {
+              "x": 5,
+              "y": 12,
+              "width": 5,
+              "height": 6,
+              "element": {
+                "kind": "ElementReference",
+                "name": "panel-3"
+              }
+            }
+          },
+          {
+            "kind": "GridLayoutItem",
+            "spec": {
+              "x": 10,
+              "y": 12,
+              "width": 5,
+              "height": 6,
+              "element": {
+                "kind": "ElementReference",
+                "name": "panel-4"
+              }
+            }
+          },
+          {
+            "kind": "GridLayoutItem",
+            "spec": {
+              "x": 15,
+              "y": 12,
+              "width": 5,
+              "height": 6,
+              "element": {
+                "kind": "ElementReference",
+                "name": "panel-21"
+              }
+            }
+          },
+          {
+            "kind": "GridLayoutItem",
+            "spec": {
+              "x": 0,
+              "y": 18,
+              "width": 8,
+              "height": 8,
+              "element": {
+                "kind": "ElementReference",
+                "name": "panel-14"
+              }
+            }
+          },
+          {
+            "kind": "GridLayoutItem",
+            "spec": {
+              "x": 8,
+              "y": 18,
+              "width": 8,
+              "height": 8,
+              "element": {
+                "kind": "ElementReference",
+                "name": "panel-19"
+              }
+            }
+          },
+          {
+            "kind": "GridLayoutItem",
+            "spec": {
+              "x": 0,
+              "y": 26,
+              "width": 8,
+              "height": 8,
+              "element": {
+                "kind": "ElementReference",
+                "name": "panel-13"
+              }
+            }
+          },
+          {
+            "kind": "GridLayoutItem",
+            "spec": {
+              "x": 8,
+              "y": 26,
+              "width": 8,
+              "height": 8,
+              "element": {
+                "kind": "ElementReference",
+                "name": "panel-18"
+              }
+            }
+          },
+          {
+            "kind": "GridLayoutItem",
+            "spec": {
+              "x": 0,
+              "y": 34,
+              "width": 6,
+              "height": 7,
+              "element": {
+                "kind": "ElementReference",
+                "name": "panel-15"
+              }
+            }
+          },
+          {
+            "kind": "GridLayoutItem",
+            "spec": {
+              "x": 6,
+              "y": 34,
+              "width": 7,
+              "height": 7,
+              "element": {
+                "kind": "ElementReference",
+                "name": "panel-16"
+              }
+            }
+          },
+          {
+            "kind": "GridLayoutItem",
+            "spec": {
+              "x": 0,
+              "y": 41,
+              "width": 13,
+              "height": 8,
+              "element": {
+                "kind": "ElementReference",
+                "name": "panel-12"
+              }
+            }
+          }
+        ]
+      }
+    },
+    "links": [],
+    "liveNow": false,
+    "preload": false,
+    "tags": [],
+    "timeSettings": {
+      "timezone": "browser",
+      "from": "now-6h",
+      "to": "now",
+      "autoRefresh": "",
+      "autoRefreshIntervals": [
+        "5s",
+        "10s",
+        "30s",
+        "1m",
+        "5m",
+        "15m",
+        "30m",
+        "1h",
+        "2h",
+        "1d"
+      ],
+      "hideTimepicker": false,
+      "fiscalYearStartMonth": 0
+    },
+    "title": "SubAgent spawn time",
+    "variables": [
+      {
+        "kind": "CustomVariable",
+        "spec": {
+          "name": "groupby",
+          "query": "session.id,gen_ai.agent.id",
+          "current": {
+            "text": "session.id",
+            "value": "session.id"
+          },
+          "options": [],
+          "multi": false,
+          "includeAll": false,
+          "hide": "dontHide",
+          "skipUrlSync": false,
+          "allowCustomValue": true,
+          "valuesFormat": "csv"
+        }
+      }
+    ],
+    "preferences": {
+      "layout": {
+        "kind": "GridLayout",
+        "spec": {
+          "items": []
+        }
+      }
+    }
+  }
+}

@@ -14,23 +14,27 @@ fi
 REMOTE_BASE="${REMOTE_HOME}/.openclaw"
 REMOTE_WS="${REMOTE_BASE}/workspaces"
 REMOTE_SERVICES="${REMOTE_BASE}/services"
+REMOTE_SCRIPTS_DIR="${REMOTE_BASE}/scripts"
 OPENCLAW_JSON="${REMOTE_BASE}/openclaw.json"
 DB_SCENARIO="${DB_SCENARIO:-2}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SRE_TRIAGE_DIR="${SCRIPT_DIR}/data"
 
 echo "[1/6] Copy workspace definitions"
 ssh "${REMOTE}" "mkdir -p ${REMOTE_WS}/{sre,telemetry,backend,db,verifier,comms}"
-scp -r "${SCRIPT_DIR}/workspaces/sre" "${REMOTE}:${REMOTE_WS}/"
-scp -r "${SCRIPT_DIR}/workspaces/telemetry" "${REMOTE}:${REMOTE_WS}/"
-scp -r "${SCRIPT_DIR}/workspaces/backend" "${REMOTE}:${REMOTE_WS}/"
-scp -r "${SCRIPT_DIR}/workspaces/db" "${REMOTE}:${REMOTE_WS}/"
-scp -r "${SCRIPT_DIR}/workspaces/verifier" "${REMOTE}:${REMOTE_WS}/"
-scp -r "${SCRIPT_DIR}/workspaces/comms" "${REMOTE}:${REMOTE_WS}/"
+scp -r "${SRE_TRIAGE_DIR}/workspaces/sre" "${REMOTE}:${REMOTE_WS}/"
+scp -r "${SRE_TRIAGE_DIR}/workspaces/telemetry" "${REMOTE}:${REMOTE_WS}/"
+scp -r "${SRE_TRIAGE_DIR}/workspaces/backend" "${REMOTE}:${REMOTE_WS}/"
+scp -r "${SRE_TRIAGE_DIR}/workspaces/db" "${REMOTE}:${REMOTE_WS}/"
+scp -r "${SRE_TRIAGE_DIR}/workspaces/verifier" "${REMOTE}:${REMOTE_WS}/"
+scp -r "${SRE_TRIAGE_DIR}/workspaces/comms" "${REMOTE}:${REMOTE_WS}/"
 
 echo "[2/6] Copy DB API package"
 ssh "${REMOTE}" "mkdir -p ${REMOTE_SERVICES}/db_api"
-scp -r "${SCRIPT_DIR}/services/db_api/"* "${REMOTE}:${REMOTE_SERVICES}/db_api/"
+scp -r "${SRE_TRIAGE_DIR}/services/db_api/"* "${REMOTE}:${REMOTE_SERVICES}/db_api/"
+
+scp -r "${SRE_TRIAGE_DIR}/scripts/" "${REMOTE}:${REMOTE_SCRIPTS_DIR}"
 
 echo "[3/6] Ensure agent runtime dirs and seed configs"
 printf '%s
@@ -100,9 +104,9 @@ printf '%s
 'agent_list = cfg["agents"]["list"]' \
 'new_agents = [' \
 '  {"id": "sre", "name": "SRE Lead", "workspace": "'"${REMOTE_WS}"'/sre", "agentDir": "'"${REMOTE_BASE}"'/agents/sre", "identity": {"name": "SRE Lead"}, "subagents": {"allowAgents": ["telemetry", "backend", "db"]}, "tools": {"allow": ["sessions_spawn", "sessions_list", "sessions_send"]}},' \
-'  {"id": "telemetry", "name": "Telemetry Analyst", "workspace": "'"${REMOTE_WS}"'/telemetry", "agentDir": "'"${REMOTE_BASE}"'/agents/telemetry", "identity": {"name": "Telemetry"}, "tools": {"allow": ["get_metrics", "list_services", "get_service_health", "get_logs", "query_db"]}},' \
-'  {"id": "backend", "name": "Backend Specialist", "workspace": "'"${REMOTE_WS}"'/backend", "agentDir": "'"${REMOTE_BASE}"'/agents/backend", "identity": {"name": "Backend"}, "tools": {"allow": ["get_deployments", "get_logs", "get_metrics", "run_action", "query_db"]}},' \
-'  {"id": "db", "name": "Database Specialist", "workspace": "'"${REMOTE_WS}"'/db", "agentDir": "'"${REMOTE_BASE}"'/agents/db", "identity": {"name": "Database"}, "tools": {"allow": ["query_db"]}},' \
+'  {"id": "telemetry", "name": "Telemetry Analyst", "workspace": "'"${REMOTE_WS}"'/telemetry", "agentDir": "'"${REMOTE_BASE}"'/agents/telemetry", "identity": {"name": "Telemetry"}, "tools": {"allow": ["exec"]}},' \
+'  {"id": "backend", "name": "Backend Specialist", "workspace": "'"${REMOTE_WS}"'/backend", "agentDir": "'"${REMOTE_BASE}"'/agents/backend", "identity": {"name": "Backend"}, "tools": {"allow": ["exec"]}},' \
+'  {"id": "db", "name": "Database Specialist", "workspace": "'"${REMOTE_WS}"'/db", "agentDir": "'"${REMOTE_BASE}"'/agents/db", "identity": {"name": "Database"}, "tools": {"allow": ["exec"]}},' \
 '  {"id": "verifier", "name": "Verifier", "workspace": "'"${REMOTE_WS}"'/verifier", "agentDir": "'"${REMOTE_BASE}"'/agents/verifier", "identity": {"name": "Verifier"}},' \
 '  {"id": "comms", "name": "Communications", "workspace": "'"${REMOTE_WS}"'/comms", "agentDir": "'"${REMOTE_BASE}"'/agents/comms", "identity": {"name": "Communications"}}' \
 ']' \

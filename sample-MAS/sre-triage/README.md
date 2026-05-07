@@ -1,16 +1,29 @@
-OpenClaw Port for SRE Triage
+# SRE triage sample MAS
 
-This folder contains an OpenClaw-compatible port of the `sre-triage` agents and
-a Python REST API that exposes DB diagnostics for the `db` agent.
+This folder contains the assets and the installation scripts to deploy our SRE triage sample MAS.
 
-Contents
+## SRE triage sample MAS description
 
-- `workspaces/`:
-  - Six OpenClaw workspace definitions: `sre`, `telemetry`, `backend`, `db`, `comms`, `verifier`.
-- `services/db_api/`:
-  - FastAPI app serving DB diagnostics.
-- `install_remote.sh`:
-  - Automated installation script for deploying the multi-agent system to a remote host.
+This sample MAS is a set of agents that are part of a SRE triage team that is responding to incidents on an emulated SaaS product. We have statically emulated different scenarios for this MAS.
+
+In details, this sample MAS is composed of three agents and three sub-agents:
+- **The SRE lead agent**: this is the leader/coordinator of the MAS. his role is to call and coordinate the action of the other agents in order to address the incident raised by the user and propose a remediation plan that needs to be approved by the verifier agent. In particular, only this agent can call the sub-agents, which are:
+   - **the telemetry agent**: responsible for checking the telemetry coming from the different services deployed.
+   - **the DB agent**: responsible for checking that the databases are healthy.
+   - **the backend agent**: responsible for checking that everything is fine with respect to the backend.
+- **The verifier agent**: this is the verifier agent. It is responsible for making sure that the remediation plan proposed by the SRE lead agent is sound.
+- **The comms agent**: this is the communication agent. The SRE lead can delegate to this agent to draft incident updates for the user.
+
+## Contents
+
+This folder is composed of the following:
+- `data/`: The folder that contains all the assets related to the SRE triage MAS.
+   - `workspaces/`: the workspaces of the different agents, containing their IDENTITY.md, SOUL.md, etc.
+   - `services/db_api/`: a FastAPI app used to emulate our different scenarios.
+   - `scripts/`: useful scripts to drive the MAS. `change-scenario.sh` allows to change the emulated scenario, while the `reset-sessions.sh` allows to reset the state of the MAS for a clean new execution.
+- `install_remote.sh`: automated installation script for deploying the MAS to a remote host.
+- `plugin/`: an helper plugin to make the helper scripts available via discord commands.
+- `nemoclaw/`: this contains everything to deploy the SRE triage MAS in a NemoClaw instance. See the [NemoClaw README](nemoclaw/README.md) for more information.
 
 ## install_remote.sh Script
 

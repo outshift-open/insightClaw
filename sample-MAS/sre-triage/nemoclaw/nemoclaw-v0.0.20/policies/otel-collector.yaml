@@ -1,0 +1,20 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+preset:
+  name: otel-collector
+  description: "OpenTelemetry Collector access"
+
+network_policies:
+  otel-collector:
+    name: otel-collector
+    endpoints:
+      - host: ${OTEL_ENDPOINT}
+        port: 4318
+        protocol: rest
+        enforcement: enforce
+        rules:
+          - allow: { method: GET, path: "/**" }
+          - allow: { method: POST, path: "/**" }
+    binaries:
+      - { path: /** }

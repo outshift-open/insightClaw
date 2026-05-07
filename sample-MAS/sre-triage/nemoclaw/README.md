@@ -1,44 +1,61 @@
-# NemoClaw Remote Install
+# NemoClaw Install
 
-This directory contains the assets used to prepare a remote NemoClaw checkout for the SRE triage sample.
+This directory contains the assets needed to spin up a NemoClaw instance for our SRE triage sample MAS.
 
-Files:
+In details, there is a `install.sh` file that can be run to deploy everything. In effect, this script clones NemoClaw repository, checks out a given version (passed as a parameter), installs it, applies the patch for the selected version, copies `sample-MAS/sre-triage` and our observability plugin, and finally runs `nemoclaw onboard`.
 
-- `install_nemoclaw_remote.sh`: clones NemoClaw on a remote host, checks out a fixed tag, applies the local patch, copies `sample-MAS/sre-triage` into the remote repo, and runs `nemoclaw onboard`.
-- `nemoclaw-nuc-v0.0.20.diff`: local patch applied to the upstream NemoClaw checkout before onboarding.
+A set of folders, with the templated name `nemoclaw-vX.Y.Z`, contains the files needed for the different NemoClaw versions that are supported.
 
 ## Prerequisites
 
-- Local machine:
-  - `bash`
-  - `ssh`
-  - `scp`
-  - this repository checked out with `sample-MAS/sre-triage` present
-- Remote machine:
-  - `git`
-  - `nemoclaw`
-  - SSH access from the local machine
+You need to have the following installed on your machine for the installation script to run:
+- `bash`
+- `git`
+- `node` (version 22 or higher)
+- `npm`
+
 
 ## Usage
 
 Run the installer against a remote host in `user@host` form:
 
+Run the installer for a supported NemoClaw version:
 ```bash
-COMPATIBLE_API_KEY=your-key \
-./sample-MAS/sre-triage/nemoclaw/install_nemoclaw_remote.sh user@host
+$ bash install.sh <NEMOCLAW_VERSION>
 ```
+
+The parameter NEMOCLAW_VERSION must be a version that is supported by our installer (i.e., the folder `nemoclaw-${NEMOCLAW_VERSION}` exists).
+
+In addition, the script supports the following flags:
+`--help | -h` : Display an help messag and exit.
+`--cleanup | -c` : Clean up installed NemoClaw and related files. In effect, this will remove the ${TARGET_DIR} folder (see below for more information about the environment variables used by the script).
+
+The script is making use of a set of environment variables:
+
+| Env variable | Description | Default value |
+| :---: | :---: | :---: |
+| NEMOCLAW_ENDPOINT_URL | - MANDATORY - Your LLM provider endpoint | `https://your-endpoint.example.com` |
+| COMPATIBLE_API_KEY | - MANDATORY - Your LLM provider API key | `None` |
+| OTEL_ENDPOINT | The otel collector endpoint. should be of format http(s)://host:port | `None` |
+| TARGET_DIR | Where you want to download the NemoClaw repo | `/home/ubuntu/NemoClaw` |
+| NEMOCLAW_REPO_URL | The url to the NemoClaw repo | https://github.com/NVIDIA/NemoClaw.git |
+| LOCAL_TRIAGE_DIR | The path to the SRE triage data | `sample-MAS/sre-triage/data` |
+| NEMOCLAW_PROVIDER | How you want your NemoClaw instance to reach your LLM provider | `custom` |
+| NEMOCLAW_MODEL | The LLM model to be used | `vertex_ai.gemini-2.5-pro` |
+| NEMOCLAW_DOCKERFILE | The path to the Dockerfile to be used for NemoClaw onboarding | The default dockerfile |
+
 
 What the script does:
 
-1. Validates local assets and remote connectivity.
-2. Clones the NemoClaw repository on the remote host and checks out `v0.0.20` by default.
-3. Applies `nemoclaw-nuc-v0.0.20.diff` on the remote checkout.
-4. Copies `sample-MAS/sre-triage` into the remote repo as `sre-triage/openclaw`.
+1. Checks that the prerequisites are present.
+2. Clones the NemoClaw repository to the $TARGET_DIR and checks out the $NEMOCLAW_VERSION. It then installs NemoClaw from source.
+3. Applies the patches present in the `nemoclaw-${NEMOCLAW_VERSION}` folder.
+4. Prepare the building of the OpenShell image by adding the SRE triage sample MAS assets and our observability plugin.
 5. Runs `nemoclaw onboard` non-interactively with the configured model settings.
 
 ## Enter The Sandbox
 
-After the install completes, SSH to the remote machine and run:
+Once the install is finished, you can access your NemoClaw instance:
 
 ```bash
 nemoclaw my-assistant connect
@@ -54,13 +71,18 @@ openclaw tui
 
 ## Change The DB API Scenario
 
-To switch the DB API dataset, first enter the sandbox:
+Our SRE triage sample MAS comes with two scenarios:
+1. `1`: payment async timeout
+2. `2`: order DB deadlock
+
+Once you are in the sandbox (`nemoclaw my-assistant connect`), you can inspect the currently loaded scenario with the `GET /scenario` endpoint:
 
 ```bash
-nemoclaw my-assistant connect
+curl http://127.0.0.1:8765/scenario
 ```
+The response includes the selected scenario number, fixture file name, incident id, and loaded services.
 
-Then call the local DB API scenario endpoint from inside the sandbox:
+You can also switch the scenario by running:
 
 ```bash
 curl -X POST http://127.0.0.1:8765/scenario \
@@ -68,71 +90,14 @@ curl -X POST http://127.0.0.1:8765/scenario \
   -d '{"scenario": 1}'
 ```
 
-Available scenarios:
-
-1. `1`: payment async timeout
-2. `2`: order DB deadlock
-
-You can also inspect the currently loaded scenario with the `GET /scenario` endpoint:
-
-```bash
-curl http://127.0.0.1:8765/scenario
-```
-
-The response includes the selected scenario number, fixture file name, incident id, and loaded services.
-
 To list all available scenarios and see which one is currently selected, use the `GET /scenarios` endpoint:
 
 ```bash
 curl http://127.0.0.1:8765/scenarios
 ```
 
-## Dry Run
+## Scripts inside the sandbox
 
-Use `DRY_RUN=1` to print the `ssh` and `scp` commands without changing the remote machine:
-
-```bash
-DRY_RUN=1 ./sample-MAS/sre-triage/nemoclaw/install_nemoclaw_remote.sh user@host
-```
-
-In dry-run mode, the script still validates the local patch and sample directory, but it does not require `COMPATIBLE_API_KEY` and does not connect to or modify the target host.
-
-## Clean Mode
-
-Use `CLEAN=1` to remove remote install directories and exit without running clone, patch, copy, or onboarding steps:
-
-```bash
-CLEAN=1 ./sample-MAS/sre-triage/nemoclaw/install_nemoclaw_remote.sh user@host
-```
-
-This removes:
-
-- `TARGET_DIR` (default `~/NemoClaw`)
-- `REMOTE_TRIAGE_DIR` (default `~/NemoClaw/sre-triage`)
-
-You can combine it with `DRY_RUN=1` to preview the clean commands:
-
-```bash
-CLEAN=1 DRY_RUN=1 ./sample-MAS/sre-triage/nemoclaw/install_nemoclaw_remote.sh user@host
-```
-
-## Environment Variables
-
-- `TARGET_DIR`: remote path for the NemoClaw checkout. Default: `~/NemoClaw`
-- `NEMOCLAW_REPO_URL`: upstream NemoClaw git URL. Default: `https://github.com/NVIDIA/NemoClaw.git`
-- `NEMOCLAW_TAG`: git tag checked out on the remote host. Default: `v0.0.20`
-- `DIFF_FILE`: local patch file to apply remotely. Default: `sample-MAS/sre-triage/nemoclaw/nemoclaw-nuc-v0.0.20.diff`
-- `LOCAL_TRIAGE_DIR`: local source directory copied to the remote repo. Default: `sample-MAS/sre-triage`
-- `REMOTE_TRIAGE_DIR`: remote directory used to stage the sample. Default: `~/NemoClaw/sre-triage`
-- `NEMOCLAW_PROVIDER`: provider passed to onboarding. Default: `custom`
-- `NEMOCLAW_ENDPOINT_URL`: endpoint passed to onboarding. Default: `https://your-endpoint.example.com`
-- `NEMOCLAW_MODEL`: model passed to onboarding. Default: `vertex_ai/gemini-2.5-pro`
-- `NEMOCLAW_ONBOARD_FROM`: Dockerfile path passed to `nemoclaw onboard --from`. Default: `~/NemoClaw/Dockerfile`
-- `COMPATIBLE_API_KEY`: required for a real onboarding run
-- `DRY_RUN`: set to `1` to print planned actions only
-- `CLEAN`: set to `1` to remove remote install directories and exit
-
-## Notes
-
-- The remote sample is copied under `sre-triage/openclaw` because the patch expects Docker build paths rooted there.
-- The script uses `git clean -fdx` on the remote NemoClaw checkout before applying the patch, so local changes inside the remote checkout will be removed.
+Two scripts are provided along with the SRE triage sample MAS:
+- `change-scenario.sh <SCENARIO_ID>`: This allow to switch the scenario loaded (see previous section).
+- `reset-session.sh`: This will reset all the sessions for the different agents deployed for our SRE triage MAS. It should be run before any SRE triage run.

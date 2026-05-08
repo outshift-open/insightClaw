@@ -26,8 +26,7 @@
  *   - api.on()           -> typed plugin hooks (tool_result_persist, agent_end)
  */
 
-import { SpanKind, SpanStatusCode, context, trace, ROOT_CONTEXT, TraceFlags, type Span, type SpanContext, type Context, type Link } from "@opentelemetry/api";
-import { readFileSync, writeFileSync } from "node:fs";
+import { SpanKind, SpanStatusCode, context, trace, ROOT_CONTEXT, type Span, type SpanContext, type Context, type Link } from "@opentelemetry/api";
 import type { TelemetryRuntime } from "./telemetry.js";
 import type { OtelObservabilityConfig } from "./config.js";
 import {
@@ -142,6 +141,11 @@ interface PendingSpawnHandoff {
   createdAt: number;
 }
 
+interface CachedSpawnParentContext {
+  spanContext: SpanContext;
+  createdAt: number;
+}
+
 interface RootSpanSeed {
   parentContext?: Context;
   links?: Link[];
@@ -213,6 +217,10 @@ const childSessionToOrchestratorKey = new Map<string, string>();
 // subagent_delivery_target can fire between orchestrator turns when the
 // in-memory session context is already gone.
 const childSessionToSpawnContext = new Map<string, Context>();
+// Maps requester session key -> parent SpanContext saved when sessions_spawn starts.
+// This covers the gap where subagent_delivery_target runs after the request span
+// has already closed but still within the same plugin process.
+const requesterSessionToSpawnSpanContext = new Map<string, CachedSpawnParentContext>();
 const ROOT_COMPLETION_GRACE_MS = 30_000;
 const MAX_CAPTURE_CONTENT_CHARS = 4_096;
 
@@ -362,6 +370,20 @@ function consumePendingSpawnHandoff(agentId: string): PendingSpawnHandoff | unde
     pendingSpawnHandoffs.set(agentId, remaining);
   }
   return next;
+}
+
+function getFreshRequesterSpawnSpanContext(requesterSessionKey: string): SpanContext | undefined {
+  const cached = requesterSessionToSpawnSpanContext.get(requesterSessionKey);
+  if (!cached) {
+    return undefined;
+  }
+
+  if (Date.now() - cached.createdAt > PENDING_SPAWN_TTL_MS) {
+    requesterSessionToSpawnSpanContext.delete(requesterSessionKey);
+    return undefined;
+  }
+
+  return cached.spanContext;
 }
 
 /** Non-consuming peek — returns the freshest pending handoff without removing it. */
@@ -2184,19 +2206,10 @@ export function registerHooks(
           if (spawnCtxToSave) {
             const spawnSpanCtx = trace.getSpanContext(spawnCtxToSave);
             if (spawnSpanCtx?.traceId && spawnSpanCtx.traceId !== "0".repeat(32)) {
-              try {
-                const sanitized = runtimeSessionKey.replace(/[^a-zA-Z0-9._-]/g, "_");
-                writeFileSync(
-                  `/tmp/openclaw/spawn-ctx-${sanitized}.json`,
-                  JSON.stringify({
-                    traceId: spawnSpanCtx.traceId,
-                    spanId: spawnSpanCtx.spanId,
-                    traceFlags: spawnSpanCtx.traceFlags,
-                  })
-                );
-              } catch {
-                // Best effort only.
-              }
+              requesterSessionToSpawnSpanContext.set(runtimeSessionKey, {
+                spanContext: spawnSpanCtx,
+                createdAt: Date.now(),
+              });
             }
           }
         }
@@ -2597,20 +2610,17 @@ export function registerHooks(
       const savedSpawnContext = event?.childSessionKey
         ? childSessionToSpawnContext.get(String(event.childSessionKey))
         : undefined;
+      const savedRequesterSpanContext = requesterKey
+        ? getFreshRequesterSpawnSpanContext(requesterKey)
+        : undefined;
       let parentContext = sessionCtx?.agentContext ?? sessionCtx?.rootContext ?? savedSpawnContext ?? context.active();
       const effectiveSpanCtx = trace.getSpanContext(parentContext);
-      if ((!effectiveSpanCtx?.traceId || effectiveSpanCtx.traceId === "0".repeat(32)) && requesterKey) {
-        try {
-          const sanitized = requesterKey.replace(/[^a-zA-Z0-9._-]/g, "_");
-          const diskData = JSON.parse(readFileSync(`/tmp/openclaw/spawn-ctx-${sanitized}.json`, "utf8"));
+      if (!effectiveSpanCtx?.traceId || effectiveSpanCtx.traceId === "0".repeat(32)) {
+        if (savedRequesterSpanContext) {
           parentContext = trace.setSpanContext(ROOT_CONTEXT, {
-            traceId: diskData.traceId,
-            spanId: diskData.spanId,
-            traceFlags: diskData.traceFlags ?? TraceFlags.SAMPLED,
+            ...savedRequesterSpanContext,
             isRemote: true,
           });
-        } catch {
-          // File may not exist yet.
         }
       }
       const sessionId = runtimeSessionKey !== "unknown"
@@ -2802,6 +2812,13 @@ export function registerHooks(
   setInterval(() => {
     const now = Date.now();
     const maxAge = 5 * 60 * 1000; // 5 minutes
+
+    for (const [requesterSessionKey, cached] of requesterSessionToSpawnSpanContext) {
+      if (now - cached.createdAt > PENDING_SPAWN_TTL_MS) {
+        requesterSessionToSpawnSpanContext.delete(requesterSessionKey);
+      }
+    }
+
     const seen = new Set<SessionTraceContext>();
     for (const [, ctx] of sessionContextMap) {
       if (seen.has(ctx)) {

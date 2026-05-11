@@ -608,7 +608,6 @@ function handleToolOutput(
   config.histograms.toolDuration.record(durationMs, {
     "tool.name": toolName,
     "gen_ai.agent.id": agentId,
-    "session.id": getSessionId(runtimeSessionKey),
   });
 
   // Prefer toolInput captured on the span in before_tool_call; fall back to event fields.
@@ -621,7 +620,6 @@ function handleToolOutput(
   const parentContext = sessionCtx?.agentContext || sessionCtx?.rootContext || context.active();
 
   const agentSequence = getHandoffSequence(runtimeSessionKey);
-  const sessionId = getSessionId(runtimeSessionKey) || "unknown";
 
   if (toolName === "sessions_spawn") {
     // sessions_spawn: target agent ID comes from the result, handle post-result.
@@ -637,7 +635,6 @@ function handleToolOutput(
       toolInput,
       counters: config.counters,
       histograms: config.histograms,
-      sessionId,
       message: result,
       durationMs,
       agentId,
@@ -838,7 +835,6 @@ export function parseContext(event: any, histograms: any, sessionId: any, agentI
 
   histograms.contextSystemSize.record(systemData, { 
     "gen_ai.agent.id": agentId,
-    "session.id": sessionId,
   });
   
   // not available at the moment
@@ -848,25 +844,20 @@ export function parseContext(event: any, histograms: any, sessionId: any, agentI
   // });
   histograms.contextHistoryMemorySize.record(historyMemory, { 
     "gen_ai.agent.id": agentId,
-    "session.id": sessionId,
   });
   histograms.contextHistoryToolSize.record(historyTool, { 
     "gen_ai.agent.id": agentId,
-    "session.id": sessionId,
   });
   histograms.contextHistoryUserSize.record(historyUser, { 
     "gen_ai.agent.id": agentId,
-    "session.id": sessionId,
   });
 
   histograms.contextHistoryOtherSize.record(historyOthers, { 
     "gen_ai.agent.id": agentId,
-    "session.id": sessionId,
   });
   
   histograms.contextPromptSize.record(prompt ? new TextEncoder().encode(prompt).length : 0, {
     "gen_ai.agent.id": agentId,
-    "session.id": sessionId,
   });
 
   // not available at the moment
@@ -1302,7 +1293,6 @@ export function registerHooks(
         histograms.agentTurnDuration.record(durationMs, {
           "gen_ai.response.model": model,
           "gen_ai.agent.id": agentId,
-          "session.id": getSessionId(runtimeSessionKey),
         });
       }
 
@@ -1328,7 +1318,6 @@ export function registerHooks(
               const noveltyScore = getNoveltyScore(output, parentContext?.systemPrompt + parentContext?.prompt + historyString);
               histograms.noveltyScore.record(noveltyScore, {
                 "gen_ai.agent.id": agentId,
-                "session.id":  getSessionId(runtimeSessionKey),
               });
             }
           } else {
@@ -1859,7 +1848,6 @@ export function registerHooks(
           contextPrepTimers.delete(agentId); // Cleanup
           histograms.contextPreparationDuration.record(tpc, {
             "gen_ai.agent.id": agentId,
-            "session.id": sessionId,
           });
         } else {
           logger.warn?.(`[otel] No start time found for agent=${agentId} in llm_input hook — cannot record context preparation time`);
@@ -1911,7 +1899,6 @@ export function registerHooks(
             if (histograms.downstreamContextSharing) {
               histograms.downstreamContextSharing.record(noveltyScore, {
                 "gen_ai.agent.id": agentId,
-                "session.id": sessionId,
               });
             }
           } else {
@@ -2044,7 +2031,6 @@ export function registerHooks(
         // Record metric
         counters.toolCalls.add(1, {
           "tool.name": toolName,
-          "session.id": getSessionId(runtimeSessionKey),
           "gen_ai.agent.id": agentId,
         });
 

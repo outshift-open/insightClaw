@@ -126,7 +126,6 @@ export function recordMemoryToolMetrics({
 
   counters.memoryReadEvents.add(1, {
     "tool.name": toolName,
-    "session.id": sessionId,
     "gen_ai.agent.id": agentId,
   });
 
@@ -137,7 +136,6 @@ export function recordMemoryToolMetrics({
   if (results.length === 0) {
     counters.memorySearchMiss.add(1, {
       "tool.name": toolName,
-      "session.id": sessionId,
       "gen_ai.agent.id": agentId,
     });
     return;

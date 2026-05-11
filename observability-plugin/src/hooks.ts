@@ -2033,7 +2033,6 @@ export function registerHooks(
         // Record metric
         counters.toolCalls.add(1, {
           "tool.name": toolName,
-          "session.id": getSessionId(runtimeSessionKey),
           "gen_ai.agent.id": agentId,
         });
 

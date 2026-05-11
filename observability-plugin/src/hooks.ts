@@ -620,7 +620,6 @@ function handleToolOutput(
   const parentContext = sessionCtx?.agentContext || sessionCtx?.rootContext || context.active();
 
   const agentSequence = getHandoffSequence(runtimeSessionKey);
-  const sessionId = getSessionId(runtimeSessionKey) || "unknown";
 
   if (toolName === "sessions_spawn") {
     // sessions_spawn: target agent ID comes from the result, handle post-result.
@@ -636,7 +635,6 @@ function handleToolOutput(
       toolInput,
       counters: config.counters,
       histograms: config.histograms,
-      sessionId,
       message: result,
       durationMs,
       agentId,

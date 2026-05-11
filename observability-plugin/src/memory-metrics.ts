@@ -28,7 +28,6 @@ interface RecordMemoryToolMetricsParams {
   toolInput: unknown;
   counters: MemoryCounters;
   histograms: MemoryHistograms;
-  sessionId: string;
   message: any;
   durationMs: number;
   agentId: string;
@@ -57,7 +56,6 @@ export function recordMemoryToolMetrics({
   toolInput,
   counters,
   histograms,
-  sessionId,
   message,
   durationMs,
   agentId,

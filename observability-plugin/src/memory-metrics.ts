@@ -66,13 +66,11 @@ export function recordMemoryToolMetrics({
     if (isLongTermMemoryAccess(toolInput)) {
       counters.memoryReadEvents.add(1, {
         "tool.name": toolName,
-        "session.id": sessionId,
         "gen_ai.agent.id": agentId,
       });
 
       histograms.memoryReadDuration.record(durationMs, {
         "tool.name": toolName,
-        "session.id": sessionId,
         "gen_ai.agent.id": agentId,
       });
     }
@@ -83,12 +81,10 @@ export function recordMemoryToolMetrics({
     if (isLongTermMemoryAccess(toolInput)) {
       counters.memoryWriteEvents.add(1, {
         "tool.name": toolName,
-        "session.id": sessionId,
         "gen_ai.agent.id": agentId,
       });
       histograms.memoryWriteDuration.record(durationMs, {
         "tool.name": toolName,
-        "session.id": sessionId,
         "gen_ai.agent.id": agentId,
       });
     }
@@ -99,12 +95,10 @@ export function recordMemoryToolMetrics({
     if (isLongTermMemoryAccess(toolInput)) {
       counters.memoryEditEvents.add(1, {
         "tool.name": toolName,
-        "session.id": sessionId,
         "gen_ai.agent.id": agentId,
       });
       histograms.memoryEditDuration.record(durationMs, {
         "tool.name": toolName,
-        "session.id": sessionId,
         "gen_ai.agent.id": agentId,
       });
     }
@@ -154,12 +148,10 @@ export function recordMemoryToolMetrics({
 
   histograms.memorySearchFragmentation.record(memoryFragmentation, {
     "tool.name": toolName,
-    "session.id": sessionId,
     "gen_ai.agent.id": agentId,
   });
   counters.memorySearchHit.add(1, {
     "tool.name": toolName,
-    "session.id": sessionId,
     "gen_ai.agent.id": agentId,
   });
 }

@@ -5,8 +5,8 @@
     "name": "ad48pzd",
     "namespace": "default",
     "uid": "ee082f03-7777-4672-9534-8077893968cd",
-    "resourceVersion": "1778601819947013",
-    "generation": 13,
+    "resourceVersion": "1778658997798012",
+    "generation": 24,
     "creationTimestamp": "2026-05-12T11:35:45Z",
     "labels": {
       "grafana.app/deprecatedInternalID": "3781073906208768"
@@ -16,7 +16,7 @@
       "grafana.app/folder": "",
       "grafana.app/saved-from-ui": "Grafana v13.0.0 (e9de482b51)",
       "grafana.app/updatedBy": "user:cfj1mqfycjaioc",
-      "grafana.app/updatedTimestamp": "2026-05-12T16:03:39Z"
+      "grafana.app/updatedTimestamp": "2026-05-13T07:56:37Z"
     }
   },
   "spec": {
@@ -685,7 +685,7 @@
                     },
                     "showPoints": "auto",
                     "showValues": false,
-                    "spanNulls": false,
+                    "spanNulls": true,
                     "stacking": {
                       "group": "A",
                       "mode": "none"
@@ -1117,7 +1117,7 @@
                     },
                     "showPoints": "auto",
                     "showValues": false,
-                    "spanNulls": false,
+                    "spanNulls": true,
                     "stacking": {
                       "group": "A",
                       "mode": "none"
@@ -1127,32 +1127,7 @@
                     }
                   }
                 },
-                "overrides": [
-                  {
-                    "__systemRef": "hideSeriesFrom",
-                    "matcher": {
-                      "id": "byNames",
-                      "options": {
-                        "mode": "exclude",
-                        "names": [
-                          "main"
-                        ],
-                        "prefix": "All except:",
-                        "readOnly": true
-                      }
-                    },
-                    "properties": [
-                      {
-                        "id": "custom.hideFrom",
-                        "value": {
-                          "legend": false,
-                          "tooltip": true,
-                          "viz": true
-                        }
-                      }
-                    ]
-                  }
-                ]
+                "overrides": []
               }
             }
           }
@@ -3156,7 +3131,7 @@
                     },
                     "showPoints": "auto",
                     "showValues": false,
-                    "spanNulls": false,
+                    "spanNulls": true,
                     "stacking": {
                       "group": "A",
                       "mode": "none"
@@ -3366,13 +3341,13 @@
                     "insertNulls": false,
                     "lineInterpolation": "linear",
                     "lineWidth": 1,
-                    "pointSize": 5,
+                    "pointSize": 1,
                     "scaleDistribution": {
                       "type": "linear"
                     },
-                    "showPoints": "auto",
+                    "showPoints": "always",
                     "showValues": false,
-                    "spanNulls": false,
+                    "spanNulls": true,
                     "stacking": {
                       "group": "A",
                       "mode": "none"
@@ -3588,7 +3563,7 @@
                     },
                     "showPoints": "auto",
                     "showValues": false,
-                    "spanNulls": false,
+                    "spanNulls": true,
                     "stacking": {
                       "group": "A",
                       "mode": "none"
@@ -3804,7 +3779,7 @@
                     },
                     "showPoints": "auto",
                     "showValues": false,
-                    "spanNulls": false,
+                    "spanNulls": true,
                     "stacking": {
                       "group": "A",
                       "mode": "none"
@@ -4894,32 +4869,223 @@
                     }
                   }
                 },
-                "overrides": [
-                  {
-                    "__systemRef": "hideSeriesFrom",
-                    "matcher": {
-                      "id": "byNames",
-                      "options": {
-                        "mode": "exclude",
-                        "names": [
-                          "backend"
-                        ],
-                        "prefix": "All except:",
-                        "readOnly": true
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "panel-34": {
+        "kind": "Panel",
+        "spec": {
+          "id": 34,
+          "title": "Agent turns counters",
+          "description": "",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "grafana-clickhouse-datasource",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "ffj1myq8fjeo0f"
+                      },
+                      "spec": {
+                        "builderOptions": {
+                          "aggregates": [],
+                          "columns": [
+                            {
+                              "alias": "TimeUnix",
+                              "hint": "time",
+                              "name": "TimeUnix",
+                              "type": "DateTime64(9)"
+                            }
+                          ],
+                          "database": "otel",
+                          "filters": [
+                            {
+                              "condition": "AND",
+                              "filterType": "custom",
+                              "hint": "time",
+                              "key": "",
+                              "operator": "WITH IN DASHBOARD TIME RANGE",
+                              "type": "datetime"
+                            },
+                            {
+                              "condition": "AND",
+                              "filterType": "custom",
+                              "key": "MetricName",
+                              "label": "MetricName",
+                              "operator": "=",
+                              "type": "String",
+                              "value": "openclaw.memory.search_miss"
+                            }
+                          ],
+                          "groupBy": [
+                            "Attributes"
+                          ],
+                          "limit": 1000,
+                          "meta": {},
+                          "mode": "trend",
+                          "orderBy": [
+                            {
+                              "default": true,
+                              "dir": "ASC",
+                              "hint": "time",
+                              "name": ""
+                            }
+                          ],
+                          "queryType": "timeseries",
+                          "table": "otel_metrics_sum"
+                        },
+                        "editorType": "sql",
+                        "format": 0,
+                        "meta": {
+                          "builderOptions": {
+                            "aggregates": [],
+                            "columns": [
+                              {
+                                "alias": "TimeUnix",
+                                "hint": "time",
+                                "name": "TimeUnix",
+                                "type": "DateTime64(9)"
+                              }
+                            ],
+                            "database": "otel",
+                            "filters": [
+                              {
+                                "condition": "AND",
+                                "filterType": "custom",
+                                "hint": "time",
+                                "key": "",
+                                "operator": "WITH IN DASHBOARD TIME RANGE",
+                                "type": "datetime"
+                              },
+                              {
+                                "condition": "AND",
+                                "filterType": "custom",
+                                "key": "MetricName",
+                                "label": "MetricName",
+                                "operator": "=",
+                                "type": "String",
+                                "value": "openclaw.memory.search_miss"
+                              }
+                            ],
+                            "groupBy": [
+                              "Attributes"
+                            ],
+                            "limit": 1000,
+                            "meta": {},
+                            "mode": "trend",
+                            "orderBy": [
+                              {
+                                "default": true,
+                                "dir": "ASC",
+                                "hint": "time",
+                                "name": ""
+                              }
+                            ],
+                            "queryType": "timeseries",
+                            "table": "otel_metrics_sum"
+                          }
+                        },
+                        "pluginVersion": "4.15.0",
+                        "queryType": "timeseries",
+                        "rawSql": "SELECT $__timeInterval(TimeUnix) as \"time\", Attributes['gen_ai.agent.id'] AS ses, max(Count) FROM \"otel\".\"otel_metrics_histogram\" \nWHERE ( time >= $__fromTime AND time <= $__toTime ) AND ( MetricName = 'openclaw.agent.turn_duration' )\nGROUP BY ses, time ORDER BY time ASC LIMIT 1000"
                       }
                     },
-                    "properties": [
+                    "refId": "Memory fragmentation",
+                    "hidden": false
+                  }
+                }
+              ],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "timeseries",
+            "version": "13.0.0",
+            "spec": {
+              "options": {
+                "annotations": {
+                  "clustering": -1,
+                  "multiLane": false
+                },
+                "legend": {
+                  "calcs": [],
+                  "displayMode": "list",
+                  "placement": "bottom",
+                  "showLegend": true
+                },
+                "tooltip": {
+                  "hideZeros": false,
+                  "mode": "single",
+                  "sort": "none"
+                }
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "displayName": "${__field.labels.ses}",
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
                       {
-                        "id": "custom.hideFrom",
-                        "value": {
-                          "legend": false,
-                          "tooltip": true,
-                          "viz": true
-                        }
+                        "value": 0,
+                        "color": "green"
+                      },
+                      {
+                        "value": 80,
+                        "color": "red"
                       }
                     ]
+                  },
+                  "color": {
+                    "mode": "palette-classic"
+                  },
+                  "custom": {
+                    "axisBorderShow": false,
+                    "axisCenteredZero": false,
+                    "axisColorMode": "text",
+                    "axisLabel": "",
+                    "axisPlacement": "auto",
+                    "barAlignment": 0,
+                    "barWidthFactor": 0.6,
+                    "drawStyle": "line",
+                    "fillOpacity": 0,
+                    "gradientMode": "none",
+                    "hideFrom": {
+                      "legend": false,
+                      "tooltip": false,
+                      "viz": false
+                    },
+                    "insertNulls": false,
+                    "lineInterpolation": "linear",
+                    "lineWidth": 1,
+                    "pointSize": 5,
+                    "scaleDistribution": {
+                      "type": "linear"
+                    },
+                    "showPoints": "auto",
+                    "showValues": false,
+                    "spanNulls": false,
+                    "stacking": {
+                      "group": "A",
+                      "mode": "none"
+                    },
+                    "thresholdsStyle": {
+                      "mode": "off"
+                    }
                   }
-                ]
+                },
+                "overrides": []
               }
             }
           }
@@ -5743,7 +5909,7 @@
               "x": 0,
               "y": 26,
               "width": 8,
-              "height": 8,
+              "height": 6,
               "element": {
                 "kind": "ElementReference",
                 "name": "panel-14"
@@ -5756,7 +5922,7 @@
               "x": 8,
               "y": 26,
               "width": 8,
-              "height": 8,
+              "height": 6,
               "element": {
                 "kind": "ElementReference",
                 "name": "panel-28"
@@ -5769,7 +5935,7 @@
               "x": 16,
               "y": 26,
               "width": 8,
-              "height": 8,
+              "height": 6,
               "element": {
                 "kind": "ElementReference",
                 "name": "panel-27"
@@ -5780,9 +5946,9 @@
             "kind": "GridLayoutItem",
             "spec": {
               "x": 0,
-              "y": 34,
+              "y": 32,
               "width": 8,
-              "height": 8,
+              "height": 6,
               "element": {
                 "kind": "ElementReference",
                 "name": "panel-12"
@@ -5793,9 +5959,9 @@
             "kind": "GridLayoutItem",
             "spec": {
               "x": 8,
-              "y": 34,
+              "y": 32,
               "width": 8,
-              "height": 8,
+              "height": 6,
               "element": {
                 "kind": "ElementReference",
                 "name": "panel-25"
@@ -5805,23 +5971,10 @@
           {
             "kind": "GridLayoutItem",
             "spec": {
-              "x": 16,
-              "y": 34,
-              "width": 8,
-              "height": 8,
-              "element": {
-                "kind": "ElementReference",
-                "name": "panel-29"
-              }
-            }
-          },
-          {
-            "kind": "GridLayoutItem",
-            "spec": {
               "x": 0,
-              "y": 42,
+              "y": 38,
               "width": 8,
-              "height": 7,
+              "height": 6,
               "element": {
                 "kind": "ElementReference",
                 "name": "panel-26"
@@ -5832,12 +5985,12 @@
             "kind": "GridLayoutItem",
             "spec": {
               "x": 8,
-              "y": 42,
+              "y": 38,
               "width": 8,
-              "height": 7,
+              "height": 6,
               "element": {
                 "kind": "ElementReference",
-                "name": "panel-32"
+                "name": "panel-29"
               }
             }
           },
@@ -5845,7 +5998,7 @@
             "kind": "GridLayoutItem",
             "spec": {
               "x": 0,
-              "y": 49,
+              "y": 44,
               "width": 6,
               "height": 8,
               "element": {
@@ -5858,7 +6011,7 @@
             "kind": "GridLayoutItem",
             "spec": {
               "x": 6,
-              "y": 49,
+              "y": 44,
               "width": 6,
               "height": 8,
               "element": {
@@ -5871,8 +6024,34 @@
             "kind": "GridLayoutItem",
             "spec": {
               "x": 12,
-              "y": 49,
+              "y": 44,
               "width": 6,
+              "height": 8,
+              "element": {
+                "kind": "ElementReference",
+                "name": "panel-32"
+              }
+            }
+          },
+          {
+            "kind": "GridLayoutItem",
+            "spec": {
+              "x": 0,
+              "y": 52,
+              "width": 9,
+              "height": 8,
+              "element": {
+                "kind": "ElementReference",
+                "name": "panel-34"
+              }
+            }
+          },
+          {
+            "kind": "GridLayoutItem",
+            "spec": {
+              "x": 9,
+              "y": 52,
+              "width": 9,
               "height": 8,
               "element": {
                 "kind": "ElementReference",
@@ -5884,12 +6063,12 @@
             "kind": "GridLayoutItem",
             "spec": {
               "x": 0,
-              "y": 57,
+              "y": 60,
               "width": 8,
               "height": 8,
               "element": {
                 "kind": "ElementReference",
-                "name": "panel-18"
+                "name": "panel-16"
               }
             }
           },
@@ -5897,7 +6076,7 @@
             "kind": "GridLayoutItem",
             "spec": {
               "x": 8,
-              "y": 57,
+              "y": 60,
               "width": 7,
               "height": 8,
               "element": {
@@ -5910,12 +6089,12 @@
             "kind": "GridLayoutItem",
             "spec": {
               "x": 15,
-              "y": 57,
-              "width": 8,
+              "y": 60,
+              "width": 7,
               "height": 8,
               "element": {
                 "kind": "ElementReference",
-                "name": "panel-16"
+                "name": "panel-18"
               }
             }
           }

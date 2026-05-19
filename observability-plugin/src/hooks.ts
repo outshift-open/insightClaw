@@ -962,6 +962,7 @@ function startRootSpan(
         "openclaw.session.key": primaryRuntimeSessionKey,
         "openclaw.message.direction": "inbound",
         "openclaw.message.from": from,
+        ...config.customAttributes,
         ...seed?.attributes,
       },
       links: allLinks.length > 0 ? allLinks : undefined,

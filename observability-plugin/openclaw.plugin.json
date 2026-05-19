@@ -49,6 +49,10 @@
       "label": "Extra Resource Attributes",
       "advanced": true
     },
+    "customAttributes": {
+      "label": "Custom Root Span Attributes",
+      "advanced": true
+    },
     "experimentalMetrics": {
       "label": "Enable Experimental Metrics",
       "help": "Enables experimental OpenClaw metrics that are not yet fully vetted for production use. These may be noisy or have performance implications."
@@ -117,6 +121,13 @@
           "type": "string"
         },
         "description": "Additional OTel resource attributes"
+      },
+      "customAttributes": {
+        "type": "object",
+        "additionalProperties": {
+          "type": ["string", "number", "boolean"]
+        },
+        "description": "Additional attributes applied only to the openclaw.request root span"
       },
       "experimentalMetrics": {
         "type": "boolean",

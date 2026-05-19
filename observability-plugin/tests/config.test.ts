@@ -19,6 +19,7 @@ test("parseConfig returns documented defaults for missing values", () => {
     spanCacheVerboseLogs: false,
     metricsIntervalMs: 30_000,
     resourceAttributes: {},
+    customAttributes: {},
     experimentalMetrics: false,
     embeddingsProcessing: false,
   });
@@ -27,6 +28,7 @@ test("parseConfig returns documented defaults for missing values", () => {
 test("parseConfig preserves supported overrides and rejects invalid shapes", () => {
   const headers = { Authorization: "Bearer token" };
   const resourceAttributes = { "deployment.environment": "test" };
+  const customAttributes = { "workspace-id": "UUID1", "mas-id": "UUID2", shard: 4, enabled: true };
 
   const config = parseConfig({
     endpoint: "http://collector:4317",
@@ -41,6 +43,7 @@ test("parseConfig preserves supported overrides and rejects invalid shapes", () 
     spanCacheVerboseLogs: true,
     metricsIntervalMs: 1500,
     resourceAttributes,
+    customAttributes,
     experimentalMetrics: false,
     embeddingsProcessing: false,
   });
@@ -57,6 +60,7 @@ test("parseConfig preserves supported overrides and rejects invalid shapes", () 
   assert.equal(config.spanCacheVerboseLogs, true);
   assert.equal(config.metricsIntervalMs, 1500);
   assert.equal(config.resourceAttributes, resourceAttributes);
+  assert.deepEqual(config.customAttributes, customAttributes);
   assert.equal(config.experimentalMetrics, false);
   assert.equal(config.embeddingsProcessing, false);
 });
@@ -75,6 +79,7 @@ test("parseConfig falls back when values are unsupported", () => {
     spanCacheVerboseLogs: "no",
     metricsIntervalMs: 999,
     resourceAttributes: [],
+    customAttributes: { ok: "value", nested: { no: true } },
     experimentalMetrics: false,
     embeddingsProcessing: false,
   });
@@ -91,6 +96,7 @@ test("parseConfig falls back when values are unsupported", () => {
   assert.equal(config.spanCacheVerboseLogs, false);
   assert.equal(config.metricsIntervalMs, 30_000);
   assert.deepEqual(config.resourceAttributes, {});
+  assert.deepEqual(config.customAttributes, { ok: "value" });
   assert.equal(config.experimentalMetrics, false);
   assert.equal(config.embeddingsProcessing, false);
 });

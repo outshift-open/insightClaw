@@ -662,6 +662,108 @@ test("registerHooks links sessions_send target turns back to the sending tool sp
     "target openclaw.request must NOT carry a redundant agent_send link");
 });
 
+test("registerHooks reuses cached requester spawn context for subagent delivery after requester cleanup", async () => {
+  const telemetry = createTelemetry();
+  const { api, typedHooks } = createApi();
+  const originalSetInterval = globalThis.setInterval;
+
+  globalThis.setInterval = ((() => ({ unref() {} })) as unknown) as typeof setInterval;
+
+  try {
+    registerHooks(api as any, () => telemetry as any, {
+      endpoint: "http://localhost:4318",
+      protocol: "http",
+      serviceName: "test-service",
+      headers: {},
+      traces: true,
+      metrics: true,
+      logs: false,
+      captureContent: false,
+      spanCache: false,
+      spanCacheVerboseLogs: false,
+      metricsIntervalMs: 30_000,
+      resourceAttributes: {},
+    });
+
+    const requesterSession = "agent:planner:spawn-cache";
+    const childSession = "agent:reviewer:subagent:delivery-target";
+    const requesterCtx = { conversationId: requesterSession, channelId: "webchat", agentId: "planner" };
+
+    typedHooks.get("message_received")?.(
+      {
+        content: "Start a reviewer subagent",
+        metadata: { conversationId: requesterSession, channelId: "webchat" },
+      },
+      requesterCtx
+    );
+
+    typedHooks.get("before_agent_start")?.(
+      { agentId: "planner", model: "claude", conversationId: requesterSession },
+      requesterCtx
+    );
+
+    typedHooks.get("before_tool_call")?.(
+      {
+        toolName: "sessions_spawn",
+        toolCallId: "spawn-cache-1",
+        input: { targetAgentId: "reviewer" },
+        conversationId: requesterSession,
+      },
+      requesterCtx
+    );
+
+    typedHooks.get("tool_result_persist")?.(
+      {
+        toolName: "sessions_spawn",
+        toolCallId: "spawn-cache-1",
+        input: { targetAgentId: "reviewer" },
+        message: {
+          content: [{ type: "text", text: JSON.stringify({ targetAgentId: "reviewer", conversationId: childSession }) }],
+        },
+        conversationId: requesterSession,
+      },
+      requesterCtx
+    );
+
+    await typedHooks.get("agent_end")?.(
+      {
+        agentId: "planner",
+        success: true,
+        durationMs: 5,
+        messages: [{ role: "assistant", content: "Spawned reviewer" }],
+        conversationId: requesterSession,
+      },
+      requesterCtx
+    );
+
+    typedHooks.get("subagent_delivery_target")?.(
+      {
+        requesterSessionKey: requesterSession,
+        childSessionKey: childSession,
+        childRunId: "child-run-1",
+        spawnMode: "detached",
+      },
+      {}
+    );
+
+    const plannerAgent = telemetry.tracer.spans.find((entry) =>
+      entry.name === "openclaw.agent.turn" && entry.options.attributes["openclaw.session.key"] === requesterSession
+    );
+    const deliverySpan = telemetry.tracer.spans.find((entry) => entry.name === "subagent.delivery_target");
+    const deliveryParent = deliverySpan?.context ? trace.getSpan(deliverySpan.context) : undefined;
+
+    assert.ok(plannerAgent, "requester agent span must exist");
+    assert.ok(deliverySpan, "subagent.delivery_target span must exist");
+    assert.equal(
+      deliveryParent?.spanContext().spanId,
+      plannerAgent?.span.spanContext().spanId,
+      "subagent.delivery_target parent must come from cached requester spawn context"
+    );
+  } finally {
+    globalThis.setInterval = originalSetInterval;
+  }
+});
+
 test("registerHooks records span-cache-backed memory failure rate and logs its inputs", () => {
   const telemetry = createTelemetry();
   const { api, typedHooks, logs } = createApi();

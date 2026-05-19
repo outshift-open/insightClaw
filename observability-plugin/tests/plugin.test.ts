@@ -14,11 +14,15 @@ test("plugin metadata and config schema stay aligned with the public contract", 
     protocol: "grpc",
     captureContent: true,
     spanCacheVerboseLogs: true,
+    customAttributes: {
+      "workspace-id": "UUID1",
+    },
   });
 
   assert.equal(config.protocol, "grpc");
   assert.equal(config.captureContent, true);
   assert.equal(config.spanCacheVerboseLogs, true);
+  assert.deepEqual(config.customAttributes, { "workspace-id": "UUID1" });
   assert.equal(config.endpoint, "http://localhost:4318");
 });
 
@@ -44,6 +48,10 @@ test("plugin register wires the gateway method, cli command, tool, and service",
       logs: false,
       captureContent: true,
       spanCacheVerboseLogs: true,
+      customAttributes: {
+        "workspace-id": "UUID1",
+        "mas-id": "UUID2",
+      },
     },
     logger,
     registerGatewayMethod(name: string, handler: unknown) {
@@ -93,6 +101,10 @@ test("plugin register wires the gateway method, cli command, tool, and service",
       captureContent: true,
       spanCache: false,
       spanCacheVerboseLogs: true,
+      customAttributes: {
+        "workspace-id": "UUID1",
+        "mas-id": "UUID2",
+      },
       experimentalMetrics: false,
       embeddingsProcessing: false,
     },

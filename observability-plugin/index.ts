@@ -24,6 +24,10 @@
  *             "captureContent": false,
  *             "spanCache": false,
  *             "spanCacheVerboseLogs": false,
+ *             "customAttributes": {
+ *               "workspace-id": "UUID1",
+ *               "mas-id": "UUID2"
+ *             },
  *             "experimentalMetrics": false,
  *             "embeddingsProcessing": false,
  *           }
@@ -85,6 +89,7 @@ const otelObservabilityPlugin = {
             captureContent: config.captureContent,
             spanCache: config.spanCache,
             spanCacheVerboseLogs: config.spanCacheVerboseLogs,
+            customAttributes: config.customAttributes,
             experimentalMetrics: config.experimentalMetrics,
             embeddingsProcessing: config.embeddingsProcessing,
           },
@@ -111,6 +116,7 @@ const otelObservabilityPlugin = {
             console.log(`  Capture content: ${config.captureContent ? "✅" : "❌"}`);
             console.log(`  Span cache:      ${config.spanCache ? "✅" : "❌"}`);
             console.log(`  Cache verbose logs: ${config.spanCacheVerboseLogs ? "✅" : "❌"}`);
+            console.log(`  Root span attrs: ${Object.keys(config.customAttributes).length}`);
             console.log(`  Initialized:     ${telemetry ? "✅" : "❌"}`);
             console.log(`  Experimental metrics: ${config.experimentalMetrics ? "✅" : "❌"}`);
             console.log(`  Embeddings processing: ${config.embeddingsProcessing ? "✅" : "❌"}`);
@@ -214,6 +220,7 @@ const otelObservabilityPlugin = {
             captureContent: config.captureContent,
             spanCache: config.spanCache,
             spanCacheVerboseLogs: config.spanCacheVerboseLogs,
+            customAttributes: config.customAttributes,
             experimentalMetrics: config.experimentalMetrics,
             embeddingsProcessing: config.embeddingsProcessing,
           };

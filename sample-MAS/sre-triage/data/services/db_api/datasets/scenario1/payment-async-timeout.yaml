@@ -37,7 +37,7 @@
 #   - api-gateway:             healthy, propagating payment-service 504s only
 #   - inventory-service:       healthy, P99 elevated by scheduled batch job
 #   - payment-gateway-cache:   healthy, transient AOF rewrite spike at 14:08
-
+---
 id: payment-async-timeout
 description: >
   Async HTTP client timeout in payment-service v3.7.2 cascades to 504 errors.
@@ -51,7 +51,7 @@ services:
     aliases: [payment_service]
 
     metrics:
-      latency_ms: { p50: 1823.4, p95: 4087.1, p99: 4212.8 }
+      latency_ms: {p50: 1823.4, p95: 4087.1, p99: 4212.8}
       error_rate: 0.2318
       requests_per_second: 312.4
       named:
@@ -130,13 +130,21 @@ services:
       - level: WARN
         message: "[payment-service] P99 latency crossed 4000ms threshold — SLO breach imminent"
       - level: WARN
-        message: "[payment-service] HTTP connection pool 78% utilised (156/200 threads waiting)"
+        message: "[payment-service] HTTP connection pool 78% utilised (117/150 threads waiting)"
       - level: ERROR
         message: "[payment-service] Checkout flow error: PaymentGatewayException: Read timed out"
       - level: ERROR
         message: "[payment-service] 5xx error rate: 23.2% (baseline <0.5%)"
       - level: INFO
         message: "[payment-service] Circuit breaker for payment-gateway: CLOSED (monitoring)"
+      - level: WARN
+        message: "[payment-service] retry_policy=payment_retry_on_timeout triggered 624 retries in last 60s"
+      - level: WARN
+        message: "[payment-service] Worker thread saturation: 117/150 threads occupied (max seen: 144/150)"
+      - level: INFO
+        message: "[payment-service] Feature flag payment_retry_on_timeout=enabled (rollout: 100%)"
+      - level: WARN
+        message: "[payment-service] JVM GC pause P99=487ms (baseline: 45ms)"
 
     feature_flags:
       payment_retry_on_timeout:
@@ -189,32 +197,6 @@ services:
         #   is controlled by AsyncPaymentGatewayClient (introduced in v3.7.2)
         #   and is hardcoded to 2000ms — not exposed as a config key yet.
 
-    logs:
-      - level: ERROR
-        message: "[payment-service] Payment gateway call to upstream timed out (attempt 1/2)"
-      - level: ERROR
-        message: "[payment-service] Payment gateway call to upstream timed out (attempt 2/2) — retry exhausted"
-      - level: ERROR
-        message: "[payment-service] POST /v1/charge → 504 Gateway Timeout (upstream: payment-gateway:443)"
-      - level: WARN
-        message: "[payment-service] P99 latency crossed 4000ms threshold — SLO breach imminent"
-      - level: WARN
-        message: "[payment-service] HTTP connection pool 78% utilised (117/150 threads waiting)"
-      - level: ERROR
-        message: "[payment-service] Checkout flow error: PaymentGatewayException: Read timed out"
-      - level: ERROR
-        message: "[payment-service] 5xx error rate: 23.2% (baseline <0.5%)"
-      - level: INFO
-        message: "[payment-service] Circuit breaker for payment-gateway: CLOSED (monitoring)"
-      - level: WARN
-        message: "[payment-service] retry_policy=payment_retry_on_timeout triggered 624 retries in last 60s"
-      - level: WARN
-        message: "[payment-service] Worker thread saturation: 117/150 threads occupied (max seen: 144/150)"
-      - level: INFO
-        message: "[payment-service] Feature flag payment_retry_on_timeout=enabled (rollout: 100%)"
-      - level: WARN
-        message: "[payment-service] JVM GC pause P99=487ms (baseline: 45ms)"
-
     rollback:
       from_version: "3.7.2"
       to_version: "3.7.1"
@@ -226,7 +208,7 @@ services:
     aliases: [payment-db, payments_db]
 
     metrics:
-      latency_ms: { p50: 8.2, p95: 18.7, p99: 14.2 }
+      latency_ms: {p50: 8.2, p95: 18.7, p99: 14.2}
       error_rate: 0.0002
       requests_per_second: 2341.0
       named:
@@ -309,7 +291,7 @@ services:
     aliases: [auth_service, authentication-service]
 
     metrics:
-      latency_ms: { p50: 12.1, p95: 34.7, p99: 41.2 }
+      latency_ms: {p50: 12.1, p95: 34.7, p99: 41.2}
       error_rate: 0.0003
       requests_per_second: 1847.3
 
@@ -346,7 +328,7 @@ services:
     aliases: [gateway, ingress]
 
     metrics:
-      latency_ms: { p50: 4.3, p95: 9.1, p99: 11.8 }
+      latency_ms: {p50: 4.3, p95: 9.1, p99: 11.8}
       error_rate: 0.231
       requests_per_second: 4823.0
 
@@ -386,7 +368,7 @@ services:
     aliases: [inventory, catalog-inventory]
 
     metrics:
-      latency_ms: { p50: 28.4, p95: 87.3, p99: 134.6 }
+      latency_ms: {p50: 28.4, p95: 87.3, p99: 134.6}
       error_rate: 0.0008
       requests_per_second: 612.1
 
@@ -422,7 +404,7 @@ services:
     aliases: [notifications, notif-service]
 
     metrics:
-      latency_ms: { p50: 43.2, p95: 180.4, p99: 312.7 }
+      latency_ms: {p50: 43.2, p95: 180.4, p99: 312.7}
       error_rate: 0.0011
       requests_per_second: 88.3
       named:
@@ -487,7 +469,7 @@ services:
     aliases: [gateway-cache, pgw-redis]
 
     metrics:
-      latency_ms: { p50: 0.9, p95: 8.4, p99: 11.2 }
+      latency_ms: {p50: 0.9, p95: 8.4, p99: 11.2}
       hit_rate: 0.987
       requests_per_second: 941.0
 

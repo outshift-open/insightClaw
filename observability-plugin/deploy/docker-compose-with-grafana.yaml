@@ -1,0 +1,93 @@
+services:
+  clickhouse:
+    image: clickhouse/clickhouse-server:25.3
+    container_name: clickhouse-server
+    ports:
+      - "8123:8123"
+      - "9000:9000"
+    environment:
+      CLICKHOUSE_DB: otel
+      CLICKHOUSE_USER: otel
+      CLICKHOUSE_PASSWORD: otel
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8123/ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.121.0
+    container_name: otel-collector
+    user: "0:0"
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+      - "13133:13133"
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otel-collector-config.yaml:ro
+      - /tmp:/host-tmp:ro
+    command: ["--config", "/etc/otel-collector-config.yaml"]
+    healthcheck:
+      test: ["CMD", "/otelcol-contrib", "--version"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+    environment:
+      GF_INSTALL_PLUGINS: grafana-clickhouse-datasource
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./ui/grafana/metric-dashboard.json:/var/lib/grafana/dashboards/metric-dashboard.json:ro
+    configs:
+      - source: grafana_clickhouse_datasource
+        target: /etc/grafana/provisioning/datasources/clickhouse.yaml
+      - source: grafana_dashboard_provider
+        target: /etc/grafana/provisioning/dashboards/provider.yaml
+
+volumes:
+  clickhouse-data:
+  grafana-data:
+
+configs:
+  grafana_dashboard_provider:
+    content: |
+      apiVersion: 1
+      providers:
+        - name: default
+          type: file
+          options:
+            path: /var/lib/grafana/dashboards
+  grafana_clickhouse_datasource:
+    content: |
+      apiVersion: 1
+      datasources:
+        - name: ClickHouse
+          type: grafana-clickhouse-datasource
+          isDefault: true
+          jsonData:
+            server: clickhouse-server
+            port: 9000
+            protocol: native
+            defaultDatabase: otel
+            username: otel
+            otelEnabled: true
+            otelVersion: latest
+          secureJsonData:
+            password: otel
+          editable: true

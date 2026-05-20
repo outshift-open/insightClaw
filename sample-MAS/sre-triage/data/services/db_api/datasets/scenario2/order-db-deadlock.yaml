@@ -28,7 +28,7 @@ services:
     aliases: [order_service]
 
     metrics:
-      latency_ms: { p50: 4310.1, p95: 9870.2, p99: 12284.6 }
+      latency_ms: {p50: 4310.1, p95: 9870.2, p99: 12284.6}
       error_rate: 0.6712
       requests_per_second: 187.3
 
@@ -112,7 +112,7 @@ services:
     aliases: [inventory_service]
 
     metrics:
-      latency_ms: { p50: 310.2, p95: 1240.8, p99: 2180.1 }
+      latency_ms: {p50: 310.2, p95: 1240.8, p99: 2180.1}
       error_rate: 0.187
       requests_per_second: 94.1
 

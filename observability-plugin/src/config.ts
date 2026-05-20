@@ -29,6 +29,8 @@ export interface OtelObservabilityConfig {
   metricsIntervalMs: number;
   /** Additional OTel resource attributes */
   resourceAttributes: Record<string, string>;
+  /** Additional span attributes applied only to the openclaw.request root span */
+  customAttributes: Record<string, string | number | boolean>;
   /** Enable processing of embeddings for context analysis (novelty, similarity) */
   embeddingsProcessing: boolean;
 }
@@ -47,14 +49,31 @@ const DEFAULTS: OtelObservabilityConfig = {
   spanCacheVerboseLogs: false,
   metricsIntervalMs: 30_000,
   resourceAttributes: {},
+  customAttributes: {},
   embeddingsProcessing: false,
 };
+
+function parsePrimitiveAttributeRecord(
+  value: unknown
+): Record<string, string | number | boolean> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {};
+  }
+
+  return Object.fromEntries(
+    Object.entries(value).filter(([, entryValue]) => {
+      const entryType = typeof entryValue;
+      return entryType === "string" || entryType === "number" || entryType === "boolean";
+    })
+  ) as Record<string, string | number | boolean>;
+}
 
 export function parseConfig(raw: unknown): OtelObservabilityConfig {
   const obj =
     raw && typeof raw === "object" && !Array.isArray(raw)
       ? (raw as Record<string, unknown>)
       : {};
+  const customAttributes = parsePrimitiveAttributeRecord(obj.customAttributes);
 
   return {
     endpoint: typeof obj.endpoint === "string" ? obj.endpoint : DEFAULTS.endpoint,
@@ -87,6 +106,7 @@ export function parseConfig(raw: unknown): OtelObservabilityConfig {
       !Array.isArray(obj.resourceAttributes)
         ? (obj.resourceAttributes as Record<string, string>)
         : DEFAULTS.resourceAttributes,
+    customAttributes,
     embeddingsProcessing:
       typeof obj.embeddingsProcessing === "boolean"
         ? obj.embeddingsProcessing

@@ -85,7 +85,11 @@ openclaw.request (root span)
               "metrics": true,
               "captureContent": true,
               "spanCache": false,
-              "spanCacheVerboseLogs": false
+                "spanCacheVerboseLogs": false,
+                "customAttributes": {
+                  "workspace-id": "UUID1",
+                  "mas-id": "UUID2"
+                }
            }
          }
        }
@@ -105,6 +109,8 @@ npm install
 ```bash
 openclaw gateway restart
 ```
+
+`customAttributes` is copied onto each `openclaw.request` root span only. The attributes are exported with the trace to the OTel collector and downstream sink without being repeated on every child span.
 
 ### Enable GenAI SDK Auto-Instrumentation
 

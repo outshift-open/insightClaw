@@ -21,6 +21,7 @@ processors:
     send_batch_size: 512
 
 exporters:
+  # ── ClickHouse (local storage) ──────────────────────────────────────────────
   clickhouse:
     endpoint: tcp://clickhouse:9000?dial_timeout=10s&compress=lz4
     database: otel
@@ -32,18 +33,39 @@ exporters:
     create_schema: true
     timeout: 5s
 
+  # ── Splunk Observability Cloud – traces & logs (OTLP HTTP) ──────────────────
+  # Set env vars on the VM:
+  #   export SPLUNK_ACCESS_TOKEN=<your ingest token>
+  #   export SPLUNK_REALM=<realm, e.g. us1>
+  otlphttp/splunk:
+    traces_endpoint: https://ingest.${SPLUNK_REALM}.signalfx.com/v2/trace/otlp
+    logs_endpoint: https://ingest.${SPLUNK_REALM}.signalfx.com/v3/event
+    headers:
+      X-SF-TOKEN: "${SPLUNK_ACCESS_TOKEN}"
+    sending_queue:
+      num_consumers: 8
+
+  # ── Splunk Observability Cloud – metrics (SignalFx native format) ───────────
+  # signalfx exporter IS included in otelcol-contrib. Preferred over otlphttp
+  # for metrics: translates OTel→SignalFx format and handles trace correlation.
+  signalfx:
+    access_token: "${SPLUNK_ACCESS_TOKEN}"
+    realm: "${SPLUNK_REALM}"
+    sending_queue:
+      num_consumers: 8
+
 service:
   extensions: [health_check]
   pipelines:
     traces:
       receivers: [otlp]
       processors: [batch]
-      exporters: [clickhouse]
+      exporters: [clickhouse, otlphttp/splunk, signalfx]
     logs:
       receivers: [otlp, filelog]
       processors: [batch]
-      exporters: [clickhouse]
+      exporters: [clickhouse, otlphttp/splunk]
     metrics:
       receivers: [otlp]
       processors: [batch]
-      exporters: [clickhouse]
+      exporters: [clickhouse, signalfx]

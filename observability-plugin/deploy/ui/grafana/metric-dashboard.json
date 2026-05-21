@@ -64,7 +64,7 @@
                       "group": "grafana-clickhouse-datasource",
                       "version": "v0",
                       "datasource": {
-                        "name": "ffj1myq8fjeo0f"
+                        "name": "ClickHouse"
                       },
                       "spec": {
                         "builderOptions": {
@@ -288,7 +288,7 @@
                       "group": "grafana-clickhouse-datasource",
                       "version": "v0",
                       "datasource": {
-                        "name": "ffj1myq8fjeo0f"
+                        "name": "ClickHouse"
                       },
                       "spec": {
                         "builderOptions": {
@@ -504,7 +504,7 @@
                       "group": "grafana-clickhouse-datasource",
                       "version": "v0",
                       "datasource": {
-                        "name": "ffj1myq8fjeo0f"
+                        "name": "ClickHouse"
                       },
                       "spec": {
                         "builderOptions": {
@@ -720,7 +720,7 @@
                       "group": "grafana-clickhouse-datasource",
                       "version": "v0",
                       "datasource": {
-                        "name": "ffj1myq8fjeo0f"
+                        "name": "ClickHouse"
                       },
                       "spec": {
                         "builderOptions": {
@@ -936,7 +936,7 @@
                       "group": "grafana-clickhouse-datasource",
                       "version": "v0",
                       "datasource": {
-                        "name": "ffj1myq8fjeo0f"
+                        "name": "ClickHouse"
                       },
                       "spec": {
                         "builderOptions": {
@@ -1152,7 +1152,7 @@
                       "group": "grafana-clickhouse-datasource",
                       "version": "v0",
                       "datasource": {
-                        "name": "ffj1myq8fjeo0f"
+                        "name": "ClickHouse"
                       },
                       "spec": {
                         "builderOptions": {
@@ -1368,7 +1368,7 @@
                       "group": "grafana-clickhouse-datasource",
                       "version": "v0",
                       "datasource": {
-                        "name": "ffj1myq8fjeo0f"
+                        "name": "ClickHouse"
                       },
                       "spec": {
                         "builderOptions": {
@@ -1584,7 +1584,7 @@
                       "group": "grafana-clickhouse-datasource",
                       "version": "v0",
                       "datasource": {
-                        "name": "ffj1myq8fjeo0f"
+                        "name": "ClickHouse"
                       },
                       "spec": {
                         "builderOptions": {
@@ -1825,7 +1825,7 @@
                       "group": "grafana-clickhouse-datasource",
                       "version": "v0",
                       "datasource": {
-                        "name": "ffj1myq8fjeo0f"
+                        "name": "ClickHouse"
                       },
                       "spec": {
                         "builderOptions": {
@@ -2041,7 +2041,7 @@
                       "group": "grafana-clickhouse-datasource",
                       "version": "v0",
                       "datasource": {
-                        "name": "ffj1myq8fjeo0f"
+                        "name": "ClickHouse"
                       },
                       "spec": {
                         "builderOptions": {
@@ -2278,7 +2278,7 @@
                       "group": "grafana-clickhouse-datasource",
                       "version": "v0",
                       "datasource": {
-                        "name": "ffj1myq8fjeo0f"
+                        "name": "ClickHouse"
                       },
                       "spec": {
                         "builderOptions": {
@@ -2502,7 +2502,7 @@
                       "group": "grafana-clickhouse-datasource",
                       "version": "v0",
                       "datasource": {
-                        "name": "ffj1myq8fjeo0f"
+                        "name": "ClickHouse"
                       },
                       "spec": {
                         "builderOptions": {
@@ -2726,7 +2726,7 @@
                       "group": "grafana-clickhouse-datasource",
                       "version": "v0",
                       "datasource": {
-                        "name": "ffj1myq8fjeo0f"
+                        "name": "ClickHouse"
                       },
                       "spec": {
                         "builderOptions": {
@@ -2950,7 +2950,7 @@
                       "group": "grafana-clickhouse-datasource",
                       "version": "v0",
                       "datasource": {
-                        "name": "ffj1myq8fjeo0f"
+                        "name": "ClickHouse"
                       },
                       "spec": {
                         "builderOptions": {
@@ -3166,7 +3166,7 @@
                       "group": "grafana-clickhouse-datasource",
                       "version": "v0",
                       "datasource": {
-                        "name": "ffj1myq8fjeo0f"
+                        "name": "ClickHouse"
                       },
                       "spec": {
                         "builderOptions": {
@@ -3382,7 +3382,7 @@
                       "group": "grafana-clickhouse-datasource",
                       "version": "v0",
                       "datasource": {
-                        "name": "ffj1myq8fjeo0f"
+                        "name": "ClickHouse"
                       },
                       "spec": {
                         "builderOptions": {
@@ -3598,7 +3598,7 @@
                       "group": "grafana-clickhouse-datasource",
                       "version": "v0",
                       "datasource": {
-                        "name": "ffj1myq8fjeo0f"
+                        "name": "ClickHouse"
                       },
                       "spec": {
                         "builderOptions": {
@@ -3814,7 +3814,7 @@
                       "group": "grafana-clickhouse-datasource",
                       "version": "v0",
                       "datasource": {
-                        "name": "ffj1myq8fjeo0f"
+                        "name": "ClickHouse"
                       },
                       "spec": {
                         "builderOptions": {
@@ -4015,7 +4015,7 @@
         "kind": "Panel",
         "spec": {
           "id": 3,
-          "title": "Search Search Miss",
+          "title": "Memory Search Miss",
           "description": "",
           "links": [],
           "data": {
@@ -4030,7 +4030,7 @@
                       "group": "grafana-clickhouse-datasource",
                       "version": "v0",
                       "datasource": {
-                        "name": "ffj1myq8fjeo0f"
+                        "name": "ClickHouse"
                       },
                       "spec": {
                         "builderOptions": {
@@ -4246,7 +4246,7 @@
                       "group": "grafana-clickhouse-datasource",
                       "version": "v0",
                       "datasource": {
-                        "name": "ffj1myq8fjeo0f"
+                        "name": "ClickHouse"
                       },
                       "spec": {
                         "builderOptions": {
@@ -4462,7 +4462,7 @@
                       "group": "grafana-clickhouse-datasource",
                       "version": "v0",
                       "datasource": {
-                        "name": "ffj1myq8fjeo0f"
+                        "name": "ClickHouse"
                       },
                       "spec": {
                         "builderOptions": {
@@ -4678,7 +4678,7 @@
                       "group": "grafana-clickhouse-datasource",
                       "version": "v0",
                       "datasource": {
-                        "name": "ffj1myq8fjeo0f"
+                        "name": "ClickHouse"
                       },
                       "spec": {
                         "builderOptions": {
@@ -4894,7 +4894,7 @@
                       "group": "grafana-clickhouse-datasource",
                       "version": "v0",
                       "datasource": {
-                        "name": "ffj1myq8fjeo0f"
+                        "name": "ClickHouse"
                       },
                       "spec": {
                         "builderOptions": {
@@ -5110,7 +5110,7 @@
                       "group": "grafana-clickhouse-datasource",
                       "version": "v0",
                       "datasource": {
-                        "name": "ffj1myq8fjeo0f"
+                        "name": "ClickHouse"
                       },
                       "spec": {
                         "builderOptions": {
@@ -5326,7 +5326,7 @@
                       "group": "grafana-clickhouse-datasource",
                       "version": "v0",
                       "datasource": {
-                        "name": "ffj1myq8fjeo0f"
+                        "name": "ClickHouse"
                       },
                       "spec": {
                         "builderOptions": {
@@ -5550,7 +5550,7 @@
                       "group": "grafana-clickhouse-datasource",
                       "version": "v0",
                       "datasource": {
-                        "name": "ffj1myq8fjeo0f"
+                        "name": "ClickHouse"
                       },
                       "spec": {
                         "builderOptions": {

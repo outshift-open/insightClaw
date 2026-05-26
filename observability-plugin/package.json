@@ -1,7 +1,7 @@
 {
-  "name": "@openclaw/openclaw-deep-observability",
+  "name": "@openclaw/insightclaw",
   "version": "0.1.0",
-  "description": "OpenTelemetry Observe PoC plugin for OpenClaw — traces, metrics, and logs for your AI agent using OpenLLMetry",
+  "description": "InsightClaw plugin for OpenClaw — traces, metrics, and deep observability for your OpenClaw agents.",
   "type": "module",
   "openclaw": {
     "extensions": [
@@ -19,11 +19,10 @@
   "keywords": [
     "openclaw",
     "opentelemetry",
-    "openclaw-deep-observability",
+    "insightclaw",
     "llm",
     "tracing",
     "metrics",
-    "dynatrace",
     "openllmetry"
   ],
   "author": "Pavan S",

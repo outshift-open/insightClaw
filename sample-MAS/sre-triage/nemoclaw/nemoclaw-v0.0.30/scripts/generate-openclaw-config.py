@@ -94,7 +94,7 @@ def build_config(env: dict | None = None) -> dict:
     inference_compat = json.loads(
         base64.b64decode(env["NEMOCLAW_INFERENCE_COMPAT_B64"]).decode("utf-8")
     )
-    inference_compat = { "supportsUsageInStreaming": True }
+    inference_compat = {"supportsUsageInStreaming": True}
 
     msg_channels = json.loads(
         base64.b64decode(
@@ -147,7 +147,9 @@ def build_config(env: dict | None = None) -> dict:
     # Normalize schemeless URLs before parsing — urlparse("remote-host:18789")
     # misclassifies hostname as scheme. Mirrors ensureScheme() in dashboard-contract.ts.
     _normalized_url = chat_ui_url
-    if chat_ui_url and not re.match(r"^[a-z][a-z0-9+.-]*://", chat_ui_url, re.IGNORECASE):
+    if chat_ui_url and not re.match(
+        r"^[a-z][a-z0-9+.-]*://", chat_ui_url, re.IGNORECASE
+    ):
         _normalized_url = f"http://{chat_ui_url}"
 
     parsed = urlparse(_normalized_url)
@@ -164,8 +166,7 @@ def build_config(env: dict | None = None) -> dict:
     # re-enable device auth for non-loopback URLs (security default).
     _is_remote = not is_loopback(parsed.hostname or "")
     disable_device_auth = (
-        env.get("NEMOCLAW_DISABLE_DEVICE_AUTH", "") == "1"
-        or _is_remote
+        env.get("NEMOCLAW_DISABLE_DEVICE_AUTH", "") == "1" or _is_remote
     )
     allow_insecure = parsed.scheme == "http"
 
@@ -209,7 +210,7 @@ def build_config(env: dict | None = None) -> dict:
         },
         "bonjour": {"enabled": False},
         "qqbot": {"enabled": False},
-        "openclaw-deep-observability": {
+        "insightclaw": {
             "enabled": True,
             "config": {
                 "endpoint": "http://127.0.0.1:4318",
@@ -219,9 +220,9 @@ def build_config(env: dict | None = None) -> dict:
                 "metrics": True,
                 "captureContent": True,
                 "spanCache": False,
-                "spanCacheVerboseLogs": False
-            }
-        }
+                "spanCacheVerboseLogs": False,
+            },
+        },
     }
 
     _bundled_provider_plugins = {
@@ -265,16 +266,10 @@ def build_config(env: dict | None = None) -> dict:
                 {
                     "id": "sre",
                     "name": "sre",
-                    "identity": {
-                        "name": "sre"
-                    },
+                    "identity": {"name": "sre"},
                     "workspace": "/sandbox/.openclaw-data/workspaces/sre",
                     "agentDir": "/sandbox/.openclaw-data/agents/sre/agent",
-                    "subagents": {
-                        "allowAgents": [
-                            "telemetry", "backend", "db"
-                        ]
-                    },
+                    "subagents": {"allowAgents": ["telemetry", "backend", "db"]},
                     "tools": {
                         "allow": [
                             "sessions_spawn",
@@ -282,80 +277,52 @@ def build_config(env: dict | None = None) -> dict:
                             "sessions_send",
                             "sessions_yield",
                         ]
-                    }
+                    },
                 },
                 {
                     "id": "telemetry",
                     "name": "telemetry",
-                    "identity": {
-                        "name": "telemetry"
-                    },
+                    "identity": {"name": "telemetry"},
                     "workspace": "/sandbox/.openclaw-data/workspaces/telemetry",
                     "agentDir": "/sandbox/.openclaw-data/agents/telemetry/agent",
-                    "tools": {
-                        "allow": [
-                            "exec"
-                        ]
-                    }
+                    "tools": {"allow": ["exec"]},
                 },
                 {
                     "id": "backend",
                     "name": "backend",
-                    "identity": {
-                        "name": "backend"
-                    },
+                    "identity": {"name": "backend"},
                     "workspace": "/sandbox/.openclaw-data/workspaces/backend",
                     "agentDir": "/sandbox/.openclaw-data/agents/backend/agent",
-                    "tools": {
-                        "allow": [
-                            "exec"
-                        ]
-                    }
+                    "tools": {"allow": ["exec"]},
                 },
                 {
                     "id": "db",
                     "name": "db",
-                    "identity": {
-                        "name": "db"
-                    },
+                    "identity": {"name": "db"},
                     "workspace": "/sandbox/.openclaw-data/workspaces/db",
                     "agentDir": "/sandbox/.openclaw-data/agents/db/agent",
-                    "tools": {
-                        "allow": [
-                            "exec"
-                        ]
-                    }
+                    "tools": {"allow": ["exec"]},
                 },
                 {
                     "id": "verifier",
                     "name": "verifier",
-                    "identity": {
-                        "name": "verifier"
-                    },
+                    "identity": {"name": "verifier"},
                     "workspace": "/sandbox/.openclaw-data/workspaces/verifier",
-                    "agentDir": "/sandbox/.openclaw-data/agents/verifier/agent"
+                    "agentDir": "/sandbox/.openclaw-data/agents/verifier/agent",
                 },
                 {
                     "id": "comms",
                     "name": "Communications",
-                    "identity": {
-                        "name": "Communications"
-                    },
+                    "identity": {"name": "Communications"},
                     "workspace": "/sandbox/.openclaw-data/workspaces/comms",
-                    "agentDir": "/sandbox/.openclaw-data/agents/comms/agent"
+                    "agentDir": "/sandbox/.openclaw-data/agents/comms/agent",
                 },
                 {
                     "id": "main",
                     "workspace": "/sandbox/.openclaw-data/workspaces/sre",
-                    "subagents": {
-                        "allowAgents": [
-                            "telemetry",
-                            "backend",
-                            "db"
-                        ]
-                    }
-                }
-            ]
+                    "subagents": {"allowAgents": ["telemetry", "backend", "db"]},
+                },
+            ],
         },
         "models": {"mode": "merge", "providers": providers},
         "channels": {"defaults": {}, **_ch_cfg},
@@ -388,10 +355,9 @@ def build_config(env: dict | None = None) -> dict:
         # unless they match NEMOCLAW_PROVIDER_KEY. That keeps the baked image
         # limited to the provider selected during onboard.
         "plugins": {
-            "load": {
-                "paths": ["/sandbox/.openclaw-data/plugins/observability/"]
-            },
-            "entries": plugin_entries},
+            "load": {"paths": ["/sandbox/.openclaw-data/plugins/observability/"]},
+            "entries": plugin_entries,
+        },
         "gateway": {
             "mode": "local",
             "controlUi": {
@@ -408,8 +374,8 @@ def build_config(env: dict | None = None) -> dict:
             },
             "agentToAgent": {
                 "enabled": True,
-            }
-        }
+            },
+        },
     }
 
     if env.get("NEMOCLAW_WEB_SEARCH_ENABLED", "") == "1":

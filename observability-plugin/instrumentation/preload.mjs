@@ -125,5 +125,5 @@ process.on("SIGTERM", () => sdk.shutdown());
 process.on("SIGINT", () => sdk.shutdown());
 
 console.log(
-  `[otel-preload] GenAI instrumentation active (providers=${providerNames.join(",")}, endpoint=${OTLP_ENDPOINT}, IITM loader registered)`
+  `[insightClaw] GenAI auto instrumentation active (providers=${providerNames.join(",")}, endpoint=${OTLP_ENDPOINT}, IITM loader registered)`
 );

@@ -1,6 +1,6 @@
-# OpenClaw Deep Observability
+# InsightClaw
 
-OpenClaw Deep Observability adds OpenTelemetry-based tracing and metrics to
+InsightClaw adds OpenTelemetry-based tracing and metrics to
 OpenClaw with a focus on end-to-end request visibility for multi-agent workflows.
 
 The main deliverable in this repository is a custom OpenClaw observability plugin that captures:
@@ -38,10 +38,10 @@ The main deliverable in this repository is a custom OpenClaw observability plugi
    {
      "plugins": {
        "load": {
-         "paths": ["/absolute/path/to/openclaw-deep-observability/observability-plugin"]
+         "paths": ["/absolute/path/to/insightClaw/observability-plugin"]
        },
        "entries": {
-         "openclaw-deep-observability": {
+         "insightClaw": {
            "enabled": true,
            "config": {
              "endpoint": "http://host.docker.internal:4318",

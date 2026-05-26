@@ -55,18 +55,18 @@ jobs:
         run: |
           VERSION=$(node -p "require('./package.json').version")
           cd artifact/package
-          zip -r "../openclaw-deep-observability-${VERSION}.zip" .
+          zip -r "../insightClaw-${VERSION}.zip" .
 
       - name: Upload compiled dist
         uses: actions/upload-artifact@v7
         with:
-          name: openclaw-deep-observability-dist
+          name: insightClaw-dist
           path: observability-plugin/dist
 
       - name: Upload release bundle
         uses: actions/upload-artifact@v7
         with:
-          name: openclaw-deep-observability-bundle
+          name: insightClaw-bundle
           path: |
             artifact/package
             artifact/*.zip

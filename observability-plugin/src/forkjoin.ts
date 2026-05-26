@@ -89,12 +89,12 @@ export function registerToolSpan(
       first.span.setAttribute("ioa_observe.fork.parent_name", agentName);
       first.span.setAttribute("ioa_observe.fork.parent_sequence", agentSequence);
       loggerRef?.info && loggerRef.info(
-        `[otel:forkjoin] Fork group detected: runtimeSession=${sessionKey}, forkId=${existing.forkId}, ` +
+        `[insightClaw:forkjoin] Fork group detected: runtimeSession=${sessionKey}, forkId=${existing.forkId}, ` +
         `branch[0]=${first.toolName}, branch[1]=${toolName} (window=${now - existing.firstTimestamp}ms)`
       );
     } else {
       loggerRef?.debug && loggerRef.debug(
-        `[otel:forkjoin] Fork branch added: runtimeSession=${sessionKey}, forkId=${existing.forkId}, ` +
+        `[insightClaw:forkjoin] Fork branch added: runtimeSession=${sessionKey}, forkId=${existing.forkId}, ` +
         `branch[${branchIndex}]=${toolName}, total=${existing.tools.length}`
       );
     }
@@ -123,7 +123,7 @@ export function registerToolSpan(
   });
 
   loggerRef?.debug && loggerRef.debug(
-    `[otel:forkjoin] New tool registered (potential fork): runtimeSession=${sessionKey}, ` +
+    `[insightClaw:forkjoin] New tool registered (potential fork): runtimeSession=${sessionKey}, ` +
     `tool=${toolName}, candidateForkId=${forkId}`
   );
 
@@ -144,7 +144,7 @@ export function finalizeAgentTurn(
 
   if (!group || group.tools.length < 2) {
     loggerRef?.debug && loggerRef.debug(
-      `[otel:forkjoin] Agent turn finalized: runtimeSession=${sessionKey}, ` +
+      `[insightClaw:forkjoin] Agent turn finalized: runtimeSession=${sessionKey}, ` +
       `tools=${group?.tools.length ?? 0} (no fork — need ≥2 concurrent tools)`
     );
     return null; // No fork detected (0 or 1 tool)
@@ -154,11 +154,11 @@ export function finalizeAgentTurn(
   completedForks.set(sessionKey, group);
 
   loggerRef?.info && loggerRef.info(
-    `[otel:forkjoin] Fork group finalized: runtimeSession=${sessionKey}, forkId=${group.forkId}, ` +
+    `[insightClaw:forkjoin] Fork group finalized: runtimeSession=${sessionKey}, forkId=${group.forkId}, ` +
     `branches=${group.tools.length} [${group.tools.map(t => t.toolName).join(", ")}]`
   );
   loggerRef?.debug && loggerRef.debug(
-    `[otel:forkjoin]   awaiting join from next agent`
+    `[insightClaw:forkjoin]   awaiting join from next agent`
   );
 
   return {
@@ -188,7 +188,7 @@ export function consumeJoin(
   completedForks.delete(sessionKey);
 
   loggerRef?.info && loggerRef.info(
-    `[otel:forkjoin] Join consumed: runtimeSession=${sessionKey}, forkId=${group.forkId}, ` +
+    `[insightClaw:forkjoin] Join consumed: runtimeSession=${sessionKey}, forkId=${group.forkId}, ` +
     `joining ${group.tools.length} branches [${group.tools.map(t => t.toolName).join(", ")}]`
   );
 
@@ -217,7 +217,7 @@ export function cleanupForkJoin(sessionKey: string): void {
   completedForks.delete(sessionKey);
   if (hadPending || hadCompleted) {
     loggerRef?.debug && loggerRef.debug(
-      `[otel:forkjoin] Cleaned up fork/join state: runtimeSession=${sessionKey}, ` +
+      `[insightClaw:forkjoin] Cleaned up fork/join state: runtimeSession=${sessionKey}, ` +
       `hadPending=${hadPending}, hadCompleted=${hadCompleted}`
     );
   }

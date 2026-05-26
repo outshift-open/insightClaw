@@ -1,5 +1,5 @@
 /**
- * OpenClaw Deep Observability Plugin
+ * InsightClaw Plugin
  *
  * Provides full OpenTelemetry Deep Observability for OpenClaw:
  *   - Connected distributed traces (request → agent turn → tools)
@@ -13,7 +13,7 @@
  *   {
  *     "plugins": {
  *       "entries": {
- *         "openclaw-deep-observability": {
+ *         "insightclaw": {
  *           "enabled": true,
  *           "config": {
  *             "endpoint": "http://localhost:4318",
@@ -56,9 +56,9 @@ const registerHooks =
 let telemetry: TelemetryRuntime | null = null;
 let unsubscribeDiagnostics: (() => void) | null = null;
 
-const otelObservabilityPlugin = {
-  id: "openclaw-deep-observability",
-  name: "OpenClaw Deep Observability Plugin",
+const insightClawPlugin = {
+  id: "insightclaw",
+  name: "InsightClaw Plugin",
   description:
     "Connected traces, cost tracking, and metrics for OpenClaw via OpenTelemetry",
 
@@ -75,7 +75,7 @@ const otelObservabilityPlugin = {
     // ── RPC: status endpoint ────────────────────────────────────────
 
     api.registerGatewayMethod(
-      "openclaw-deep-observability.status",
+      "insightclaw.status",
       ({ respond }: { respond: (ok: boolean, payload?: unknown) => void }) => {
         respond(true, {
           initialized: telemetry !== null,
@@ -103,9 +103,9 @@ const otelObservabilityPlugin = {
       ({ program }: { program: any }) => {
         program
           .command("otel")
-          .description("OpenClaw Deep Observability Plugin status")
+          .description("InsightClaw Plugin status")
           .action(async () => {
-            console.log("🔭 OpenClaw Deep Observability Plugin");
+            console.log("🔭 InsightClaw Plugin");
             console.log("─".repeat(40));
             console.log(`  Endpoint:        ${config.endpoint}`);
             console.log(`  Protocol:        ${config.protocol}`);
@@ -141,10 +141,10 @@ const otelObservabilityPlugin = {
     // ── Background service ──────────────────────────────────────────
 
     api.registerService({
-      id: "openclaw-deep-observability",
+      id: "insightclaw",
 
       start: async () => {
-        logger.info("[otel] Starting OpenTelemetry Observe PoC...");
+        logger.info("[insightClaw] Starting InsightClaw service...");
 
         // 1. Initialize our OTel providers FIRST (traces + metrics)
         //    This registers our TracerProvider as global, so all spans
@@ -170,14 +170,14 @@ const otelObservabilityPlugin = {
         // This gives us cost data and accurate token counts
         unsubscribeDiagnostics = await registerDiagnosticsListener(telemetry, logger);
         if (hasDiagnosticsSupport()) {
-          logger.info("[otel] ✅ Integrated with OpenClaw diagnostics (cost tracking enabled)");
+          logger.info("[insightClaw] ✅ Integrated with OpenClaw diagnostics (cost tracking enabled)");
         }
 
-        logger.info("[otel] ✅ Observe PoC pipeline active");
+        logger.info("[insightClaw] ✅ pipeline active");
         logger.info(
-          `[otel]   Traces=${config.traces} Metrics=${config.metrics} Logs=${config.logs}`
+          `[insightClaw]   Traces=${config.traces} Metrics=${config.metrics} Logs=${config.logs}`
         );
-        logger.info(`[otel]   Endpoint=${config.endpoint} (${config.protocol})`);
+        logger.info(`[insightClaw]   Endpoint=${config.endpoint} (${config.protocol})`);
       },
 
       stop: async () => {
@@ -189,20 +189,20 @@ const otelObservabilityPlugin = {
         if (telemetry) {
           await telemetry.shutdown();
           telemetry = null;
-          logger.info("[otel] Telemetry shut down");
+          logger.info("[insightClaw] Telemetry shut down");
         }
       },
     });
 
-    // ── Agent tool: otel_status ─────────────────────────────────────
-    // Lets the agent check Observe PoC status in conversation
+    // ── Agent tool: insightclaw_status ─────────────────────────────────────
+    // Lets the agent check InsightClaw status in conversation
 
     api.registerTool(
       {
-        name: "otel_status",
-        label: "OTel Status",
+        name: "insightclaw_status",
+        label: "InsightClaw Status",
         description:
-          "Check the OpenTelemetry observability plugin status and configuration.",
+          "Check the InsightClaw plugin status and configuration.",
         parameters: {
           type: "object",
           properties: {},
@@ -239,7 +239,7 @@ const otelObservabilityPlugin = {
   },
 };
 
-export default otelObservabilityPlugin;
+export default insightClawPlugin;
 
 // ── Span Cache public API ─────────────────────────────────────────
 // Re-exported so callers (e.g., tests or metric-computation helpers)

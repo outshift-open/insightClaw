@@ -173,8 +173,12 @@ class SceneStore:
             "idle_connections": idle,
             "waiting_queries": 0,
             "blocking_queries": [],
-            "longest_running_query_seconds": round(_hash_float(service_name, "db_longest_q", 0.05, 0.4), 2),
-            "max_lock_wait_ms": round(_hash_float(service_name, "db_lock_wait", 0.5, 5.0), 1),
+            "longest_running_query_seconds": round(
+                _hash_float(service_name, "db_longest_q", 0.05, 0.4), 2
+            ),
+            "max_lock_wait_ms": round(
+                _hash_float(service_name, "db_lock_wait", 0.5, 5.0), 1
+            ),
             "conclusion": "No blocking queries detected. Database is healthy.",
         }
 
@@ -183,9 +187,21 @@ class SceneStore:
         if isinstance(blocking, dict) and blocking:
             return blocking
 
-        metrics = service.get("metrics", {}) if isinstance(service.get("metrics"), dict) else {}
-        analysis = service.get("query_analysis", {}) if isinstance(service.get("query_analysis"), dict) else {}
-        slow_queries = analysis.get("slow_queries", []) if isinstance(analysis.get("slow_queries"), list) else []
+        metrics = (
+            service.get("metrics", {})
+            if isinstance(service.get("metrics"), dict)
+            else {}
+        )
+        analysis = (
+            service.get("query_analysis", {})
+            if isinstance(service.get("query_analysis"), dict)
+            else {}
+        )
+        slow_queries = (
+            analysis.get("slow_queries", [])
+            if isinstance(analysis.get("slow_queries"), list)
+            else []
+        )
 
         deadlocks_5m = int(metrics.get("deadlock_count_last_5min", 0) or 0)
         blocking_count = int(metrics.get("blocking_queries", 0) or 0)
@@ -198,7 +214,11 @@ class SceneStore:
                 "deadlocks_last_5min": deadlocks_5m,
                 "blocking_query_count": blocking_count,
                 "lock_wait_avg_ms": lock_wait_avg_ms,
-                "suspected_query_patterns": [q.get("query_pattern") for q in slow_queries[:3] if isinstance(q, dict)],
+                "suspected_query_patterns": [
+                    q.get("query_pattern")
+                    for q in slow_queries[:3]
+                    if isinstance(q, dict)
+                ],
                 "conclusion": "Lock contention/deadlock pressure detected from fixture metrics and query analysis.",
             }
 
@@ -215,7 +235,11 @@ class SceneStore:
         if isinstance(pool, dict) and pool:
             return pool
 
-        metrics = service.get("metrics", {}) if isinstance(service.get("metrics"), dict) else {}
+        metrics = (
+            service.get("metrics", {})
+            if isinstance(service.get("metrics"), dict)
+            else {}
+        )
         pool_size = int(metrics.get("connection_pool_size", 100) or 100)
         active = int(metrics.get("active_connections", 0) or 0)
         waiting = int(metrics.get("blocking_queries", 0) or 0)
@@ -226,9 +250,11 @@ class SceneStore:
         note = (
             "Connection pool saturation detected."
             if status == "critical"
-            else "Connection pool elevated."
-            if status == "degraded"
-            else "Connection pool within normal range."
+            else (
+                "Connection pool elevated."
+                if status == "degraded"
+                else "Connection pool within normal range."
+            )
         )
 
         return {
@@ -246,7 +272,11 @@ class SceneStore:
         if isinstance(stat, dict) and stat:
             return stat
 
-        metrics = service.get("metrics", {}) if isinstance(service.get("metrics"), dict) else {}
+        metrics = (
+            service.get("metrics", {})
+            if isinstance(service.get("metrics"), dict)
+            else {}
+        )
         max_connections = int(metrics.get("connection_pool_size", 200) or 200)
         active_queries = int(metrics.get("active_connections", 0) or 0)
         waiting_queries = int(metrics.get("blocking_queries", 0) or 0)
@@ -292,7 +322,11 @@ class SceneStore:
                 deployments = []
             return {
                 "deployments": deployments,
-                "incident_correlations": [d for d in deployments if isinstance(d, dict) and d.get("overlap_with_incident")],
+                "incident_correlations": [
+                    d
+                    for d in deployments
+                    if isinstance(d, dict) and d.get("overlap_with_incident")
+                ],
             }
         if query_type in ("blocking_queries", "deadlocks"):
             return self._synth_blocking(service)
@@ -300,9 +334,12 @@ class SceneStore:
             return self._synth_connection_pool(service)
         return self._synth_pg_stat_activity(service)
 
+
 def _parse_scenario_arg(argv: list[str]) -> str:
     parser = argparse.ArgumentParser(add_help=False)
-    parser.add_argument("--scenario", choices=sorted(_SCENARIO_CATALOG.keys()), default="2")
+    parser.add_argument(
+        "--scenario", choices=sorted(_SCENARIO_CATALOG.keys()), default="2"
+    )
     args, _ = parser.parse_known_args(argv)
     return args.scenario
 
@@ -382,7 +419,9 @@ async def _parse_query_request(req: Request) -> QueryRequest:
     if not service and len(store.services) == 1:
         service = next(iter(store.services.keys()))
 
-    query_type = _normalize_query_type(payload.get("query_type") or payload.get("query"))
+    query_type = _normalize_query_type(
+        payload.get("query_type") or payload.get("query")
+    )
     caller = payload.get("caller") or req.headers.get("X-Agent-Id") or "unknown"
 
     if not service:
@@ -401,21 +440,21 @@ store = SceneStore(_FIXTURE_PATH)
 
 def _set_scenario(scenario: int) -> dict[str, Any]:
     """Dynamically reload the scenario fixture.
-    
+
     Args:
         scenario: Scenario number (1 or 2)
-        
+
     Returns:
         Dictionary with status and loaded scenario info
     """
     global _SCENARIO, _FIXTURE_PATH, store
-    
+
     scenario_str = str(scenario)
     if scenario_str not in _SCENARIO_CATALOG:
         raise ValueError(
             f"Invalid scenario: {scenario_str}. Must be one of {', '.join(sorted(_SCENARIO_CATALOG.keys()))}."
         )
-    
+
     previous_scenario = _SCENARIO
     previous_fixture = _FIXTURE_PATH.name if _FIXTURE_PATH else None
 
@@ -423,7 +462,7 @@ def _set_scenario(scenario: int) -> dict[str, Any]:
     _FIXTURE_PATH = _resolve_fixture_path(_SCENARIO)
     store = SceneStore(_FIXTURE_PATH)
     current_fixture = _FIXTURE_PATH.name if _FIXTURE_PATH else None
-    
+
     logger.info(
         "Scenario reloaded: %s (%s) -> %s (%s), file: %s -> %s, incident_id=%s services=%s",
         previous_scenario,
@@ -435,7 +474,7 @@ def _set_scenario(scenario: int) -> dict[str, Any]:
         store.incident_id,
         sorted(store.services.keys()),
     )
-    
+
     return {
         "status": "ok",
         "scenario": _SCENARIO,
@@ -493,7 +532,9 @@ def list_scenarios(req: Request) -> dict[str, Any]:
 @app.post("/scenario")
 def set_scenario(request: ScenarioRequest, req: Request) -> dict[str, Any]:
     caller = req.headers.get("X-Agent-Id", "unknown")
-    logger.info("caller=%s endpoint=POST /scenario scenario=%s", caller, request.scenario)
+    logger.info(
+        "caller=%s endpoint=POST /scenario scenario=%s", caller, request.scenario
+    )
     try:
         result = _set_scenario(request.scenario)
         return result

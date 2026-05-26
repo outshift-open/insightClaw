@@ -97,7 +97,7 @@ index af0918bd..a8351f9f 100644
 +        'paths': ['/sandbox/.openclaw-data/plugins/observability/'] \
 +      }, \
 +      'entries': { \
-+        'openclaw-deep-observability': { \
++        'insightclaw': { \
 +          'enabled': True, \
 +          'config': { \
 +            'endpoint': 'http://127.0.0.1:4318', \

@@ -1,4 +1,4 @@
-# OpenClaw Deep Observability Plugin
+# InsightClaw Plugin
 
 ## Custom Hook-Based Plugin
 
@@ -69,14 +69,14 @@ when inbound hooks only expose conversation metadata
 1. Clone this repository:
 
    ```bash
-   git clone https://github.com/outshift-open/openclaw-deep-observability.git
+   git clone https://github.com/outshift-open/insightClaw.git
    ```
 
 2. Navigate to the `deploy` directory and start the observability stack, which includes a ClickHouse instance and
 an OpenTelemetry Collector configured to receive OTel data and forward it to ClickHouse:
 
    ```bash
-   cd openclaw-deep-observability/observability-plugin/deploy
+   cd insightClaw/observability-plugin/deploy
    docker-compose up -d
    ```
 
@@ -89,10 +89,10 @@ or `http://172.17.0.1:4318` when using Docker on Linux):
    {
      "plugins": {
        "load": {
-         "paths": ["/path/to/openclaw-deep-observability/observability-plugin"]
+         "paths": ["/path/to/insightClaw/observability-plugin"]
        },
        "entries": {
-         "openclaw-deep-observability": {
+         "insightclaw": {
            "enabled": true,
            "config": {
              "endpoint": "http://host.docker.internal:4318",
@@ -117,7 +117,7 @@ or `http://172.17.0.1:4318` when using Docker on Linux):
 4. Build the plugin and install dependencies:
 
    ```bash
-   cd openclaw-deep-observability/observability-plugin
+   cd insightClaw/observability-plugin
    npm install
    ```
 
@@ -184,8 +184,8 @@ See in the caveats section for more information.
 1. Verify startup logs:
 
   ```text
-  [otel-preload] GenAI instrumentation active (providers=anthropic,bedrock,openai,vertexai, ...)
-  [otel] ✅ GenAI instrumentation active via NODE_OPTIONS preload
+  [insightClaw] GenAI instrumentation active (providers=anthropic,bedrock,openai,vertexai, ...)
+  [insightClaw] ✅ GenAI instrumentation active via NODE_OPTIONS preload
   ```
 
 ### Preload the instrumentation
@@ -206,7 +206,7 @@ However, we also provide a more complete deployment, with a preconfigured grafan
 To use it, simply deploy the complete docker compose file:
 
 ```bash
-cd openclaw-deep-observability/observability-plugin/deploy
+cd insightClaw/observability-plugin/deploy
 docker-compose up -f docker-compose-with-grafana.yaml -d
 ```
 

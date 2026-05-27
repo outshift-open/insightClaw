@@ -1,7 +1,7 @@
 # Security Policies and Procedures
 
 This document outlines security procedures and general policies for the
-`openclaw-deep-observability` project.
+`insightClaw` project.
 
 - [Disclosing a security issue](#disclosing-a-security-issue)
 - [Vulnerability management](#vulnerability-management)
@@ -9,12 +9,12 @@ This document outlines security procedures and general policies for the
 
 ## Disclosing a security issue
 
-The `openclaw-deep-observability` maintainers take all security issues in the project
-seriously. Thank you for improving the security of `openclaw-deep-observability`. We
+The `insightClaw` maintainers take all security issues in the project
+seriously. Thank you for improving the security of `insightClaw`. We
 appreciate your dedication to responsible disclosure and will make every effort
 to acknowledge your contributions.
 
-`openclaw-deep-observability` leverages GitHub's private vulnerability reporting.
+`insightClaw` leverages GitHub's private vulnerability reporting.
 
 To learn more about this feature and how to submit a vulnerability report,
 review [GitHub's documentation on private reporting](https://docs.github.com/code-security/security-advisories/guidance-on-reporting-and-writing-information-about-vulnerabilities/privately-reporting-a-security-vulnerability).

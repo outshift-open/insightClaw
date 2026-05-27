@@ -98,7 +98,7 @@ export function startSessionWatcher(
   }
 
   if (watcherTimer) {
-    logger.debug?.("[otel:session] Session watcher already running, skipping");
+    logger.debug?.("[insightClaw:session] Session watcher already running, skipping");
     return;
   }
 
@@ -119,7 +119,7 @@ export function startSessionWatcher(
   });
 
   logger.info?.(
-    `[otel:session] Session lifecycle watcher started (idleTimeout=${idleTimeoutMs}ms, checkInterval=${WATCHER_INTERVAL_MS}ms)`
+    `[insightClaw:session] Session lifecycle watcher started (idleTimeout=${idleTimeoutMs}ms, checkInterval=${WATCHER_INTERVAL_MS}ms)`
   );
 }
 
@@ -130,7 +130,7 @@ export function stopSessionWatcher(): void {
   if (watcherTimer) {
     clearInterval(watcherTimer);
     watcherTimer = null;
-    loggerRef?.debug?.("[otel:session] Session watcher stopped");
+    loggerRef?.debug?.("[insightClaw:session] Session watcher stopped");
   }
   stopSpanCache();
   process.removeListener("beforeExit", emitAllSessionEnds);
@@ -162,7 +162,7 @@ export function touchSession(
       const inheritedSession = findSessionById(inheritedSessionId);
       if (inheritedSession && !inheritedSession.ended) {
         loggerRef?.info?.(
-          `[otel:session] Merging session=${existing.sessionId} into session=${inheritedSession.sessionId} ` +
+          `[insightClaw:session] Merging session=${existing.sessionId} into session=${inheritedSession.sessionId} ` +
           `for runtimeSession=${runtimeSessionKey}`
         );
         for (const key of existing.runtimeSessionKeys) {
@@ -192,7 +192,7 @@ export function touchSession(
       adopted.runtimeSessionKeys.add(runtimeSessionKey);
       sessions.set(runtimeSessionKey, adopted);
       loggerRef?.info?.(
-        `[otel:session] Aliased runtime session: session=${adopted.sessionId}, runtimeSession=${runtimeSessionKey}, primaryRuntimeSession=${adopted.primaryRuntimeSessionKey}, activeSessions=${getUniqueSessions().length}`
+        `[insightClaw:session] Aliased runtime session: session=${adopted.sessionId}, runtimeSession=${runtimeSessionKey}, primaryRuntimeSession=${adopted.primaryRuntimeSessionKey}, activeSessions=${getUniqueSessions().length}`
       );
       return adopted.sessionId;
     }
@@ -221,7 +221,7 @@ export function touchSession(
           rootContext
         );
         sessionContext = trace.setSpan(rootContext, sessionSpan);
-        loggerRef?.debug?.(`[otel:session] session.start span opened for session=${sessionId}`);
+        loggerRef?.debug?.(`[insightClaw:session] session.start span opened for session=${sessionId}`);
       } catch {
         // If span creation fails the session still works without a root span
       }
@@ -242,7 +242,7 @@ export function touchSession(
 
     sessions.set(runtimeSessionKey, session);
     loggerRef?.info?.(
-      `[otel:session] New session tracked: session=${session.sessionId}, runtimeSession=${runtimeSessionKey}, activeSessions=${getUniqueSessions().length}`
+      `[insightClaw:session] New session tracked: session=${session.sessionId}, runtimeSession=${runtimeSessionKey}, activeSessions=${getUniqueSessions().length}`
     );
     return session.sessionId;
   }
@@ -288,14 +288,14 @@ export function endSession(runtimeSessionKey: string, histograms?: any): void {
 
   if (session.runtimeSessionKeys.size > 0) {
     loggerRef?.debug?.(
-      `[otel:session] Detached runtime session alias: session=${session.sessionId}, runtimeSession=${runtimeSessionKey}, remainingAliases=${session.runtimeSessionKeys.size}`
+      `[insightClaw:session] Detached runtime session alias: session=${session.sessionId}, runtimeSession=${runtimeSessionKey}, remainingAliases=${session.runtimeSessionKeys.size}`
     );
     return;
   }
 
   if (!session.ended) {
     loggerRef?.info?.(
-      `[otel:session] Explicit session end: session=${session.sessionId}, runtimeSession=${runtimeSessionKey}`
+      `[insightClaw:session] Explicit session end: session=${session.sessionId}, runtimeSession=${runtimeSessionKey}`
     );
     emitSessionEnd(session);
   }
@@ -349,26 +349,26 @@ export function recordEndOfSessionMetrics(runtimeSessionKey: string, histograms:
 function recordRepetitionScore(runtimeSessionKey: string, histograms: any, embeddingsProcessing?: boolean): void {
   const sessionId = getSessionId(runtimeSessionKey);
   if (!sessionId) {
-    loggerRef?.warn?.(`[otel:session] Cannot record repetition score, session not found for runtimeSessionKey=${runtimeSessionKey}`);
+    loggerRef?.warn?.(`[insightClaw:session] Cannot record repetition score, session not found for runtimeSessionKey=${runtimeSessionKey}`);
     return;
   }
 
   const session = sessions.get(runtimeSessionKey);
   if (!session) {
-    loggerRef?.warn?.(`[otel:session] Cannot record repetition score, session not found for sessionId=${sessionId}`);
+    loggerRef?.warn?.(`[insightClaw:session] Cannot record repetition score, session not found for sessionId=${sessionId}`);
     return;
   }
 
   if (!session.channel || session.channel === "heartbeat") {
     // we do not compute the score for heartbeat sessions
-    loggerRef?.debug?.(`[otel:session] Skipping repetition score for heartbeat session: session=${sessionId}`);
+    loggerRef?.debug?.(`[insightClaw:session] Skipping repetition score for heartbeat session: session=${sessionId}`);
     return;
   }
 
   // Getting all spans of type llm call
   const calls = getSpansByType("openclaw.llm.call", undefined, undefined, sessionId);
   if (calls.length === 0) {
-    loggerRef?.info?.(`[otel:session] No LLM calls found for session ${sessionId}, skipping repetition score (this is fine if cache is disabled)`);
+    loggerRef?.info?.(`[insightClaw:session] No LLM calls found for session ${sessionId}, skipping repetition score (this is fine if cache is disabled)`);
     return;
   }
 
@@ -391,10 +391,10 @@ function recordRepetitionScore(runtimeSessionKey: string, histograms: any, embed
       rootAgent = agentId;
     }
 
-    loggerRef?.debug?.(`[otel:session] Recording call for agent ${agentId} with prompt: ${prompt} startTime: ${startTime} rootAgent: ${rootAgent} rootStartTime: ${rootStartTime}`);
+    loggerRef?.debug?.(`[insightClaw:session] Recording call for agent ${agentId} with prompt: ${prompt} startTime: ${startTime} rootAgent: ${rootAgent} rootStartTime: ${rootStartTime}`);
     callsByAgent.get(agentId)!.push({ prompt });
   }
-  loggerRef?.debug?.(`[otel:session] Computing repetition score for session ${sessionId}-${runtimeSessionKey} (rootAgent=${rootAgent})`);
+  loggerRef?.debug?.(`[insightClaw:session] Computing repetition score for session ${sessionId}-${runtimeSessionKey} (rootAgent=${rootAgent})`);
 
   // Wrap async computation to avoid blocking - all the required state has been retrieved at this point
   (async () => {
@@ -402,7 +402,7 @@ function recordRepetitionScore(runtimeSessionKey: string, histograms: any, embed
 
     for (const [agentId, agentCalls] of callsByAgent) {
       if (agentId === rootAgent) {
-        loggerRef?.debug?.(`[otel:session] Skipping repetition score for root agent ${agentId}`);
+        loggerRef?.debug?.(`[insightClaw:session] Skipping repetition score for root agent ${agentId}`);
         continue;
       }
       if (agentCalls.length < 2) continue;
@@ -418,8 +418,8 @@ function recordRepetitionScore(runtimeSessionKey: string, histograms: any, embed
           } else {
             similarity = computeStringSimilarity(agentCalls[i].prompt, agentCalls[j].prompt, "jaccard");
           }
-          loggerRef?.debug?.(`[otel:session] ${embeddingsProcessing ? "embeddings" : "jaccard"} similarity: session=${sessionId}, agent=${agentId}, similarity=${similarity}`);
-          loggerRef?.debug?.(`[otel:session] ${embeddingsProcessing ? "embeddings" : "jaccard"} A=${agentCalls[i].prompt} B=${agentCalls[j].prompt}`);
+          loggerRef?.debug?.(`[insightClaw:session] ${embeddingsProcessing ? "embeddings" : "jaccard"} similarity: session=${sessionId}, agent=${agentId}, similarity=${similarity}`);
+          loggerRef?.debug?.(`[insightClaw:session] ${embeddingsProcessing ? "embeddings" : "jaccard"} A=${agentCalls[i].prompt} B=${agentCalls[j].prompt}`);
           agentScores.push(similarity);
         }
       }
@@ -430,11 +430,11 @@ function recordRepetitionScore(runtimeSessionKey: string, histograms: any, embed
     if (scores.length > 0) {
       finalScore = scores.reduce((a, b) => a + b, 0) / scores.length;
     }
-    loggerRef?.info?.(`[otel:session] Final repetition score for session ${sessionId}-${runtimeSessionKey}: ${finalScore}`);
+    loggerRef?.info?.(`[insightClaw:session] Final repetition score for session ${sessionId}-${runtimeSessionKey}: ${finalScore}`);
 
     histograms.repetitionScore.record(finalScore, { "openclaw.session.key": runtimeSessionKey });
   })().catch((err) => {
-    loggerRef?.warn?.(`[otel:session] Error computing repetition score: ${err instanceof Error ? err.message : String(err)}`);
+    loggerRef?.warn?.(`[insightClaw:session] Error computing repetition score: ${err instanceof Error ? err.message : String(err)}`);
   });
 }
 
@@ -449,31 +449,31 @@ function recordRepetitionScore(runtimeSessionKey: string, histograms: any, embed
 export function recordParallelisationScore(runtimeSessionKey: string, histograms: any): void {
   const sessionId = getSessionId(runtimeSessionKey);
   if (!sessionId) {
-    loggerRef?.warn?.(`[otel:session] Cannot record parallelisation score, session not found for runtimeSessionKey=${runtimeSessionKey}`);
+    loggerRef?.warn?.(`[insightClaw:session] Cannot record parallelisation score, session not found for runtimeSessionKey=${runtimeSessionKey}`);
     return;
   }
 
   const session = sessions.get(runtimeSessionKey);
   if (!session) {
-    loggerRef?.warn?.(`[otel:session] Cannot record parallelisation score, session not found for sessionId=${sessionId}`);
+    loggerRef?.warn?.(`[insightClaw:session] Cannot record parallelisation score, session not found for sessionId=${sessionId}`);
     return;
   }
 
   if (!session.channel || session.channel === "heartbeat") {
     // we do not compute the score for heartbeat sessions
-    loggerRef?.debug?.(`[otel:session] Skipping parallelisation score for heartbeat session: session=${sessionId}`);
+    loggerRef?.debug?.(`[insightClaw:session] Skipping parallelisation score for heartbeat session: session=${sessionId}`);
     return;
   }
 
   const startTime = getSessionStartTime(sessionId);
   if (!startTime) {
-    loggerRef?.warn?.(`[otel:session] Cannot record parallelisation score, session not found: session=${sessionId}`);
+    loggerRef?.warn?.(`[insightClaw:session] Cannot record parallelisation score, session not found: session=${sessionId}`);
     return;
   }
 
   const endTime = getSessionEndTime(sessionId);
   if (!endTime) {
-    loggerRef?.warn?.(`[otel:session] Cannot record parallelisation score, session not ended: session=${sessionId}`);
+    loggerRef?.warn?.(`[insightClaw:session] Cannot record parallelisation score, session not ended: session=${sessionId}`);
     return;
   }
   const sessionDurationTillNow = endTime - startTime;
@@ -497,11 +497,11 @@ export function recordParallelisationScore(runtimeSessionKey: string, histograms
       }
     }
     if (!found) {
-      loggerRef?.warn?.(`[otel:session] Span without duration attribute: session=${sessionId}, span=${r.spanId}, attributes=${JSON.stringify(r.attributes)}`);
+      loggerRef?.warn?.(`[insightClaw:session] Span without duration attribute: session=${sessionId}, span=${r.spanId}, attributes=${JSON.stringify(r.attributes)}`);
     }
   }
   const score = spansDuration / sessionDurationTillNow; 
-  loggerRef?.info?.(`[otel:session] Parallelisation score for session ${sessionId}-${runtimeSessionKey}: ${score} (spansDuration=${spansDuration}ms, sessionDuration=${sessionDurationTillNow}ms)`);
+  loggerRef?.info?.(`[insightClaw:session] Parallelisation score for session ${sessionId}-${runtimeSessionKey}: ${score} (spansDuration=${spansDuration}ms, sessionDuration=${sessionDurationTillNow}ms)`);
   histograms.parallelisationScore.record(score, { "openclaw.session.key": runtimeSessionKey });
 }
 
@@ -515,7 +515,7 @@ function checkIdleSessions(histograms?: any): void {
     const idleMs = now - session.lastActivityAt;
     if (idleMs > idleTimeoutMs) {
       loggerRef?.info?.(
-        `[otel:session] Session idle timeout: session=${session.sessionId}, runtimeSession=${session.primaryRuntimeSessionKey}, ` +
+        `[insightClaw:session] Session idle timeout: session=${session.sessionId}, runtimeSession=${session.primaryRuntimeSessionKey}, ` +
         `idleFor=${Math.round(idleMs / 1000)}s (threshold=${Math.round(idleTimeoutMs / 1000)}s)`
       );
       if(histograms) {
@@ -532,7 +532,7 @@ function checkIdleSessions(histograms?: any): void {
   }
   if (getUniqueSessions().length > 0 || idleCount > 0) {
     loggerRef?.debug?.(
-      `[otel:session] Idle check: active=${getUniqueSessions().length}, expired=${idleCount}`
+      `[insightClaw:session] Idle check: active=${getUniqueSessions().length}, expired=${idleCount}`
     );
   }
 }
@@ -572,7 +572,7 @@ function emitSessionEnd(session: SessionActivity): void {
       session.sessionSpan.end();
     }
 
-    loggerRef?.debug?.(`[otel:session] session.start span closed for session=${session.sessionId}`);
+    loggerRef?.debug?.(`[insightClaw:session] session.start span closed for session=${session.sessionId}`);
   } catch {
     // Never let session telemetry errors propagate
   }
@@ -582,7 +582,7 @@ function emitAllSessionEnds(): void {
   const remaining = getUniqueSessions().filter(s => !s.ended);
   if (remaining.length > 0) {
     loggerRef?.info?.(
-      `[otel:session] Process exit — emitting session.end for ${remaining.length} active session(s): ` +
+      `[insightClaw:session] Process exit — emitting session.end for ${remaining.length} active session(s): ` +
       `[${remaining.map(s => s.sessionId).join(", ")}]`
     );
   }

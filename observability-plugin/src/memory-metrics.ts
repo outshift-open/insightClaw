@@ -191,7 +191,7 @@ export function recordMemoryFailureRateFromCache({
   });
 
   logger?.info?.(
-    `[otel:metric] openclaw.memory.failure_rate session=${runtimeSessionKey} total=${memoryRecords.length} ` +
+    `[insightClaw:metric] openclaw.memory.failure_rate session=${runtimeSessionKey} total=${memoryRecords.length} ` +
     `failed=${failedOperations} rate=${failureRate.toFixed(4)} latestOperation=${latestOperation}`
   );
 }

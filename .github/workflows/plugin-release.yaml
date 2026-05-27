@@ -46,7 +46,7 @@ jobs:
         run: |
           VERSION=$(node -p "require('./package.json').version")
           cd artifact/package
-          zip -r "../openclaw-deep-observability-${VERSION}.zip" .
+          zip -r "../insightClaw-${VERSION}.zip" .
 
       - name: Publish GitHub release
         uses: softprops/action-gh-release@v2

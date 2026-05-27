@@ -73,7 +73,7 @@ test("plugin register wires the gateway method, cli command, tool, and service",
   await plugin.register(api);
 
   assert.equal(calls.registerGatewayMethod.length, 1);
-  assert.equal(calls.registerGatewayMethod[0]?.name, "openclaw-deep-observability.status");
+  assert.equal(calls.registerGatewayMethod[0]?.name, "insightclaw.status");
   assert.equal(calls.registerCli.length, 1);
   assert.deepEqual(calls.registerCli[0]?.options, { commands: ["otel"] });
   assert.equal(calls.registerService.length, 1);

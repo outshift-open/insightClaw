@@ -1,6 +1,6 @@
 {
-  "id": "openclaw-deep-observability",
-  "name": "OpenClaw Deep Observability Plugin",
+  "id": "insightclaw",
+  "name": "InsightClaw Plugin",
   "description": "Connected traces, cost tracking, and metrics for OpenClaw via OpenTelemetry",
   "version": "0.1.0",
   "uiHints": {

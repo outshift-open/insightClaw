@@ -1,3 +1,6 @@
+//  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
+//  SPDX-License-Identifier: Apache-2.0
+
 import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 

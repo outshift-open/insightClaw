@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
+# Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
+# SPDX-License-Identifier: Apache-2.0
+
 set -euo pipefail
 
-REMOTE="${1:-manang@192.168.1.55}"
+REMOTE="${1:-ubuntu@localhost}"
 REMOTE_USER="${REMOTE%@*}"
 if [ "${REMOTE_USER}" = "${REMOTE}" ]; then
 	REMOTE_HOME="/home/${REMOTE_USER}"

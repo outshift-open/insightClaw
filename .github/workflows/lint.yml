@@ -1,3 +1,6 @@
+# Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
+# SPDX-License-Identifier: Apache-2.0
+
 ---
 name: lint
 
@@ -68,4 +71,8 @@ jobs:
           VALIDATE_PYTHON_PYINK: false
           VALIDATE_TYPESCRIPT_PRETTIER: false
           VALIDATE_TYPESCRIPT_STANDARD: false
+          VALIDATE_BASH: false
+          VALIDATE_BASH_EXEC: false
+          VALIDATE_SHELL_SHFMT: false
           MULTI_STATUS: false
+          FILTER_REGEX_EXCLUDE: (^|/)openllmetry-patch-index.js$

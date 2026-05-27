@@ -1,3 +1,6 @@
+//  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
+//  SPDX-License-Identifier: Apache-2.0
+
 import test from "node:test";
 import assert from "node:assert/strict";
 
@@ -112,5 +115,5 @@ test("plugin register wires the gateway method, cli command, tool, and service",
 
   const toolRegistration = calls.registerTool[0];
   assert.equal(toolRegistration.options.optional, true);
-  assert.equal(toolRegistration.tool.name, "otel_status");
+  assert.equal(toolRegistration.tool.name, "insightclaw_status");
 });

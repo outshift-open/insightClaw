@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
+# Modification Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
+# SPDX-License-Identifier: Apache-2.0
 #
 # NemoClaw sandbox entrypoint. Runs as root (via ENTRYPOINT) to start the
 # gateway as the 'gateway' user, then drops to 'sandbox' for agent commands.

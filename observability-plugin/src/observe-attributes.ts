@@ -1,3 +1,6 @@
+//  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
+//  SPDX-License-Identifier: Apache-2.0
+
 /**
  * Observe Span Kinds — semantic span kind constants from the AGNTCY schema.
  *

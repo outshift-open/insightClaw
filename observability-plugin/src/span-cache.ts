@@ -1,3 +1,6 @@
+//  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
+//  SPDX-License-Identifier: Apache-2.0
+
 /**
  * Span Attribute Cache — lightweight in-process K-V store that captures a
  * snapshot of every span's attributes just before the span is ended.

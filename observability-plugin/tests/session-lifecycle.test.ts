@@ -1,3 +1,6 @@
+//  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
+//  SPDX-License-Identifier: Apache-2.0
+
 import test from "node:test";
 import assert from "node:assert/strict";
 import { context } from "@opentelemetry/api";

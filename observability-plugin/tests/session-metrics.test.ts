@@ -1,3 +1,6 @@
+//  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
+//  SPDX-License-Identifier: Apache-2.0
+
 // This is the place to test all the metrics we compute at the end of a session
 
 import test from "node:test";

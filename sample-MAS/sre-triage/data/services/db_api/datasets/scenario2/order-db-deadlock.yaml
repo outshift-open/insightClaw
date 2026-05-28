@@ -1,3 +1,6 @@
+# Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
+# SPDX-License-Identifier: Apache-2.0
+
 # Incident fixture: order-db-deadlock
 #
 # Fully parameterizes all mock tool responses for this incident.

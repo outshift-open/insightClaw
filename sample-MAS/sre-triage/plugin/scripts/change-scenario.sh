@@ -1,4 +1,6 @@
 #!/bin/bash
+# Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
+# SPDX-License-Identifier: Apache-2.0
 
 #!/usr/bin/env bash
 set -euo pipefail
@@ -36,12 +38,10 @@ EOF
 systemctl --user daemon-reload
 
 # Restart the service
-systemctl restart --user openclaw-db-api
+systemctl --user restart openclaw-db-api
 
 # wait for it
 sleep 2
 
-echo $HOME
 # test to see that everything is ok
 curl -sS http://127.0.0.1:8765/scenario
-

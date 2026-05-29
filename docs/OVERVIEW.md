@@ -27,8 +27,14 @@ The implementation is intentionally split into two layers plus an optional third
 
 The plugin registers typed hooks through `api.on(...)` to model the request lifecycle. This layer creates the connected trace hierarchy:
 
-```mermaid
-openclaw.request └── openclaw.agent.turn ├── tool.Read ├── tool.exec ├── tool.sessions_spawn └── provider SDK spans (optional, via preload instrumentation) └── openclaw.message.sent
+```text
+openclaw.request
+  └── openclaw.agent.turn
+      ├── tool.Read
+      ├── tool.exec
+      ├── tool.sessions_spawn
+      └── provider SDK spans (optional, via preload instrumentation)
+  └── openclaw.message.sent
 ```
 
 This gives us the workflow structure that stakeholders care about.

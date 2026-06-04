@@ -65,7 +65,7 @@ The main deliverable in this repository is a custom OpenClaw observability plugi
 
 ## Documentation
 
-- Plugin setup and overview: [observability-plugin/OVERVIEW.md](observability-plugin/OVERVIEW.md)
+- Plugin setup and overview: [docs/OVERVIEW.md](docs/OVERVIEW.md)
 - Plugin metrics: [docs/METRICS.md](docs/METRICS.md)
 
 ## Development
@@ -85,3 +85,12 @@ For provider SDK auto-instrumentation, see the preload instructions in
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) and [SECURITY.md](SECURITY.md).
+
+## License
+
+Apache 2.0. See [LICENSE](LICENSE).
+
+## Security
+
+If you discover a security vulnerability, please do not open a public issue.
+Contact the maintainers directly via the repository security advisory process.

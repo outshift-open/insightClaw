@@ -1,9 +1,13 @@
+// @ts-expect-error - openclaw/plugin-sdk types not available at build time
 import type { OpenClawPluginApi, PluginHookName } from "openclaw/plugin-sdk/plugin-runtime";
 
 // Marker to avoid double-wrapping after a registry replacement
 const WRAPPED = Symbol.for("hook-observability.wrapped");
 
-export async function wrapHooks(api: OpenClawPluginApi) {
+export async function wrapHooks(api: OpenClawPluginApi, opts?: {
+  /** Called when a before_tool_call hook from another plugin returns { block: true }. */
+  closeBlockedToolSpan?: (toolCallId: string, blockReason?: string) => void;
+}) {
   let getGlobalPluginRegistry: (() => any) | undefined;
   try {
     // Dynamic import to avoid build issues if SDK not available
@@ -32,6 +36,10 @@ export async function wrapHooks(api: OpenClawPluginApi) {
         try {
           const result = original(event, ctx);
           report({ hookName: hook.hookName, pluginId: hook.pluginId, priority: hook.priority ?? 0, event, ctx, result });
+          if (hook.hookName === "before_tool_call" && (result as any)?.block === true) {
+            const toolCallId = (event as any)?.toolCallId || (event as any)?.id || "";
+            if (toolCallId) opts?.closeBlockedToolSpan?.(toolCallId, (result as any)?.blockReason);
+          }
           return result;
         } catch (err) {
           report({ hookName: hook.hookName, pluginId: hook.pluginId, priority: hook.priority ?? 0, event, ctx, error: String(err) });
@@ -45,6 +53,10 @@ export async function wrapHooks(api: OpenClawPluginApi) {
         try {
           const result = await (original as (...args: unknown[]) => Promise<unknown>)(event, ctx);
           report({ hookName: hook.hookName, pluginId: hook.pluginId, priority: hook.priority ?? 0, event, ctx, result });
+          if (hook.hookName === "before_tool_call" && (result as any)?.block === true) {
+            const toolCallId = (event as any)?.toolCallId || (event as any)?.id || "";
+            if (toolCallId) opts?.closeBlockedToolSpan?.(toolCallId, (result as any)?.blockReason);
+          }
           return result;
         } catch (err) {
           report({ hookName: hook.hookName, pluginId: hook.pluginId, priority: hook.priority ?? 0, event, ctx, error: String(err) });

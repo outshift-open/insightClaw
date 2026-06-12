@@ -204,6 +204,9 @@ interface ToolStatus {
 
 /** Map of runtime session key -> active trace context. Cleaned up when the request span closes. */
 const sessionContextMap = new Map<string, SessionTraceContext>();
+// Module-level singletons shared across all registerHooks calls (hot-reload safe).
+const pendingToolSpans = new Map<string, PendingToolSpan>();
+const pendingLlmSpans = new Map<string, PendingLlmSpan>();
 const pendingSpawnHandoffs = new Map<string, PendingSpawnHandoff[]>();
 const contextPrepTimers = new Map<string, number>();
 const pendingAgentContextsMap = new Map<string, any>(); //Note: this should be moved to the plugin cache once it will support the feature
@@ -250,8 +253,8 @@ function initHookConfig(
     tracer: telemetry?.tracer,
     counters: telemetry?.counters,
     histograms: telemetry?.histograms,
-    pendingToolSpans: new Map<string, PendingToolSpan>(),
-    pendingLlmSpans: new Map<string, PendingLlmSpan>(),
+    pendingToolSpans,
+    pendingLlmSpans,
     logger,
   };
 }
@@ -1079,7 +1082,7 @@ export function registerHooks(
   api: any,
   getTelemetry: () => TelemetryRuntime,
   config: OtelObservabilityConfig
-): void {
+): { closeBlockedToolSpan: (toolCallId: string, blockReason?: string) => void } {
 
   // Interface to hold references to telemetry components and shared state for hooks
   const hookConfig = initHookConfig(config, getTelemetry, api.logger);
@@ -1106,7 +1109,6 @@ export function registerHooks(
 
   // Spans created in before_tool_call, completed in tool_result_persist
   const pendingToolSpans = hookConfig.pendingToolSpans;
-
   // Spans created in llm_input, completed in llm_output
   const pendingLlmSpans = hookConfig.pendingLlmSpans;
 
@@ -2243,7 +2245,8 @@ export function registerHooks(
         // Never let telemetry errors break the main flow
       }
       return undefined;
-    }
+    },
+    { priority: 100 }
   );
 
     // ── after_tool_call ──────────────────────────────────────────
@@ -2867,6 +2870,51 @@ export function registerHooks(
       }
     }
   }, 60_000).unref();
+
+  /**
+   * Close the pending tool span created for `toolCallId` and mark it as
+   * blocked by a `before_tool_call` hook.  Called by the hook-observability
+   * wrapper in wrapper.ts whenever it detects that another plugin's
+   * before_tool_call handler returned `{ block: true }`.
+   *
+   * The span is ended with ERROR status so it surfaces clearly in traces.
+   * Two attributes are added:
+   *   - openclaw.tool.blocked   = true
+   *   - openclaw.tool.block_reason = <blockReason> (when provided)
+   */
+  function closeBlockedToolSpan(toolCallId: string, blockReason?: string): void {
+    const pending = pendingToolSpans.get(toolCallId);
+    if (!pending){
+      logger.info(`[insightClaw] No pending tool for callId ${toolCallId}, skipping closeBlockedToolSpan`);
+      return;
+    }
+    pendingToolSpans.delete(toolCallId);
+
+    const { span } = pending;
+    span.setAttribute("error.type", "tool_blocked");
+    span.setAttribute("openclaw.tool.blocked", true);
+    if (blockReason) {
+      span.setAttribute("openclaw.tool.block_reason", blockReason);
+    }
+    span.setStatus({
+      code: SpanStatusCode.ERROR,
+      message: blockReason ?? "blocked",
+    });
+    const rawAttrs = (span as any).attributes ?? {};
+    const getAttr = (key: string): unknown =>
+      rawAttrs instanceof Map ? rawAttrs.get(key) : rawAttrs[key];
+    const sessionKey = (getAttr("openclaw.session.key") as string | undefined) ?? "unknown";
+    const sessionId = getAttr("session.id") as string | undefined;
+    const toolName = (getAttr("openclaw.tool.name") as string | undefined) ?? "unknown";
+    captureSpanToCache(span, `tool.${toolName}`, "tool", sessionKey, sessionId);
+    span.end();
+    logger.info(
+      `[insightClaw] Tool span closed as blocked: callId=${toolCallId}` +
+      (blockReason ? `, reason="${blockReason}"` : "")
+    );
+  }
+
+  return { closeBlockedToolSpan };
 }
 
 export default registerHooks;

@@ -140,7 +140,7 @@ const insightClawPlugin = {
 
     // Register hooks NOW (during register phase) so OpenClaw picks them up.
     // Telemetry is resolved lazily on first hook invocation (after service.start()).
-    registerHooks(api, () => telemetry!, config);
+    const hookHandles = registerHooks(api, () => telemetry!, config);
 
     // ── Background service ──────────────────────────────────────────
 
@@ -180,7 +180,7 @@ const insightClawPlugin = {
         // Wrap hooks for observability
         // We do this in a setTimeout to ensure it runs after all plugins have registered their hooks.
         // And this solves the timing issue: whenever a plugin registers a new hook, it will be wrapped within 500ms (until the next poll).
-        const poll = () => wrapHooks(api);
+        const poll = () => wrapHooks(api, hookHandles);
         setTimeout(poll, 0);
         setInterval(poll, 500);
         logger.info("[insightClaw] ✅ pipeline active");

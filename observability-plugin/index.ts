@@ -46,6 +46,7 @@ import { initOpenLLMetry } from "./src/openllmetry.js";
 import * as hooksModule from "./src/hooks.js";
 import { registerDiagnosticsListener, hasDiagnosticsSupport } from "./src/diagnostics.js";
 import { startSessionWatcher, stopSessionWatcher } from "./src/session-lifecycle.js";
+import { wrapHooks } from "./src/wrapper.js";
 
 const registerHooks =
   typeof hooksModule.registerHooks === "function"
@@ -139,7 +140,7 @@ const insightClawPlugin = {
 
     // Register hooks NOW (during register phase) so OpenClaw picks them up.
     // Telemetry is resolved lazily on first hook invocation (after service.start()).
-    registerHooks(api, () => telemetry!, config);
+    const hookHandles = registerHooks(api, () => telemetry!, config);
 
     // ── Background service ──────────────────────────────────────────
 
@@ -176,6 +177,12 @@ const insightClawPlugin = {
           logger.info("[insightClaw] ✅ Integrated with OpenClaw diagnostics (cost tracking enabled)");
         }
 
+        // Wrap hooks for observability
+        // We do this in a setTimeout to ensure it runs after all plugins have registered their hooks.
+        // And this solves the timing issue: whenever a plugin registers a new hook, it will be wrapped within 500ms (until the next poll).
+        const poll = () => wrapHooks(api, hookHandles);
+        setTimeout(poll, 0);
+        setInterval(poll, 500);
         logger.info("[insightClaw] ✅ pipeline active");
         logger.info(
           `[insightClaw]   Traces=${config.traces} Metrics=${config.metrics} Logs=${config.logs}`

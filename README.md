@@ -63,6 +63,14 @@ The main deliverable in this repository is a custom OpenClaw observability plugi
    openclaw gateway restart
    ```
 
+## Usage with DefenseClaw
+
+DefenseClaw is a governance plugin that enforces policies on agent behaviour. InsightClaw complements it with its observability features.
+When both plugins are loaded together, InsightClaw's hook-wrapping mechanism automatically traces DefenseClaw's handler executions,
+surfacing which tools were blocked, and what decisions were made; all within the same trace.
+
+To install DefenseClaw, follow the instructions on their [repository](https://github.com/cisco-ai-defense/defenseclaw).
+
 ## Documentation
 
 - Plugin setup and overview: [docs/OVERVIEW.md](docs/OVERVIEW.md)

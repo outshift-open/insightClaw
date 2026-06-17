@@ -64,6 +64,23 @@ or webchat `agent_end` inference when no outbound signal exists
 - Fallback `openclaw.request` root span creation during `before_agent_start`
 when inbound hooks only expose conversation metadata
 
+### Observability of other hook-based plugins
+
+OpenClaw supports multiple plugins running side by side, each registering its own hook handlers.
+To provide full observability of what those plugins do
+(e.g., which hooks they intercept, what decisions they make, and whether they block or modify the agent's behaviour),
+the plugin wraps the registered handlers of every other loaded plugin by patching the global hook registry at startup.
+Only **action hooks**, hooks whose return value is read by the runtime and can influence agent behaviour
+(e.g. `before_tool_call`, `before_agent_start`, `before_llm_call`), are wrapped; purely observational hooks are left untouched.
+
+Each wrapped handler transparently calls the original, then emits a trace record containing the hook name, source plugin ID,
+execution priority, input event/context, and the resulting value (or the error if the handler threw).
+
+When a `before_tool_call` handler returns `{ block: true }`,
+the wrapper additionally closes the in-flight tool span with the block reason, so blocked calls appear in traces alongside normal ones.
+
+This gives a cross-plugin view of every action that can alter the agent's behaviour, without requiring changes to the other plugins themselves.
+
 ### Installation
 
 1. Clone this repository:

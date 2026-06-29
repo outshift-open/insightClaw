@@ -49,6 +49,7 @@ function createTelemetry() {
       contextHistoryUserSize: histogram(),
       contextHistoryOtherSize: histogram(),
       contextPromptSize: histogram(),
+      contextPreparationDuration: histogram(),
     },
     gauges: {
       activeSessions: counter(),
@@ -301,6 +302,109 @@ test("registerHooks wires lifecycle hooks that create and complete request spans
     assert.equal(telemetry.histograms.contextHistoryMemorySize.calls[0]?.value, 3 * new TextEncoder().encode(llmInputToolResult).length);
     assert.equal(telemetry.histograms.contextPromptSize.calls[0]?.value, new TextEncoder().encode(llmInputPrompt).length);
 
+  } finally {
+    globalThis.setInterval = originalSetInterval;
+    Date.now = originalDateNow;
+  }
+});
+
+test("registerHooks prefers before_model_resolve and keeps before_agent_start as fallback", async () => {
+  const telemetry = createTelemetry();
+  const { api, typedHooks, logs } = createApi();
+  const originalSetInterval = globalThis.setInterval;
+  const originalDateNow = Date.now;
+  let now = 5_000;
+
+  globalThis.setInterval = ((() => ({ unref() {} })) as unknown) as typeof setInterval;
+  Date.now = () => now;
+
+  try {
+    registerHooks(api as any, () => telemetry as any, {
+      endpoint: "http://localhost:4318",
+      protocol: "http",
+      serviceName: "test-service",
+      headers: {},
+      traces: true,
+      metrics: true,
+      logs: false,
+      captureContent: true,
+      spanCache: false,
+      spanCacheVerboseLogs: false,
+      metricsIntervalMs: 30_000,
+      resourceAttributes: {},
+      customAttributes: {},
+      experimentalMetrics: false,
+      embeddingsProcessing: false,
+    });
+
+    const sessionKey = "agent:planner:preferred-lifecycle";
+    const hookCtx = { conversationId: sessionKey, channelId: "chat", agentId: "planner" };
+
+    await typedHooks.get("message_received")?.(
+      {
+        content: "Build the prompt",
+        metadata: { channelId: "chat", conversationId: sessionKey },
+      },
+      hookCtx
+    );
+
+    typedHooks.get("before_model_resolve")?.(
+      { agentId: "planner", model: "claude-sonnet-4", conversationId: sessionKey },
+      hookCtx
+    );
+    typedHooks.get("before_prompt_build")?.(
+      { agentId: "planner", model: "claude-sonnet-4", conversationId: sessionKey },
+      hookCtx
+    );
+    typedHooks.get("before_agent_start")?.(
+      { agentId: "planner", model: "claude-sonnet-4", conversationId: sessionKey },
+      hookCtx
+    );
+
+    now += 37;
+
+    typedHooks.get("llm_input")?.(
+      {
+        agentId: "planner",
+        model: "claude-sonnet-4",
+        callId: "preferred-lifecycle-call",
+        conversationId: sessionKey,
+        prompt: "Build the prompt",
+      },
+      hookCtx
+    );
+
+    typedHooks.get("llm_output")?.(
+      {
+        callId: "preferred-lifecycle-call",
+        response: { content: [{ type: "text", text: "Done." }] },
+        conversationId: sessionKey,
+      },
+      hookCtx
+    );
+
+    await typedHooks.get("agent_end")?.(
+      {
+        agentId: "planner",
+        success: true,
+        durationMs: 100,
+        messages: [
+          { role: "assistant", model: "claude-sonnet-4", usage: { input: 5, output: 2 } },
+          { role: "assistant", content: [{ type: "text", text: "Done." }] },
+        ],
+        conversationId: sessionKey,
+      },
+      hookCtx
+    );
+
+    const agentSpans = telemetry.tracer.spans.filter((entry) => entry.name === "openclaw.agent.turn");
+    const agent = agentSpans[0]?.span;
+
+    assert.equal(agentSpans.length, 1);
+    assert.equal(agent?.attributes.get("openclaw.agent.lifecycle_hook"), "before_model_resolve");
+    assert.equal(telemetry.histograms.contextPreparationDuration.calls[0]?.value, 37);
+    assert.equal(logs.warn.some((message) => message.includes("Duplicate before_prompt_build ignored")), true);
+    assert.equal(logs.warn.some((message) => message.includes("Duplicate before_agent_start ignored")), true);
   } finally {
     globalThis.setInterval = originalSetInterval;
     Date.now = originalDateNow;

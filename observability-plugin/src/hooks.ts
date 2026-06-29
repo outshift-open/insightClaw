@@ -16,7 +16,8 @@
  *
  * Context propagation:
  *   - message_received: creates root span, stores in sessionContextMap
- *   - before_agent_start: creates child "agent turn" span under root
+ *   - before_model_resolve / before_prompt_build: create child "agent turn" span under root
+ *     + before_agent_start remains as a legacy fallback
  *     + agent handoff tracking via span links
  *     + join detection from previous parallel fork
  *   - tool_result_persist: creates child tool span under agent turn
@@ -1678,12 +1679,16 @@ export function registerHooks(
 
   logger.info("[insightClaw] Registered message_sent hook (via api.on)");
 
-  // -- before_agent_start ----------------------------------------------
+  // -- agent lifecycle startup -----------------------------------------
   // Creates an "agent turn" child span under the root request span.
+  // Prefer before_model_resolve / before_prompt_build; before_agent_start
+  // remains registered as a legacy fallback for older OpenClaw runtimes.
 
-  api.on(
-    "before_agent_start",
-    (event: any, ctx: any) => {
+  const handleAgentLifecycleStart = (
+    lifecycleHookName: "before_model_resolve" | "before_prompt_build" | "before_agent_start",
+    event: any,
+    ctx: any
+  ) => {
       try {
         ensureRuntime();
         const runtimeSessionIdentities = resolveRuntimeSessionIdentities(event, ctx);
@@ -1747,12 +1752,12 @@ export function registerHooks(
           );
         }
 
-        markLifecycleEvent(sessionCtx, "before_agent_start");
+        markLifecycleEvent(sessionCtx, lifecycleHookName);
 
         if (sessionCtx?.agentSpan && sessionCtx.runtimeSessionKey === runtimeSessionKey) {
           const activeAgentId = sessionCtx.agentId || "unknown";
           logger.warn?.(
-            `[insightClaw] Duplicate before_agent_start ignored: runtimeSession=${runtimeSessionKey}, ` +
+            `[insightClaw] Duplicate ${lifecycleHookName} ignored: runtimeSession=${runtimeSessionKey}, ` +
             `activeAgent=${activeAgentId}, incomingAgent=${agentId}`
           );
           return undefined;
@@ -1815,6 +1820,7 @@ export function registerHooks(
               ...(runtimeSessionKey !== "unknown" ? { [GEN_AI_CONVERSATION_ID_ATTR]: runtimeSessionKey } : {}),
               ...(sessionId ? { "session.id": sessionId } : {}),
               "gen_ai.agent.model": model,
+              "openclaw.agent.lifecycle_hook": lifecycleHookName,
               ...handoff.attributes,
             },
             links: agentLinks,
@@ -1850,7 +1856,7 @@ export function registerHooks(
 
         // Store the agent context so llm_input can call enterWith() in the
         // correct async execution context (the one that actually makes the
-        // LLM call). before_agent_start fires in a separate async chain from
+        // LLM call). Agent lifecycle hooks fire in a separate async chain from
         // the LLM call, so enterWith() here would not propagate.
         // Legacy single-global fallback for runtimes without preload.mjs.
         (globalThis as any).__OPENCLAW_ACTIVE_AGENT_CONTEXT = agentContext;
@@ -1879,33 +1885,36 @@ export function registerHooks(
 
         logger.info?.(`[insightClaw] Agent turn started: agent=${agentId}, model=${model}, runtimeSession=${runtimeSessionKey}`);
       } catch (error) {
-        logger.debug(`[insightClaw] before_agent_start hook failed: ${String(error)}`);
+        logger.debug(`[insightClaw] ${lifecycleHookName} hook failed: ${String(error)}`);
       }
 
       // Return undefined - don't modify system prompt
       return undefined;
-    },
+    };
+
+  api.on(
+    "before_model_resolve",
+    (event: any, ctx: any) => handleAgentLifecycleStart("before_model_resolve", event, ctx),
+    { priority: 90 }
+  );
+
+  logger.info("[insightClaw] Registered before_model_resolve hook (via api.on)");
+
+  api.on(
+    "before_prompt_build",
+    (event: any, ctx: any) => handleAgentLifecycleStart("before_prompt_build", event, ctx),
+    { priority: 90 }
+  );
+
+  logger.info("[insightClaw] Registered before_prompt_build hook (via api.on)");
+
+  api.on(
+    "before_agent_start",
+    (event: any, ctx: any) => handleAgentLifecycleStart("before_agent_start", event, ctx),
     { priority: 90 }
   );
 
   logger.info("[insightClaw] Registered before_agent_start hook (via api.on)");
-
-  api.on(
-    "before_model_resolve",
-    (_event: any, _ctx: any) => {
-      // Not implemented at the moment
-      return undefined;
-    }
-  );
- logger.info("[insightClaw] Registered before_model_resolve hook (via api.on)");
-  api.on(
-    "before_prompt_build",
-    (_event: any, _ctx: any) => {
-      // Not implemented at the moment
-      return undefined;
-    }
-  );
-  logger.info("[insightClaw] Registered before_prompt_build hook (via api.on)");
 
   // ── llm_input ────────────────────────────────────────────────────
   // Creates an LLM call span at the moment the request is sent to the model.

@@ -61,7 +61,8 @@ openclaw.request (root span)
 - Outbound delivery visibility via `message_sent`, diagnostic `message.processed`,
 or webchat `agent_end` inference when no outbound signal exists
 - Agent turn duration with token breakdown
-- Fallback `openclaw.request` root span creation during `before_agent_start`
+- Fallback `openclaw.request` root span creation during `before_model_resolve`
+or `before_prompt_build`, with `before_agent_start` retained for legacy runtimes
 when inbound hooks only expose conversation metadata
 
 ### Installation

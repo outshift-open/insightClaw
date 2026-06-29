@@ -2210,8 +2210,10 @@ export function registerHooks(
             usage.input ?? usage.inputTokens ?? usage.input_tokens ?? 0;
           const outputTokens =
             usage.output ?? usage.outputTokens ?? usage.output_tokens ?? 0;
-          const cacheRead = usage.cacheRead ?? usage.cache_read_tokens ?? 0;
-          const cacheWrite = usage.cacheWrite ?? usage.cache_write_tokens ?? 0;
+          const cacheRead =
+            usage.cacheRead ?? usage.cache_read?.input_tokens ?? usage.cacheRead?.inputTokens ?? usage.cache_read_tokens ?? 0;
+          const cacheWrite =
+            usage.cacheWrite ?? usage.cache_creation?.input_tokens ?? usage.cacheCreation?.inputTokens ?? usage.cache_write_tokens ?? 0;
 
           span.setAttribute("gen_ai.usage.input_tokens", inputTokens);
           span.setAttribute("gen_ai.usage.output_tokens", outputTokens);

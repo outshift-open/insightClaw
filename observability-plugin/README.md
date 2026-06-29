@@ -50,9 +50,9 @@ openclaw.request (root span)
 
 **Agent Payload Visibility:**
 
-- Optional agent input/output payload capture on `openclaw.agent.turn`
-- Request input captured on the root request span
-- Outbound message payload captured on `openclaw.message.sent` when the typed hook is available
+- Optional payload capture on `openclaw.agent.turn`, `openclaw.request`, `openclaw.llm.call`, `tool.<name>`, and `openclaw.message.sent` when `captureContent=true`
+- OTel GenAI semconv payload fields: `gen_ai.input.messages` / `gen_ai.output.messages` on request, agent, and LLM spans; `gen_ai.tool.call.arguments` / `gen_ai.tool.call.result` on tool spans
+- Set `emitIoaObserveAttributes: false` to suppress `ioa_observe.*` IOA-specific attributes (fork/join topology, handoff sequence, entity payloads) and emit only OTel GenAI semconv fields
 
 **Request Lifecycle:**
 
@@ -103,8 +103,7 @@ or `http://172.17.0.1:4318` when using Docker on Linux):
               "metrics": true,
               "captureContent": true,
               "spanCache": false,
-                "spanCacheVerboseLogs": false,
-                "customAttributes": {
+                "spanCacheVerboseLogs": false,               "emitIoaObserveAttributes": true,                "customAttributes": {
                   "workspace-id": "UUID1",
                   "mas-id": "UUID2"
                 }

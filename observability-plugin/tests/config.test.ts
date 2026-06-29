@@ -25,6 +25,7 @@ test("parseConfig returns documented defaults for missing values", () => {
     customAttributes: {},
     experimentalMetrics: false,
     embeddingsProcessing: false,
+    emitIoaObserveAttributes: true,
   });
 });
 
@@ -49,6 +50,7 @@ test("parseConfig preserves supported overrides and rejects invalid shapes", () 
     customAttributes,
     experimentalMetrics: false,
     embeddingsProcessing: false,
+    emitIoaObserveAttributes: true,
   });
 
   assert.equal(config.endpoint, "http://collector:4317");
@@ -66,6 +68,7 @@ test("parseConfig preserves supported overrides and rejects invalid shapes", () 
   assert.deepEqual(config.customAttributes, customAttributes);
   assert.equal(config.experimentalMetrics, false);
   assert.equal(config.embeddingsProcessing, false);
+  assert.equal(config.emitIoaObserveAttributes, true);
 });
 
 test("parseConfig falls back when values are unsupported", () => {
@@ -102,4 +105,5 @@ test("parseConfig falls back when values are unsupported", () => {
   assert.deepEqual(config.customAttributes, { ok: "value" });
   assert.equal(config.experimentalMetrics, false);
   assert.equal(config.embeddingsProcessing, false);
+  assert.equal(config.emitIoaObserveAttributes, true);
 });

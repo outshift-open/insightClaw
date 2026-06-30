@@ -1969,7 +1969,6 @@ export function registerHooks(
               "openclaw.session.key": runtimeSessionKey,
               ...(runtimeSessionKey !== "unknown" ? { [GEN_AI_CONVERSATION_ID_ATTR]: runtimeSessionKey } : {}),
               ...(sessionId ? { "session.id": sessionId } : {}),
-              "gen_ai.agent.model": model,
               "openclaw.agent.lifecycle_hook": lifecycleHookName,
               ...(config.emitIoaObserveAttributes !== false ? handoff.attributes : {}),
             },

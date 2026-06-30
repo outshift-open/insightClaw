@@ -73,9 +73,9 @@ The plugin still emits its own hook-based request, agent, tool, and message span
 | :-- | :-- | :-- |
 | message_received | Creates or reuses the root request span, captures inbound content when enabled, runs prompt-injection detection, and starts session tracking. | openclaw.request span, openclaw.messages.received counter. |
 | message_sent | Creates a producer span for the outbound response and captures response content when enabled. | openclaw.message.sent span, openclaw.messages.sent counter. |
-| before_agent_start | Creates the openclaw.agent.turn child span, attaches handoff and join links, seeds child-session handoff state, and registers the active span for diagnostics enrichment. | openclaw.agent.turn span. |
-| before_model_resolve | Registered but currently acts as a placeholder. | No telemetry today. |
-| before_prompt_build | Registered but currently acts as a placeholder. | No telemetry today. |
+| before_model_resolve | Preferred lifecycle hook for starting the openclaw.agent.turn child span, attaching handoff and join links, seeding child-session handoff state, and registering the active span for diagnostics enrichment. | openclaw.agent.turn span. |
+| before_prompt_build | Secondary preferred lifecycle hook for the same agent-turn startup path when model resolution is not the first available signal. | openclaw.agent.turn span when no active agent turn already exists. |
+| before_agent_start | Legacy fallback for OpenClaw runtimes that have not moved to the newer lifecycle hooks. | openclaw.agent.turn span when no active agent turn already exists. |
 | before_tool_call | Starts the tool span, captures tool input when enabled, records tool invocation count, runs sensitive-file and dangerous-command detection, and marks parallel branches for fork detection. | tool.< toolName > span start, openclaw.tool.calls counter,. |
 | tool_result_persist | Looks up the pending tool span, attaches result metadata and captured output, marks tool errors, closes the span, and extracts child-agent IDs from sessions_spawn. | tool.< toolName > span completion, openclaw.tool.errors counter when the result is flagged as an error. |
 | agent_end | Finalizes the agent span and the root request span, attaches tokens/model/provider/cost/context, records duration, closes fork groups, clears active state, and cleans up context. | openclaw.agent.turn span completion, openclaw.request span completion, openclaw.agent.turn_duration histogram, token and request counters when diagnostics data was not already available. |
@@ -116,8 +116,8 @@ It is the diagnostics path that complements the workflow hooks with accurate usa
 
 | Span | Source | Parenting | When emitted | Why it exists |
 | :-- | :-- | :-- | :-- | :-- |
-| openclaw.request | message_received or fallback creation during before_agent_start | Root span | On the first stable inbound session/conversation event for a request. | Represents the full message-to-response workflow. |
-| openclaw.agent.turn | before_agent_start | Child of openclaw.request | When an agent begins work on a session. | Represents one agent turn and is the anchor for model usage, handoffs, and tools. |
+| openclaw.request | message_received or fallback creation during agent lifecycle startup | Root span | On the first stable inbound session/conversation event for a request. | Represents the full message-to-response workflow. |
+| openclaw.agent.turn | before_model_resolve, before_prompt_build, or legacy before_agent_start | Child of openclaw.request | When an agent begins work on a session. | Represents one agent turn and is the anchor for model usage, handoffs, and tools. |
 | tool.< toolName > | before_tool_call + tool_result_persist | Child of openclaw.agent.turn | Starts before the tool runs and ends when the persisted result arrives. | Represents tool execution with input/output, error state. |
 | openclaw.message.sent | message_sent | Child of openclaw.request | When OpenClaw emits the outbound message hook. | Confirms response delivery was attempted. |
 | session.end | Session watcher / explicit session end | Child of stored session root context | On idle timeout, process exit, or explicit command:new / command:reset. | Marks operational session completion. |
@@ -175,7 +175,7 @@ Our session starts the first time we observe activity for a stable runtime sessi
 Most commonly that happens when we create the root `openclaw.request` span from an inbound message.
 If the inbound hook does not provide enough context early enough, the session can also be created lazily from later activity such as:
 
-* `before_agent_start`
+* `before_model_resolve`, `before_prompt_build`, or legacy `before_agent_start`
 * `before_tool_call`
 * `llm_input`
 * `message_sent`
@@ -241,8 +241,8 @@ as long as OpenClaw gives them distinct runtime session keys.
 When one agent turn follows another in the same session, the next `openclaw.agent.turn` span receives:
 
 * a span link with `link.type=agent_handoff`
-* `ioa_observe.agent.sequence`
-* `ioa_observe.agent.previous`
+* `ioa_observe.agent.sequence` _(emitted when `emitIoaObserveAttributes=true`, the default)_
+* `ioa_observe.agent.previous` _(emitted when `emitIoaObserveAttributes=true`, the default)_
 
 This shows the execution chain even when the turns are not simple parent-child nesting.
 
@@ -260,14 +260,14 @@ This is how the plugin preserves cross-session lineage.
 When multiple tools execute within the configured fork window for the same agent turn, the plugin annotates them as fork branches
 and annotates the next agent turn as the join.
 
-Fork attributes include:
+Fork attributes include _(emitted when `emitIoaObserveAttributes=true`, the default)_:
 
 * `ioa_observe.fork.id`
 * `ioa_observe.fork.branch_index`
 * `ioa_observe.fork.parent_name`
 * `ioa_observe.fork.parent_sequence`
 
-Join attributes include:
+Join attributes include _(emitted when `emitIoaObserveAttributes=true`, the default)_:
 
 * `ioa_observe.join.fork_id`
 * `ioa_observe.join.branch_count`
@@ -275,16 +275,38 @@ Join attributes include:
 ## Payload Capture Behavior
 
 If `captureContent=true`, the plugin stores request, agent, tool, and outbound message payloads on spans.
-Captured content is truncated to 4096 characters.
+String content is truncated to 4096 characters before embedding, ensuring JSON payload fields are always valid.
 
-This applies to:
+Each span type emits both an OTel GenAI semconv payload field and OpenClaw-namespaced attributes:
 
-* inbound request input on `openclaw.request`
-* agent input and output on `openclaw.agent.turn`
-* tool input and output on `tool.<toolName>`
-* outbound message output on `openclaw.message.sent`
+| Span | OTel GenAI field | OpenClaw field |
+| :-- | :-- | :-- |
+| `openclaw.request` | `gen_ai.input.messages` (input), `gen_ai.output.messages` (output) | `openclaw.request.input`, `openclaw.request.output` |
+| `openclaw.agent.turn` | `gen_ai.input.messages`, `gen_ai.output.messages` | `openclaw.agent.input`, `openclaw.agent.output` |
+| `openclaw.llm.call` | `gen_ai.input.messages`, `gen_ai.output.messages` | `openclaw.llm.input`, `openclaw.llm.output` |
+| `tool.<toolName>` | `gen_ai.tool.call.arguments` (input), `gen_ai.tool.call.result` (output) | `openclaw.tool.input`, `openclaw.tool.output` |
+| `openclaw.message.sent` | — | `openclaw.message.output` |
+
+The `gen_ai.input.messages` and `gen_ai.output.messages` fields are JSON arrays of schema-compliant message objects
+(`[{"role": "user"|"assistant", "content": ..., "finish_reason": ...}]`).
+The `gen_ai.tool.call.arguments` and `gen_ai.tool.call.result` fields prefer object form and parse JSON strings when possible.
 
 If `captureContent=false`, the span structure and counters still exist, but payload text is not exported.
+
+## IOA-Specific Attributes (`emitIoaObserveAttributes`)
+
+The `emitIoaObserveAttributes` config flag (default `true`) controls whether IOA-specific semantic attributes
+are emitted alongside the primary OTel GenAI semconv fields.
+
+When `true` (default), the plugin additionally emits:
+
+* `ioa_observe.entity.input` / `ioa_observe.entity.output` on all payload-carrying spans
+* `ioa_observe.agent.sequence`, `ioa_observe.agent.previous`, `ioa_observe.agent.previous_sequence` on agent turn spans
+* `ioa_observe.fork.*` on fork-branch tool spans
+* `ioa_observe.join.*` on joining agent turn spans
+* `ioa_observe.workflow.name` on `session.start` and `session.end` spans
+
+Set `emitIoaObserveAttributes: false` to emit only the OTel GenAI semconv fields.
 
 ## Operational Boundaries
 

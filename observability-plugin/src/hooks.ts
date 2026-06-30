@@ -49,13 +49,21 @@ import {
   ATTR_OBSERVE_ENTITY_NAME,
   ATTR_OBSERVE_ENTITY_INPUT,
   ATTR_OBSERVE_ENTITY_OUTPUT,
+  ATTR_GEN_AI_WORKFLOW_NAME,
+  ATTR_GEN_AI_INPUT_MESSAGES,
+  ATTR_GEN_AI_OUTPUT_MESSAGES,
+  ATTR_GEN_AI_TOOL_CALL_ARGUMENTS,
+  ATTR_GEN_AI_TOOL_CALL_RESULT,
+  ATTR_GEN_AI_PROVIDER_NAME,
+  ATTR_GEN_AI_CACHE_READ_INPUT_TOKENS,
+  ATTR_GEN_AI_CACHE_CREATION_INPUT_TOKENS,
 } from "./observe-attributes.js";
 import {
   annotateMemoryToolSpan,
   recordMemoryFailureRateFromCache,
   recordMemoryToolMetrics,
 } from "./memory-metrics.js";
-import { touchSession, endSession, getSessionId, getSessionContext, getSessionSpanContext } from "./session-lifecycle.js";
+import { touchSession, endSession, getSessionId, getSessionContext, getSessionSpanContext, getSessionWorkflowName, setEmitIoaObserveAttributes } from "./session-lifecycle.js";
 import { recordSpan, type SpanAttributeValue, type SpanRecord } from "./span-cache.js";
 import { calculateCoverage, getNoveltyScore} from "./context-analysis.js";
 
@@ -241,6 +249,7 @@ const GEN_AI_OPERATION = {
   CHAT: "chat",
   EXECUTE_TOOL: "execute_tool",
   INVOKE_AGENT: "invoke_agent",
+  INVOKE_WORKFLOW: "invoke_workflow",
 } as const;
 
 function initHookConfig(
@@ -577,23 +586,122 @@ function serializeCapturedContent(value: unknown): string | undefined {
   }
 }
 
+/**
+ * Build a schema-compliant gen_ai.{input,output}.messages JSON string.
+ * If `value` is already an array of message objects (detected by shape) it is
+ * serialised as-is. Otherwise the value is wrapped in a single-message array
+ * with the supplied role.  The inner content string is truncated before
+ * embedding so the resulting JSON is always valid.
+ */
+function buildGenAiMessages(
+  value: unknown,
+  role: "user" | "assistant",
+  finishReason?: string
+): string | undefined {
+  if (value == null) return undefined;
+
+  // If value is already an array whose first element looks like a message object,
+  // pass it through directly.
+  if (
+    Array.isArray(value) &&
+    value.length > 0 &&
+    typeof value[0] === "object" &&
+    value[0] !== null &&
+    "role" in value[0]
+  ) {
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return undefined;
+    }
+  }
+
+  let content: unknown;
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) return undefined;
+    // Truncate string content before embedding so the JSON remains valid.
+    content = trimmed.length > MAX_CAPTURE_CONTENT_CHARS
+      ? trimmed.slice(0, MAX_CAPTURE_CONTENT_CHARS)
+      : trimmed;
+  } else {
+    content = value;
+  }
+
+  const message: Record<string, unknown> = { role, content };
+  if (finishReason !== undefined) {
+    message.finish_reason = finishReason;
+  }
+  try {
+    return JSON.stringify([message]);
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Build a gen_ai.tool.call.arguments or gen_ai.tool.call.result value.
+ * Prefers object form; parses JSON strings when possible.
+ */
+function buildGenAiToolPayload(value: unknown): string | undefined {
+  if (value == null) return undefined;
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) return undefined;
+    // If it's already valid JSON, return as-is.
+    try {
+      JSON.parse(trimmed);
+      return trimmed;
+    } catch {
+      // Wrap the string in a JSON string literal.
+      try {
+        return JSON.stringify(trimmed);
+      } catch {
+        return undefined;
+      }
+    }
+  }
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return undefined;
+  }
+}
+
 function setCapturedContent(
   span: Span,
   direction: "input" | "output",
   value: unknown,
-  attrPrefixes: string[] = []
+  attrPrefixes: string[] = [],
+  options?: {
+    /** OTel GenAI payload attribute to set (e.g. gen_ai.input.messages). */
+    otelPayloadAttr?: string;
+    /** Pre-built OTel payload JSON. If omitted and otelPayloadAttr is set, value is serialised via serializeCapturedContent. */
+    otelPayloadValue?: string;
+    /** When false, skip emitting ioa_observe.entity.* attributes. Defaults to true. */
+    emitIoaObserve?: boolean;
+  }
 ): string | undefined {
   const serialized = serializeCapturedContent(value);
   if (!serialized) {
     return undefined;
   }
 
-  const observeAttr =
-    direction === "input" ? ATTR_OBSERVE_ENTITY_INPUT : ATTR_OBSERVE_ENTITY_OUTPUT;
-  span.setAttribute(observeAttr, serialized);
+  const emitIoa = options?.emitIoaObserve !== false;
+  if (emitIoa) {
+    const observeAttr =
+      direction === "input" ? ATTR_OBSERVE_ENTITY_INPUT : ATTR_OBSERVE_ENTITY_OUTPUT;
+    span.setAttribute(observeAttr, serialized);
+  }
   span.setAttribute(`openclaw.entity.${direction}`, serialized);
   for (const prefix of attrPrefixes) {
     span.setAttribute(`${prefix}.${direction}`, serialized);
+  }
+
+  // Set OTel GenAI payload field when requested.
+  if (options?.otelPayloadAttr) {
+    const payload = options.otelPayloadValue ?? serialized;
+    span.setAttribute(options.otelPayloadAttr, payload);
   }
 
   return serialized;
@@ -720,12 +828,18 @@ function handleToolOutput(
     }
 
     if (config.otel_config.captureContent) {
+      const outputPayload = extractToolOutputPayload(event, result);
+      const toolResultPayload = buildGenAiToolPayload(outputPayload);
       setCapturedContent(
         span,
         "output",
-        extractToolOutputPayload(event, result),
-        ["openclaw.tool"]
+        outputPayload,
+        ["openclaw.tool"],
+        { emitIoaObserve: config.otel_config.emitIoaObserveAttributes !== false }
       );
+      if (toolResultPayload) {
+        span.setAttribute(ATTR_GEN_AI_TOOL_CALL_RESULT, toolResultPayload);
+      }
     }
 
     const toolStatus = getToolStatus(event);
@@ -1037,6 +1151,7 @@ function startRootSpan(
       attributes: {
         [ATTR_OBSERVE_SPAN_KIND]: ObserveSpanKind.WORKFLOW,
         [ATTR_OBSERVE_ENTITY_NAME]: "openclaw.request",
+        [GEN_AI_OPERATION_NAME_ATTR]: GEN_AI_OPERATION.INVOKE_WORKFLOW,
         "openclaw.message.channel": channel,
         "openclaw.session.key": primaryRuntimeSessionKey,
         "openclaw.message.direction": "inbound",
@@ -1051,8 +1166,19 @@ function startRootSpan(
 
   const rootContext = trace.setSpan(sessionParentContext, rootSpan);
   rootSpan.setAttribute("session.id", sessionId);
+
+  // Set gen_ai.workflow.name if a workflow name is available for this session.
+  const workflowName = getSessionWorkflowName(primaryRuntimeSessionKey);
+  if (workflowName) {
+    rootSpan.setAttribute(ATTR_GEN_AI_WORKFLOW_NAME, workflowName);
+  }
+
   const capturedInput = config.captureContent
-    ? setCapturedContent(rootSpan, "input", messageText, ["openclaw.request"])
+    ? setCapturedContent(rootSpan, "input", messageText, ["openclaw.request"], {
+        otelPayloadAttr: ATTR_GEN_AI_INPUT_MESSAGES,
+        otelPayloadValue: buildGenAiMessages(messageText, "user") ?? undefined,
+        emitIoaObserve: config.emitIoaObserveAttributes !== false,
+      })
     : undefined;
   const sessionCtx: SessionTraceContext = {
     runtimeSessionKey: primaryRuntimeSessionKey,
@@ -1096,6 +1222,8 @@ export function registerHooks(
   // Initialize loggers for sub-modules
   setHandoffLogger(logger);
   setForkJoinLogger(logger);
+  // Propagate ioa_observe flag to session-lifecycle module.
+  setEmitIoaObserveAttributes(config.emitIoaObserveAttributes !== false);
 
   function ensureRuntime() {
     if (tracer) return;
@@ -1148,6 +1276,14 @@ export function registerHooks(
 
     if (sessionCtx.rootSpan && sessionCtx.rootSpan !== sessionCtx.agentSpan) {
       const totalMs = Date.now() - sessionCtx.startTime;
+      // Emit workflow output payload on the root span when content capture is on.
+      if (config.captureContent && sessionCtx.latestOutput != null) {
+        setCapturedContent(sessionCtx.rootSpan, "output", sessionCtx.latestOutput, ["openclaw.request"], {
+          otelPayloadAttr: ATTR_GEN_AI_OUTPUT_MESSAGES,
+          otelPayloadValue: buildGenAiMessages(sessionCtx.latestOutput, "assistant", "unknown") ?? undefined,
+          emitIoaObserve: config.emitIoaObserveAttributes !== false,
+        });
+      }
       sessionCtx.rootSpan.setAttribute("openclaw.request.duration_ms", totalMs);
       sessionCtx.rootSpan.setAttribute("openclaw.request.completion_reason", reason);
       sessionCtx.rootSpan.setStatus({ code: SpanStatusCode.OK });
@@ -1200,7 +1336,9 @@ export function registerHooks(
     );
 
     if (config.captureContent && output != null) {
-      setCapturedContent(span, "output", output, ["openclaw.message"]);
+      setCapturedContent(span, "output", output, ["openclaw.message"], {
+        emitIoaObserve: config.emitIoaObserveAttributes !== false,
+      });
     }
 
     counters.messagesSent.add(1, {
@@ -1321,7 +1459,12 @@ export function registerHooks(
           agentSpan,
           "output",
           assistantOutput,
-          ["openclaw.agent"]
+          ["openclaw.agent"],
+          {
+            otelPayloadAttr: ATTR_GEN_AI_OUTPUT_MESSAGES,
+            otelPayloadValue: buildGenAiMessages(assistantOutput, "assistant", "unknown") ?? undefined,
+            emitIoaObserve: config.emitIoaObserveAttributes !== false,
+          }
         );
       }
 
@@ -1336,10 +1479,10 @@ export function registerHooks(
       agentSpan.setAttribute("openclaw.agent.success", success);
 
       if (cacheReadTokens > 0) {
-        agentSpan.setAttribute("gen_ai.usage.cache_read_tokens", cacheReadTokens);
+        agentSpan.setAttribute(ATTR_GEN_AI_CACHE_READ_INPUT_TOKENS, cacheReadTokens);
       }
       if (cacheWriteTokens > 0) {
-        agentSpan.setAttribute("gen_ai.usage.cache_write_tokens", cacheWriteTokens);
+        agentSpan.setAttribute(ATTR_GEN_AI_CACHE_CREATION_INPUT_TOKENS, cacheWriteTokens);
       }
 
       if (typeof costUsd === "number") {
@@ -1347,7 +1490,7 @@ export function registerHooks(
       }
 
       if (diagUsage?.provider) {
-        agentSpan.setAttribute("gen_ai.system", diagUsage.provider);
+        agentSpan.setAttribute(ATTR_GEN_AI_PROVIDER_NAME, diagUsage.provider);
       }
 
       if (diagUsage?.context?.limit) {
@@ -1422,8 +1565,10 @@ export function registerHooks(
 
       const forkResult = finalizeAgentTurn(runtimeSessionKey);
       if (forkResult) {
-        agentSpan.setAttribute("ioa_observe.fork.id", forkResult.forkId);
-        agentSpan.setAttribute("ioa_observe.fork.branch_count", forkResult.branchCount);
+        if (config.emitIoaObserveAttributes !== false) {
+          agentSpan.setAttribute("ioa_observe.fork.id", forkResult.forkId);
+          agentSpan.setAttribute("ioa_observe.fork.branch_count", forkResult.branchCount);
+        }
         agentSpan.addEvent("agent.fork_completed", {
           "ioa_observe.fork.id": forkResult.forkId,
           "ioa_observe.fork.branch_count": forkResult.branchCount,
@@ -1546,7 +1691,12 @@ export function registerHooks(
               sessionCtx.rootSpan,
               "input",
               messageText,
-              ["openclaw.request"]
+              ["openclaw.request"],
+              {
+                otelPayloadAttr: ATTR_GEN_AI_INPUT_MESSAGES,
+                otelPayloadValue: buildGenAiMessages(messageText, "user") ?? undefined,
+                emitIoaObserve: config.emitIoaObserveAttributes !== false,
+              }
             ) ?? sessionCtx.latestInput;
           }
 
@@ -1819,9 +1969,8 @@ export function registerHooks(
               "openclaw.session.key": runtimeSessionKey,
               ...(runtimeSessionKey !== "unknown" ? { [GEN_AI_CONVERSATION_ID_ATTR]: runtimeSessionKey } : {}),
               ...(sessionId ? { "session.id": sessionId } : {}),
-              "gen_ai.agent.model": model,
               "openclaw.agent.lifecycle_hook": lifecycleHookName,
-              ...handoff.attributes,
+              ...(config.emitIoaObserveAttributes !== false ? handoff.attributes : {}),
             },
             links: agentLinks,
           },
@@ -1829,13 +1978,19 @@ export function registerHooks(
         );
 
         if (config.captureContent && sessionCtx?.latestInput) {
-          setCapturedContent(agentSpan, "input", sessionCtx.latestInput, ["openclaw.agent"]);
+          setCapturedContent(agentSpan, "input", sessionCtx.latestInput, ["openclaw.agent"], {
+            otelPayloadAttr: ATTR_GEN_AI_INPUT_MESSAGES,
+            otelPayloadValue: buildGenAiMessages(sessionCtx.latestInput, "user") ?? undefined,
+            emitIoaObserve: config.emitIoaObserveAttributes !== false,
+          });
         }
 
         // Annotate join metadata if this agent follows a fork
         if (joinInfo) {
-          for (const key of Object.keys(joinInfo.attributes)) {
-            agentSpan.setAttribute(key, joinInfo.attributes[key]);
+          if (config.emitIoaObserveAttributes !== false) {
+            for (const key of Object.keys(joinInfo.attributes)) {
+              agentSpan.setAttribute(key, joinInfo.attributes[key]);
+            }
           }
           agentSpan.addEvent("agent.join", {
             "ioa_observe.join.fork_id": joinInfo.attributes["ioa_observe.join.fork_id"],
@@ -1967,7 +2122,11 @@ export function registerHooks(
         // Capture the messages / prompt sent to the model
         const messages = event?.messages || event?.prompt || event?.input;
         if (config.captureContent && messages != null) {
-          setCapturedContent(span, "input", messages, ["openclaw.llm"]);
+          setCapturedContent(span, "input", messages, ["openclaw.llm"], {
+            otelPayloadAttr: ATTR_GEN_AI_INPUT_MESSAGES,
+            otelPayloadValue: buildGenAiMessages(messages, "user") ?? undefined,
+            emitIoaObserve: config.emitIoaObserveAttributes !== false,
+          });
         }
         pendingLlmSpans.set(callId, {
           span,
@@ -2050,14 +2209,16 @@ export function registerHooks(
             usage.input ?? usage.inputTokens ?? usage.input_tokens ?? 0;
           const outputTokens =
             usage.output ?? usage.outputTokens ?? usage.output_tokens ?? 0;
-          const cacheRead = usage.cacheRead ?? usage.cache_read_tokens ?? 0;
-          const cacheWrite = usage.cacheWrite ?? usage.cache_write_tokens ?? 0;
+          const cacheRead =
+            usage.cacheRead ?? usage.cache_read?.input_tokens ?? usage.cacheRead?.inputTokens ?? usage.cache_read_tokens ?? 0;
+          const cacheWrite =
+            usage.cacheWrite ?? usage.cache_creation?.input_tokens ?? usage.cacheCreation?.inputTokens ?? usage.cache_write_tokens ?? 0;
 
           span.setAttribute("gen_ai.usage.input_tokens", inputTokens);
           span.setAttribute("gen_ai.usage.output_tokens", outputTokens);
           span.setAttribute("gen_ai.usage.total_tokens", inputTokens + outputTokens + cacheRead + cacheWrite);
-          if (cacheRead > 0) span.setAttribute("gen_ai.usage.cache_read_tokens", cacheRead);
-          if (cacheWrite > 0) span.setAttribute("gen_ai.usage.cache_write_tokens", cacheWrite);
+          if (cacheRead > 0) span.setAttribute(ATTR_GEN_AI_CACHE_READ_INPUT_TOKENS, cacheRead);
+          if (cacheWrite > 0) span.setAttribute(ATTR_GEN_AI_CACHE_CREATION_INPUT_TOKENS, cacheWrite);
         }
 
         const model = event?.model || ctx?.model;
@@ -2068,7 +2229,13 @@ export function registerHooks(
         // Capture the model response
         const output = event?.output || event?.response || event?.completion || event?.message;
         if (config.captureContent && output != null) {
-          setCapturedContent(span, "output", output, ["openclaw.llm"]);
+          const finishReason: string =
+            event?.finish_reason ?? event?.stop_reason ?? event?.finishReason ?? event?.stopReason ?? "unknown";
+          setCapturedContent(span, "output", output, ["openclaw.llm"], {
+            otelPayloadAttr: ATTR_GEN_AI_OUTPUT_MESSAGES,
+            otelPayloadValue: buildGenAiMessages(output, "assistant", finishReason) ?? undefined,
+            emitIoaObserve: config.emitIoaObserveAttributes !== false,
+          });
         }
 
         if (event?.error) {
@@ -2164,8 +2331,10 @@ export function registerHooks(
         const agentSequence = getHandoffSequence(runtimeSessionKey);
         const forkAttrs = registerToolSpan(runtimeSessionKey, toolName, span, agentId, agentSequence);
         if (forkAttrs) {
-          for (const key of Object.keys(forkAttrs)) {
-            span.setAttribute(key, forkAttrs[key]);
+          if (config.emitIoaObserveAttributes !== false) {
+            for (const key of Object.keys(forkAttrs)) {
+              span.setAttribute(key, forkAttrs[key]);
+            }
           }
           logger.info(
             `[insightClaw] Tool in fork group: tool=${toolName}, forkId=${forkAttrs["ioa_observe.fork.id"]}, ` +
@@ -2175,7 +2344,13 @@ export function registerHooks(
 
         // Capture tool input if configured
         if (config.captureContent) {
-          setCapturedContent(span, "input", toolInput, ["openclaw.tool"]);
+          const toolArgsPayload = buildGenAiToolPayload(toolInput);
+          setCapturedContent(span, "input", toolInput, ["openclaw.tool"], {
+            emitIoaObserve: config.emitIoaObserveAttributes !== false,
+          });
+          if (toolArgsPayload) {
+            span.setAttribute(ATTR_GEN_AI_TOOL_CALL_ARGUMENTS, toolArgsPayload);
+          }
         }
 
         // Store span so tool_result_persist can add the output and close it

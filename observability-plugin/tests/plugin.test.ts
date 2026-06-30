@@ -110,6 +110,7 @@ test("plugin register wires the gateway method, cli command, tool, and service",
       },
       experimentalMetrics: false,
       embeddingsProcessing: false,
+      emitIoaObserveAttributes: true,
     },
   });
 

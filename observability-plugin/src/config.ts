@@ -36,6 +36,8 @@ export interface OtelObservabilityConfig {
   customAttributes: Record<string, string | number | boolean>;
   /** Enable processing of embeddings for context analysis (novelty, similarity) */
   embeddingsProcessing: boolean;
+  /** Emit ioa_observe.* IOA-specific attributes (entity payload, fork/join, handoff sequences). Disable to emit only OTel GenAI semconv. */
+  emitIoaObserveAttributes: boolean;
 }
 
 const DEFAULTS: OtelObservabilityConfig = {
@@ -54,6 +56,7 @@ const DEFAULTS: OtelObservabilityConfig = {
   resourceAttributes: {},
   customAttributes: {},
   embeddingsProcessing: false,
+  emitIoaObserveAttributes: true,
 };
 
 function parsePrimitiveAttributeRecord(
@@ -114,5 +117,9 @@ export function parseConfig(raw: unknown): OtelObservabilityConfig {
       typeof obj.embeddingsProcessing === "boolean"
         ? obj.embeddingsProcessing
         : DEFAULTS.embeddingsProcessing,
+    emitIoaObserveAttributes:
+      typeof obj.emitIoaObserveAttributes === "boolean"
+        ? obj.emitIoaObserveAttributes
+        : DEFAULTS.emitIoaObserveAttributes,
   };
 }

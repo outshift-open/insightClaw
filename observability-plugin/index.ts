@@ -96,6 +96,7 @@ const insightClawPlugin = {
             customAttributes: config.customAttributes,
             experimentalMetrics: config.experimentalMetrics,
             embeddingsProcessing: config.embeddingsProcessing,
+            emitIoaObserveAttributes: config.emitIoaObserveAttributes,
           },
         });
       }

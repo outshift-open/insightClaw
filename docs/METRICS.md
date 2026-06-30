@@ -1,95 +1,117 @@
-## Operational Metrics We Emit Today
+# Operational Metrics We Emit Today
 
-### Core workflow metrics
+The tables below list the metric attributes exactly as they are emitted by the current source.
 
-| Metric | Type | When emitted | Notes |
-| :-- | :-- | :-- | :-- |
-| openclaw.messages.received | Counter | On every message_received hook. | Tagged with message channel. |
-| openclaw.messages.sent | Counter | On every message_sent hook. | Tagged with message channel. |
-| openclaw.tool.calls | Counter | On every before_tool_call hook. | Tagged with tool name and session key. |
-| openclaw.tool.errors | Counter | On tool_result_persist when the persisted tool result is marked as an error. | Tagged with tool name. |
-| openclaw.session.resets | Counter | On command:new and command:reset. | Tagged with command source. |
-| openclaw.llm.requests | Counter | On every model.usage diagnostics event, or on agent_end if diagnostics data was not available and usage was recovered from messages. | Tagged with model and provider context when available. |
-| openclaw.llm.tokens.prompt | Counter | On model.usage for input tokens and cache tokens, or on agent_end fallback without diagnostics. | Cache read and cache write tokens are also added here with token.type dimensions during diagnostics-driven emission. |
-| openclaw.llm.tokens.completion | Counter | On model.usage for output tokens, or on agent_end fallback without diagnostics. | Tagged with model and agent when available. |
-| openclaw.llm.tokens.total | Counter | On model.usage total tokens, or on agent_end fallback without diagnostics. | Represents total token consumption. |
-| openclaw.agent.turn_duration | Histogram | On agent_end when durationMs is provided. | Tagged with model and agent ID. |
-| openclaw.llm.duration | Histogram | On model.usage when diagnostics include durationMs. | Measures model request duration, not full turn duration. |
-| openclaw.cost.usd | Counter | On model.usage when costUsd is present and greater than zero. | Diagnostics-driven cost signal. |
+For the core counters created in `observability-plugin/src/telemetry.ts`, the plugin also emits periodic zero-value
+heartbeat datapoints with the attribute `openclaw.idle=true` to keep those timeseries alive during idle periods.
+That heartbeat applies to these counters only: `openclaw.llm.requests`, `openclaw.llm.errors`,
+`openclaw.llm.tokens.total`, `openclaw.llm.tokens.prompt`, `openclaw.llm.tokens.completion`,
+`openclaw.tool.calls`, `openclaw.tool.errors`, `openclaw.messages.received`, `openclaw.messages.sent`,
+`openclaw.session.resets`, `openclaw.memory.search_hit`, `openclaw.memory.search_miss`,
+`openclaw.memory.write_events`, `openclaw.memory.read_events`, and `openclaw.memory.edit_events`.
 
-### Diagnostics-driven gateway metrics
+## Core workflow metrics
 
-| Metric | Type | When emitted | Notes |
-| :-- | :-- | :-- | :-- |
-| openclaw.webhook.received | Counter | On webhook.received. | Tagged with channel and webhook/update type. |
-| openclaw.webhook.error | Counter | On webhook.error. | Tagged with channel and webhook/update type. |
-| openclaw.webhook.duration_ms | Histogram | On webhook.processed when durationMs is available. | Measures ingress processing duration. |
-| openclaw.message.queued | Counter | On message.queued. | Tagged with channel and source. |
-| openclaw.message.processed | Counter | On message.processed. | Tagged with channel and outcome. |
-| openclaw.message.duration_ms | Histogram | On message.processed when durationMs is available. | Measures queued-message processing duration. |
-| openclaw.queue.depth | Histogram | On message.queued from queueDepth, on queue.lane.enqueue / queue.lane.dequeue from queueSize, and on diagnostic.heartbeat for queued/active/waiting snapshots. | This is the main backlog pressure metric. |
-| openclaw.queue.wait_ms | Histogram | On queue.lane.dequeue when waitMs is provided. | Measures time spent waiting in the queue. |
-| openclaw.queue.lane.enqueue | Counter | On queue.lane.enqueue. | Tagged with lane. |
-| openclaw.queue.lane.dequeue | Counter | On queue.lane.dequeue. | Tagged with lane. |
-| openclaw.session.state | Counter | On session.state. | Tagged with state and optional reason. |
-| openclaw.session.stuck | Counter | On session.stuck. | Tagged with state. |
-| openclaw.session.stuck_age_ms | Histogram | On session.stuck when ageMs is available. | Measures how long sessions have been stuck. |
-| openclaw.run.attempt | Counter | On run.attempt. | Tagged with attempt number. |
-| openclaw.tool.loop | Counter | On tool.loop. | Tagged with tool, detector, action, and severity level. |
+| Metric | Type | When emitted | Attributes emitted | Notes |
+| :-- | :-- | :-- | :-- | :-- |
+| openclaw.messages.received | Counter | On every `message_received` hook. | `openclaw.message.channel` | Heartbeat datapoints use only `openclaw.idle=true`. |
+| openclaw.messages.sent | Counter | On every `message_sent` hook and inferred outbound completion path. | `openclaw.message.channel` | Heartbeat datapoints use only `openclaw.idle=true`. |
+| openclaw.tool.calls | Counter | On every `before_tool_call` hook. | `tool.name`, `gen_ai.agent.id` | The code does not attach session metadata to this metric. |
+| openclaw.tool.errors | Counter | When a tool result is marked as failed/error, or completed/accepted/yielded with a positive exit code. | `tool.name`, `gen_ai.agent.id` | Emitted from tool result handling in `observability-plugin/src/hooks.ts`. |
+| openclaw.tool.duration | Histogram | When a tool span is closed in `after_tool_call` or `tool_result_persist`. | `tool.name`, `gen_ai.agent.id` | This metric is emitted today but was missing from the previous docs. |
+| openclaw.session.resets | Counter | On `command:new` and `command:reset`. | `command.source` | Heartbeat datapoints use only `openclaw.idle=true`. |
+| openclaw.llm.requests | Counter | On every `model.usage` diagnostics event, or on `agent_end` fallback if diagnostics usage was not available. | Diagnostics path: `gen_ai.response.model`, `openclaw.provider`, `openclaw.channel`. Fallback path: `gen_ai.response.model`, `gen_ai.agent.id`. | Heartbeat datapoints use only `openclaw.idle=true`. |
+| openclaw.llm.tokens.prompt | Counter | On `model.usage` for input tokens and cache tokens, or on `agent_end` fallback without diagnostics. | Diagnostics path: `gen_ai.response.model`, `openclaw.provider`, `openclaw.channel`. Cache token datapoints also add `token.type=cache_read` or `token.type=cache_write`. Fallback path: `gen_ai.response.model`, `gen_ai.agent.id`. | The fallback path adds input plus cache tokens in a single datapoint, without `token.type`. |
+| openclaw.llm.tokens.completion | Counter | On `model.usage` for output tokens, or on `agent_end` fallback without diagnostics. | Diagnostics path: `gen_ai.response.model`, `openclaw.provider`, `openclaw.channel`. Fallback path: `gen_ai.response.model`, `gen_ai.agent.id`. | Heartbeat datapoints use only `openclaw.idle=true`. |
+| openclaw.llm.tokens.total | Counter | On `model.usage` total tokens, or on `agent_end` fallback without diagnostics. | Diagnostics path: `gen_ai.response.model`, `openclaw.provider`, `openclaw.channel`. Fallback path: `gen_ai.response.model`, `gen_ai.agent.id`. | Heartbeat datapoints use only `openclaw.idle=true`. |
+| openclaw.agent.turn_duration | Histogram | On `agent_end` when `durationMs` is present. | `gen_ai.response.model`, `gen_ai.agent.id` | Measures full agent-turn duration. |
+| openclaw.llm.duration | Histogram | On `model.usage` when diagnostics include `durationMs`. | `gen_ai.response.model`, `openclaw.provider`, `openclaw.channel` | Measures model request duration, not full turn duration. |
+| openclaw.cost.usd | Counter | On `model.usage` when `costUsd` is present and greater than zero. | `gen_ai.response.model`, `openclaw.provider`, `openclaw.channel` | Diagnostics-driven cost signal. |
 
-### Memory-events metrics
+## Diagnostics-driven gateway metrics
 
-| Metric | Type | When emitted | Notes |
-| :-- | :-- | :-- | :-- |
-| openclaw.memory.search_hit | Counter | On after_tool_call/tool_result_persist - memory_search | Only if memory_search returns some result |
-| openclaw.memory.search_miss | Counter | On after_tool_call/tool_result_persist - memory_search with NO results | Only if memory_search returns NO result |
-| openclaw.memory.edit_events | Counter | On after_tool_call/tool_result_persist - edit | Only if edit performed on long-term memory files (heuristics) |
-| openclaw.memory.read_events | Counter | On after_tool_call/tool_result_persist - read | Only if read performed on long-term memory files (heuristics) |
-| openclaw.memory.write_events | Counter | On after_tool_call/tool_result_persist - write | Only if write performed on long-term memory files (heuristics) |
-| openclaw.memory.read_duration | Histogram | On after_tool_call/tool_result_persist - read | Only if read performed on long-term memory files (heuristics) |
-| openclaw.memory.write_duration | Histogram | On after_tool_call/tool_result_persist - write | Only if write performed on long-term memory files (heuristics) |
-| openclaw.memory.edit_duration | Histogram | On after_tool_call/tool_result_persist - edit | Only if edit performed on long-term memory files (heuristics) |
+| Metric | Type | When emitted | Attributes emitted | Notes |
+| :-- | :-- | :-- | :-- | :-- |
+| openclaw.webhook.received | Counter | On `webhook.received`. | `openclaw.channel`, `openclaw.webhook` | `openclaw.webhook` is the diagnostic `updateType`. |
+| openclaw.webhook.error | Counter | On `webhook.error`. | `openclaw.channel`, `openclaw.webhook` | Error text is added to the diagnostic span, not to the metric. |
+| openclaw.webhook.duration_ms | Histogram | On `webhook.processed` when `durationMs` is available. | `openclaw.channel`, `openclaw.webhook` | Measures ingress processing duration. |
+| openclaw.message.queued | Counter | On `message.queued`. | `openclaw.channel`, `openclaw.source` | |
+| openclaw.message.processed | Counter | On `message.processed`. | `openclaw.channel`, `openclaw.outcome` | |
+| openclaw.message.duration_ms | Histogram | On `message.processed` when `durationMs` is available. | `openclaw.channel`, `openclaw.outcome` | Measures queued-message processing duration. |
+| openclaw.queue.depth | Histogram | On `message.queued` from `queueDepth`, on `queue.lane.enqueue` / `queue.lane.dequeue` from `queueSize`, and on `diagnostic.heartbeat` for queued/active/waiting snapshots. | `message.queued` path: `openclaw.channel`, `openclaw.source`. Lane paths: `openclaw.lane`. Heartbeat path: `openclaw.channel=heartbeat`, `openclaw.metric` where the value is `queued`, `active`, or `waiting`. | This is the main backlog pressure metric. |
+| openclaw.queue.wait_ms | Histogram | On `queue.lane.dequeue` when `waitMs` is provided. | `openclaw.lane` | Measures time spent waiting in the queue. |
+| openclaw.queue.lane.enqueue | Counter | On `queue.lane.enqueue`. | `openclaw.lane` | |
+| openclaw.queue.lane.dequeue | Counter | On `queue.lane.dequeue`. | `openclaw.lane` | |
+| openclaw.session.state | Counter | On `session.state`. | `openclaw.state`, optional `openclaw.reason` | |
+| openclaw.session.stuck | Counter | On `session.stuck`. | `openclaw.state` | Queue depth and age are added to the diagnostic span, not to the counter. |
+| openclaw.session.stuck_age_ms | Histogram | On `session.stuck` when `ageMs` is available. | `openclaw.state` | Measures how long sessions have been stuck. |
+| openclaw.run.attempt | Counter | On `run.attempt`. | `openclaw.attempt` | Numeric attempt number. |
+| openclaw.tool.loop | Counter | On `tool.loop`. | `openclaw.tool`, `openclaw.detector`, `openclaw.action`, `openclaw.level` | Loop count, paired tool, and message are added to the diagnostic span, not to the counter. |
 
-Note that some additional counters/duration relative to memory\_search and memory\_get can be derived by tool\_call counters, filtering on tool\_name - they do not require any additional processing/ heuristics.
+## Memory-events metrics
+
+| Metric | Type | When emitted | Attributes emitted | Notes |
+| :-- | :-- | :-- | :-- | :-- |
+| openclaw.memory.search_hit | Counter | On `after_tool_call` or `tool_result_persist` for `memory_search` when the parsed results array is non-empty. | `tool.name`, `gen_ai.agent.id` | `tool.name` is `memory_search`. |
+| openclaw.memory.search_miss | Counter | On `after_tool_call` or `tool_result_persist` for `memory_search` when the parsed results array is empty. | `tool.name`, `gen_ai.agent.id` | `tool.name` is `memory_search`. |
+| openclaw.memory.edit_events | Counter | On `after_tool_call` or `tool_result_persist` for `edit`. | `tool.name`, `gen_ai.agent.id` | Only when the path heuristics classify the target as long-term memory: path contains `memory` or `memories` and ends with `.md`. |
+| openclaw.memory.read_events | Counter | On `after_tool_call` or `tool_result_persist` for long-term-memory `read`, and also on every `memory_search`. | `tool.name`, `gen_ai.agent.id` | The current implementation increments `read_events` for `memory_search` as well as `read`. |
+| openclaw.memory.write_events | Counter | On `after_tool_call` or `tool_result_persist` for `write`. | `tool.name`, `gen_ai.agent.id` | Only when the path heuristics classify the target as long-term memory. |
+| openclaw.memory.read_duration | Histogram | On `after_tool_call` or `tool_result_persist` for long-term-memory `read`. | `tool.name`, `gen_ai.agent.id` | |
+| openclaw.memory.write_duration | Histogram | On `after_tool_call` or `tool_result_persist` for long-term-memory `write`. | `tool.name`, `gen_ai.agent.id` | |
+| openclaw.memory.edit_duration | Histogram | On `after_tool_call` or `tool_result_persist` for long-term-memory `edit`. | `tool.name`, `gen_ai.agent.id` | |
+
+Note that some additional counters relative to `memory_search` and `memory_get` can be derived
+by filtering `openclaw.tool.calls` / `openclaw.tool.errors` by `tool.name`.
 
 ## Derived Metrics
 
 ### Context assembly
 
-| Metric | Type | When emitted | Description | 
-| :-- | :-- | :-- | :-- | 
-| openclaw.context.system_size | Histogram | On llm_input |#bytes in the agent context generated by system prompt (SOUL.md, Agent.md etc.)
-| openclaw.context.prompt_size | Histogram | On llm_input| #bytes in the agent context generated by the prompt size
-| openclaw.context.history_memory_size | Histogram | On llm_input| #bytes in the agent context generated by memory-tool output in the history
-| openclaw.context.history_tool_size | Histogram | On llm_input| #bytes in the agent context generated by tool-output in the history (no memory tools)
-| openclaw.context.history_user_size | Histogram | On llm_input| #bytes in the agent context generated by user-interaction (from history)
-| openclaw.context.history_other_size | Histogram | On llm_input| #bytes in the agent context generated by anything else in the history
-| openclaw.context.preparation_duration | Histogram | On llm_input| time between llm_input hook and before_agent_start . It indicates the time needed to prepare the context |
-| openclaw.agent.downstream_context_sharing| Histogram | On llm_input| Estimates how much of the caller agent full context (prompt, history, system…) is covered by the sub-agent prompt (based on n-grams text analysis and some heuristics). High score means the caller shares a lot of its context with the sub-agent. [Experimental]
-| openclaw.agent.novelty_score | Histogram | on llm_output and agent_end| Estimates how much of the sub-agent reply is novel, comparing it to the caller-agent full context (prompt, history, system...). Based on text heuristic and n-grams text analysis, highly experimental. Low score means the majority of text in the sub-agent output can be found already in the main-agent context i.e. in its history. (available also using embeddings instead of n-grams processing, BUT it slows down the processing, especially comparing replies with large context. The embedding-based metric requires some optimisation) [Experimental]
-
+| Metric | Type | When emitted | Attributes emitted | Description |
+| :-- | :-- | :-- | :-- | :-- |
+| openclaw.context.system_size | Histogram | On `llm_input`. | `gen_ai.agent.id` | Bytes contributed by `systemPrompt`. |
+| openclaw.context.prompt_size | Histogram | On `llm_input`. | `gen_ai.agent.id` | Bytes contributed by `prompt`. |
+| openclaw.context.history_memory_size | Histogram | On `llm_input`. | `gen_ai.agent.id` | Bytes contributed by history entries recognized as memory-tool output. |
+| openclaw.context.history_tool_size | Histogram | On `llm_input`. | `gen_ai.agent.id` | Bytes contributed by non-memory tool results in history. |
+| openclaw.context.history_user_size | Histogram | On `llm_input`. | `gen_ai.agent.id` | Bytes contributed by user messages in history. |
+| openclaw.context.history_other_size | Histogram | On `llm_input`. | `gen_ai.agent.id` | Bytes contributed by all other history entries. |
+| openclaw.context.preparation_duration | Histogram | On `llm_input`. | `gen_ai.agent.id` | Time between the preferred agent lifecycle start hook (`before_model_resolve` or `before_prompt_build`) and `llm_input`; legacy `before_agent_start` is still supported as a fallback. |
+| openclaw.agent.downstream_context_sharing | Histogram | On `llm_input`, when experimental metrics are enabled and parent context is available. | `gen_ai.agent.id` | Estimated overlap between the caller context and the sub-agent prompt. [Experimental] |
+| openclaw.agent.novelty_score | Histogram | On `agent_end`, when experimental metrics are enabled and parent context is available. | `gen_ai.agent.id` | Estimated novelty of the sub-agent output relative to the caller context. [Experimental] |
 
 ### Memory Lifecycle
 
-| Metric | Type | When emitted | Description |
-| :-- | :-- | :-- | :-- |
-| openclaw.memory.search_fragmentation | Histogram | On (memory) tool_result_persist and after_tool_call | it measures how much the information is spread across different long-term memory files. Computed when using the memory_search tool to access the long term memory, as the ratio of the unique files in the results and the number of hits returned by the tool (i.e. 1 unique file in n hits means fragmentation is 0, 10 unique files in 10 hits means fragmentation is 0.9)
+| Metric | Type | When emitted | Attributes emitted | Description |
+| :-- | :-- | :-- | :-- | :-- |
+| openclaw.memory.search_fragmentation | Histogram | On `after_tool_call` or `tool_result_persist` for `memory_search`, when the parsed results array is non-empty. | `tool.name`, `gen_ai.agent.id` | Measures how much the information is spread across different files, computed as `(uniquePaths - 1) / results.length`. |
+| openclaw.memory.failure_rate | Histogram | When a long-term memory tool span closes and at least one long-term memory span exists in the session cache. | `openclaw.session.key`, `openclaw.metric.scope=session` | Session-level failure rate derived from cached long-term-memory tool spans. |
 
 ### Routing and Delegation
 
-| Metric | Type | When emitted  | Description |
-| :-- | :-- | :-- | :-- |
-| openclaw.session.parallelisation_score | Histogram | On end of session |it’s an indicator of the efficiency of the session (how much tasks were parallelised, how much agents waited idle). Computed as the ratio between the total durations of  all the spans of type agent-turn, and the total session duration. The higher the score, the more parallelization there was in the session (i.e., multiple agents working at the same time, or an agent working while waiting for a tool response). Low score means low parallelisation or the agent waiting for external actions. A score close to 1 means the session was quite sequential and with not much idle time. A score largely below 1 means agents were idle for a significant amout of time.
-| openclaw.session.repetition_score | Histogram | On end of session | Indicates how much agents re-issue the “same” request to the same agent (i.e. because the first request failed, or the answer was not satisfying). Given all the LLM calls (openclaw.llm.call) in a session (including sub-agents and other top-level agents), it computes a per-agent Jaccard similarity between the different input prompts of that agent, and then reports the average across. High score means that there are agents that got called several time with the "same" input in the session. (Available also using embeddings instead of Jaccard).
+| Metric | Type | When emitted | Attributes emitted | Description |
+| :-- | :-- | :-- | :-- | :-- |
+| openclaw.session.parallelisation_score | Histogram | When a session ends and the session is not a heartbeat session. | `openclaw.session.key` | Ratio between the sum of recorded agent-turn durations and total session duration. Values above 1 are possible when work overlapped in time. |
+| openclaw.session.repetition_score | Histogram | When a session ends and the session is not a heartbeat session. | `openclaw.session.key` | Average per-agent repetition score across non-root agents, based on prompt similarity between `openclaw.llm.call` inputs. |
 
+Note: metrics flagged as [Experimental] are still at an early stage and not production-level. By default they are
+disabled in the plugin (must be enabled via `experimentalMetrics` configuration).
 
-Note: metrics flagged as [Experimental] are still at an early stage and not production-level. By default they are disabled in the plugin (must be enabled via `experimentalMetrics` configuration).
+## Declared But Not Fully Wired
+
+- `openclaw.llm.errors` is declared and receives only the zero-value heartbeat datapoints with `openclaw.idle=true`;
+  I did not find any non-idle increment path in the current source.
+- `openclaw.sessions.active` is declared as an up/down counter in `observability-plugin/src/telemetry.ts`, but
+  I did not find any update calls, so it is not functionally emitted today.
 
 ## Additional composed metrics
-Additional metrics can be defined composing the metrics above. For these, the plugin does not explicitly emit new signals, but one may use current metrics to build new ones. This section report some of these examples (which can be found in the Grafana dashboard provided as example)
 
-- Agent turn counters: based on `openclaw.agent.turn_duration` histogram, using `Count` value and grouping by agent ID (`gen_ai.agent.id`)
-- Memory Search Events: based on `openclaw.tool.calls`, filtering `tool_name = memory_search`
-- Memory Get Events: based on `openclaw.tool.calls`, filtering `tool_name = memory_get`
-- Memory Search Errors: based on `openclaw.tool.errors`, filtering `tool_name = memory_search`
-- Memory Edit Errors: based on `openclaw.tool.errors`, filtering `tool_name = memory_search`
+Additional metrics can be defined composing the metrics above. For these, the plugin does not explicitly emit new
+signals, but one may use current metrics to build new ones. This section report some of these examples (which can
+be found in the Grafana dashboard provided as example)
+
+- Agent turn counters: based on `openclaw.agent.turn_duration`, using the histogram `Count` value and grouping by `gen_ai.agent.id`.
+- Memory Search Events: based on `openclaw.tool.calls`, filtering `tool.name = memory_search`.
+- Memory Get Events: based on `openclaw.tool.calls`, filtering `tool.name = memory_get`.
+- Memory Search Errors: based on `openclaw.tool.errors`, filtering `tool.name = memory_search`.
+- Memory Edit Errors: based on `openclaw.tool.errors`, filtering `tool.name = edit`.

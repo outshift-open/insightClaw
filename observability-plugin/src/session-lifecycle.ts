@@ -54,6 +54,12 @@ let idleTimeoutMs = DEFAULT_IDLE_TIMEOUT_MS;
 
 // ── Other configuration ──────────────────────────────────────────────────────────
 let embeddingsProcessing = false;
+/** Controls whether ioa_observe.workflow.name is emitted alongside gen_ai.workflow.name. */
+let emitIoaObserveAttributesRef = true;
+
+export function setEmitIoaObserveAttributes(flag: boolean): void {
+  emitIoaObserveAttributesRef = flag;
+}
 
 function getUniqueSessions(): SessionActivity[] {
   return [...new Set(sessions.values())];
@@ -218,7 +224,10 @@ export function touchSession(
               "session.id": sessionId,
               "session.started_at": new Date(startedAt).toISOString(),
               "openclaw.session.key": runtimeSessionKey,
-              ...(workflowName ? { "ioa_observe.workflow.name": workflowName } : {}),
+              ...(workflowName ? {
+                ...(emitIoaObserveAttributesRef ? { "ioa_observe.workflow.name": workflowName } : {}),
+                "gen_ai.workflow.name": workflowName,
+              } : {}),
             },
           },
           rootContext
@@ -253,6 +262,10 @@ export function touchSession(
 
 export function getSessionId(runtimeSessionKey: string): string | undefined {
   return sessions.get(runtimeSessionKey)?.sessionId;
+}
+
+export function getSessionWorkflowName(runtimeSessionKey: string): string | undefined {
+  return sessions.get(runtimeSessionKey)?.workflowName;
 }
 
 /**
@@ -559,7 +572,10 @@ function emitSessionEnd(session: SessionActivity): void {
           "session.ended_at": new Date(session.lastActivityAt).toISOString(),
           "openclaw.session.key": session.primaryRuntimeSessionKey,
           ...(session.workflowName
-            ? { "ioa_observe.workflow.name": session.workflowName }
+            ? {
+                ...(emitIoaObserveAttributesRef ? { "ioa_observe.workflow.name": session.workflowName } : {}),
+                "gen_ai.workflow.name": session.workflowName,
+              }
             : {}),
         },
       },

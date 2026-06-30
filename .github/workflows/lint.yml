@@ -71,6 +71,7 @@ jobs:
           VALIDATE_PYTHON_PYINK: false
           VALIDATE_TYPESCRIPT_PRETTIER: false
           VALIDATE_TYPESCRIPT_STANDARD: false
+          VALIDATE_JAVASCRIPT_PRETTIER: false
           VALIDATE_BASH: false
           VALIDATE_BASH_EXEC: false
           VALIDATE_SHELL_SHFMT: false

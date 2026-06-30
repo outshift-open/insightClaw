@@ -2,9 +2,15 @@
 
 The tables below list the metric attributes exactly as they are emitted by the current source.
 
-For the core counters created in `observability-plugin/src/telemetry.ts`, the plugin also emits periodic zero-value heartbeat datapoints with the attribute `openclaw.idle=true` to keep those timeseries alive during idle periods. That heartbeat applies to these counters only: `openclaw.llm.requests`, `openclaw.llm.errors`, `openclaw.llm.tokens.total`, `openclaw.llm.tokens.prompt`, `openclaw.llm.tokens.completion`, `openclaw.tool.calls`, `openclaw.tool.errors`, `openclaw.messages.received`, `openclaw.messages.sent`, `openclaw.session.resets`, `openclaw.memory.search_hit`, `openclaw.memory.search_miss`, `openclaw.memory.write_events`, `openclaw.memory.read_events`, and `openclaw.memory.edit_events`.
+For the core counters created in `observability-plugin/src/telemetry.ts`, the plugin also emits periodic zero-value
+heartbeat datapoints with the attribute `openclaw.idle=true` to keep those timeseries alive during idle periods.
+That heartbeat applies to these counters only: `openclaw.llm.requests`, `openclaw.llm.errors`,
+`openclaw.llm.tokens.total`, `openclaw.llm.tokens.prompt`, `openclaw.llm.tokens.completion`,
+`openclaw.tool.calls`, `openclaw.tool.errors`, `openclaw.messages.received`, `openclaw.messages.sent`,
+`openclaw.session.resets`, `openclaw.memory.search_hit`, `openclaw.memory.search_miss`,
+`openclaw.memory.write_events`, `openclaw.memory.read_events`, and `openclaw.memory.edit_events`.
 
-### Core workflow metrics
+## Core workflow metrics
 
 | Metric | Type | When emitted | Attributes emitted | Notes |
 | :-- | :-- | :-- | :-- | :-- |
@@ -22,7 +28,7 @@ For the core counters created in `observability-plugin/src/telemetry.ts`, the pl
 | openclaw.llm.duration | Histogram | On `model.usage` when diagnostics include `durationMs`. | `gen_ai.response.model`, `openclaw.provider`, `openclaw.channel` | Measures model request duration, not full turn duration. |
 | openclaw.cost.usd | Counter | On `model.usage` when `costUsd` is present and greater than zero. | `gen_ai.response.model`, `openclaw.provider`, `openclaw.channel` | Diagnostics-driven cost signal. |
 
-### Diagnostics-driven gateway metrics
+## Diagnostics-driven gateway metrics
 
 | Metric | Type | When emitted | Attributes emitted | Notes |
 | :-- | :-- | :-- | :-- | :-- |
@@ -42,7 +48,7 @@ For the core counters created in `observability-plugin/src/telemetry.ts`, the pl
 | openclaw.run.attempt | Counter | On `run.attempt`. | `openclaw.attempt` | Numeric attempt number. |
 | openclaw.tool.loop | Counter | On `tool.loop`. | `openclaw.tool`, `openclaw.detector`, `openclaw.action`, `openclaw.level` | Loop count, paired tool, and message are added to the diagnostic span, not to the counter. |
 
-### Memory-events metrics
+## Memory-events metrics
 
 | Metric | Type | When emitted | Attributes emitted | Notes |
 | :-- | :-- | :-- | :-- | :-- |
@@ -55,7 +61,8 @@ For the core counters created in `observability-plugin/src/telemetry.ts`, the pl
 | openclaw.memory.write_duration | Histogram | On `after_tool_call` or `tool_result_persist` for long-term-memory `write`. | `tool.name`, `gen_ai.agent.id` | |
 | openclaw.memory.edit_duration | Histogram | On `after_tool_call` or `tool_result_persist` for long-term-memory `edit`. | `tool.name`, `gen_ai.agent.id` | |
 
-Note that some additional counters relative to `memory_search` and `memory_get` can be derived by filtering `openclaw.tool.calls` / `openclaw.tool.errors` by `tool.name`.
+Note that some additional counters relative to `memory_search` and `memory_get` can be derived
+by filtering `openclaw.tool.calls` / `openclaw.tool.errors` by `tool.name`.
 
 ## Derived Metrics
 
@@ -87,16 +94,21 @@ Note that some additional counters relative to `memory_search` and `memory_get` 
 | openclaw.session.parallelisation_score | Histogram | When a session ends and the session is not a heartbeat session. | `openclaw.session.key` | Ratio between the sum of recorded agent-turn durations and total session duration. Values above 1 are possible when work overlapped in time. |
 | openclaw.session.repetition_score | Histogram | When a session ends and the session is not a heartbeat session. | `openclaw.session.key` | Average per-agent repetition score across non-root agents, based on prompt similarity between `openclaw.llm.call` inputs. |
 
-Note: metrics flagged as [Experimental] are still at an early stage and not production-level. By default they are disabled in the plugin (must be enabled via `experimentalMetrics` configuration).
+Note: metrics flagged as [Experimental] are still at an early stage and not production-level. By default they are
+disabled in the plugin (must be enabled via `experimentalMetrics` configuration).
 
 ## Declared But Not Fully Wired
 
-- `openclaw.llm.errors` is declared and receives only the zero-value heartbeat datapoints with `openclaw.idle=true`; I did not find any non-idle increment path in the current source.
-- `openclaw.sessions.active` is declared as an up/down counter in `observability-plugin/src/telemetry.ts`, but I did not find any update calls, so it is not functionally emitted today.
+- `openclaw.llm.errors` is declared and receives only the zero-value heartbeat datapoints with `openclaw.idle=true`;
+  I did not find any non-idle increment path in the current source.
+- `openclaw.sessions.active` is declared as an up/down counter in `observability-plugin/src/telemetry.ts`, but
+  I did not find any update calls, so it is not functionally emitted today.
 
 ## Additional composed metrics
 
-Additional metrics can be defined composing the metrics above. For these, the plugin does not explicitly emit new signals, but one may use current metrics to build new ones. This section report some of these examples (which can be found in the Grafana dashboard provided as example)
+Additional metrics can be defined composing the metrics above. For these, the plugin does not explicitly emit new
+signals, but one may use current metrics to build new ones. This section report some of these examples (which can
+be found in the Grafana dashboard provided as example)
 
 - Agent turn counters: based on `openclaw.agent.turn_duration`, using the histogram `Count` value and grouping by `gen_ai.agent.id`.
 - Memory Search Events: based on `openclaw.tool.calls`, filtering `tool.name = memory_search`.

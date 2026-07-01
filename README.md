@@ -49,7 +49,12 @@ The main deliverable in this repository is a custom OpenClaw observability plugi
              "protocol": "http",
              "traces": true,
              "metrics": true,
-             "captureContent": false
+             "captureContent": true,
+             "emitIoaObserveAttributes": true,
+              "customAttributes": {
+                  "workspace-id": "UUID1",
+                  "mas-id": "UUID2"
+                }
            }
          }
        }

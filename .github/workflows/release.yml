@@ -10,6 +10,7 @@ on:
       - "v*"
 
 permissions:
+  id-token: write  # Required for OIDC trusted publishing
   contents: write
 
 jobs:
@@ -55,10 +56,8 @@ jobs:
           echo "VERSION=${VERSION}" >> "$GITHUB_ENV"
 
       - name: Publish to npm
-        run: npm publish --access public
+        run: npm publish --provenance --access public
         working-directory: observability-plugin/artifact/package
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2

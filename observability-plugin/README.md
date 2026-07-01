@@ -123,7 +123,8 @@ or `http://172.17.0.1:4318` when using Docker on Linux):
               "metrics": true,
               "captureContent": true,
               "spanCache": false,
-                "spanCacheVerboseLogs": false,               "emitIoaObserveAttributes": true,                "customAttributes": {
+              "emitIoaObserveAttributes": true,
+              "customAttributes": {
                   "workspace-id": "UUID1",
                   "mas-id": "UUID2"
                 }

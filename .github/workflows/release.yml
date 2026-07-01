@@ -31,6 +31,7 @@ jobs:
           node-version: "22"
           cache: "npm"
           cache-dependency-path: observability-plugin/package-lock.json
+          registry-url: "https://registry.npmjs.org"
 
       - name: Install dependencies
         run: npm ci
@@ -52,6 +53,12 @@ jobs:
           zip -r "../${ARCHIVE}" package/
           echo "ARCHIVE=${ARCHIVE}" >> "$GITHUB_ENV"
           echo "VERSION=${VERSION}" >> "$GITHUB_ENV"
+
+      - name: Publish to npm
+        run: npm publish --access public
+        working-directory: observability-plugin/artifact/package
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2

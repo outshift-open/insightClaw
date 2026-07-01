@@ -1,3 +1,6 @@
+//  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
+//  SPDX-License-Identifier: Apache-2.0
+
 // @ts-expect-error - openclaw/plugin-sdk types not available at build time
 import type { OpenClawPluginApi, PluginHookName } from "openclaw/plugin-sdk/plugin-runtime";
 

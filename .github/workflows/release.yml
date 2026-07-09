@@ -34,6 +34,9 @@ jobs:
           cache-dependency-path: observability-plugin/package-lock.json
           registry-url: "https://registry.npmjs.org"
 
+      - name: Pin npm to v11 to fix release packaging bug with latest version
+        run: npm install -g npm@11
+
       - name: Install dependencies
         run: npm ci
 
@@ -54,9 +57,6 @@ jobs:
           zip -r "../${ARCHIVE}" package/
           echo "ARCHIVE=${ARCHIVE}" >> "$GITHUB_ENV"
           echo "VERSION=${VERSION}" >> "$GITHUB_ENV"
-
-      - name: Update npm
-        run: npm install -g npm@latest
 
       - name: Publish to npm
         run: npm publish --provenance --access public

@@ -1,6 +1,6 @@
 {
   "name": "@outshift-open/insightclaw",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "InsightClaw plugin for OpenClaw — traces, metrics, and deep observability for your OpenClaw agents.",
   "type": "module",
   "openclaw": {
@@ -8,7 +8,7 @@
       "./index.ts"
     ],
     "compat": {
-      "pluginApi": ">=2026.3"
+      "pluginApi": ">=2026.3.24"
     },
     "build": {
       "openclawVersion": "2026.4.24"
